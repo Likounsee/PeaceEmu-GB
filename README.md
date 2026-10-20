@@ -36,6 +36,33 @@ To build the library:
 cargo build --manifest-path GameBoy/Cargo.toml
 ```
 
+## Minimal integration example
+
+The library exposes a high-level machine facade so callers do not have to wire
+the CPU and bus manually:
+
+```rust
+use gameboy::{GbaCartridge, GbaMachine};
+
+fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    let cartridge = GbaCartridge::parse(rom_bytes)?;
+    let mut machine = GbaMachine::new(cartridge);
+
+    // Execute one instruction; modeled peripherals advance by estimated cycles.
+    let cycles = machine.step()?;
+    println!("step took {cycles} estimated cycles");
+
+    if let Some(frame) = machine.render_frame() {
+        // frame.pixels contains opaque 0xAARRGGBB pixels.
+        println!("rendered {}x{} pixels", frame.width, frame.height);
+    }
+    Ok(())
+}
+```
+
+The initial program counter is 0x08000000. The facade is a development API,
+not a promise of complete commercial-game compatibility or accurate frame pacing.
+
 ## Project status
 
 The main priorities are improving hardware accuracy and expanding integration between the CPU, memory bus, DMA, video, interrupts, and save devices. Timing is still approximate; complete exception handling, wait-state accuracy, full audio output, and comprehensive game compatibility are not claimed.
