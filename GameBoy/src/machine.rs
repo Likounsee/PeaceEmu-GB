@@ -371,7 +371,11 @@ mod tests {
     fn machine_save_api_round_trips_flash_and_eeprom_images() {
         for (marker, save_type, size) in [
             (b"FLASH_V".as_slice(), crate::SaveType::Flash64K, 64 * 1024),
-            (b"FLASH1M_V".as_slice(), crate::SaveType::Flash128K, 128 * 1024),
+            (
+                b"FLASH1M_V".as_slice(),
+                crate::SaveType::Flash128K,
+                128 * 1024,
+            ),
             (b"EEPROM_V".as_slice(), crate::SaveType::Eeprom, 512),
         ] {
             let mut rom = vec![0; GBA_HEADER_SIZE + marker.len()];
