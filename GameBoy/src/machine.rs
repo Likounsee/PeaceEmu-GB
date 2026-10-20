@@ -42,6 +42,44 @@ impl GbaMachine {
         Ok(cycles)
     }
 
+    /// Sets the active-low keypad input through a pressed-key bitmask.
+    ///
+    /// Bits 0..9 correspond to A, B, Select, Start, Right, Left, Up, Down, R, L.
+    pub fn set_keys_pressed(&mut self, pressed: u16) {
+        self.bus.set_keys_pressed(pressed);
+    }
+
+    /// Copies the active cartridge's persistent save image, if its type is known.
+    ///
+    /// The returned bytes are suitable for writing to a frontend-managed save file.
+    pub fn save_data(&self) -> Option<Vec<u8>> {
+        match self.bus.cartridge_save_type()? {
+            crate::SaveType::Sram => Some(self.bus.sram_data().to_vec()),
+            crate::SaveType::Flash64K | crate::SaveType::Flash128K => {
+                self.bus.flash_data().map(<[u8]>::to_vec)
+            }
+            crate::SaveType::Eeprom => self.bus.eeprom_data().map(<[u8]>::to_vec),
+        }
+    }
+
+    /// Loads a complete save image for this cartridge.
+    ///
+    /// Returns false if the ROM has no recognized save type. A size error leaves
+    /// the existing save image unchanged.
+    pub fn load_save_data(&mut self, data: &[u8]) -> Result<bool, crate::SramSizeError> {
+        match self.bus.cartridge_save_type() {
+            Some(crate::SaveType::Sram) => {
+                self.bus.load_sram_data(data)?;
+                Ok(true)
+            }
+            Some(crate::SaveType::Flash64K | crate::SaveType::Flash128K) => {
+                self.bus.load_flash_data(data)
+            }
+            Some(crate::SaveType::Eeprom) => self.bus.load_eeprom_data(data),
+            None => Ok(false),
+        }
+    }
+
     /// Returns the current CPU state for debugging and inspection.
     pub fn cpu(&self) -> &Cpu {
         &self.cpu
@@ -137,6 +175,28 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 1);
         assert_eq!(machine.cycles_elapsed(), u64::from(cycles));
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 4));
+    }
+
+    #[test]
+    fn machine_save_api_round_trips_sram_and_rejects_bad_sizes_atomically() {
+        let mut rom = vec![0; GBA_HEADER_SIZE + 16];
+        rom[0xA0..0xAC].copy_from_slice(b"TEST GAME   ");
+        rom[0xAC..0xB0].copy_from_slice(b"TGME");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        rom[GBA_HEADER_SIZE..GBA_HEADER_SIZE + 7].copy_from_slice(b"SRAM_V1");
+        let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+
+        assert_eq!(machine.save_data().unwrap().len(), crate::memory::SRAM_SIZE);
+        assert!(machine.load_save_data(&vec![0x5A; crate::memory::SRAM_SIZE]).unwrap());
+        assert!(machine.save_data().unwrap().iter().all(|byte| *byte == 0x5A));
+
+        let before = machine.save_data().unwrap();
+        assert!(machine.load_save_data(&[0xFF; 4]).is_err());
+        assert_eq!(machine.save_data().unwrap(), before);
     }
 
     #[test]
