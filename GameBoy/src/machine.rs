@@ -42,6 +42,46 @@ impl GbaMachine {
         Ok(cycles)
     }
 
+    /// Executes instructions until at least `cycle_budget` estimated cycles have elapsed.
+    ///
+    /// Since instructions are indivisible at this API level, the returned cycle
+    /// count can exceed the budget by the final instruction's estimated duration.
+    /// A zero budget performs no work. Peripheral timing advances through
+    /// `step` for every executed instruction.
+    pub fn run_for_cycles(&mut self, cycle_budget: u64) -> Result<u64, CpuError> {
+        let mut elapsed = 0_u64;
+        while elapsed < cycle_budget {
+            elapsed = elapsed.saturating_add(u64::from(self.step()?));
+        }
+        Ok(elapsed)
+    }
+
+    /// Executes until the PPU reaches a requested scanline or the instruction limit.
+    ///
+    /// The target must be in the GBA scanline range 0..228. Returns `None` for
+    /// an invalid target; otherwise returns the number of executed instructions.
+    /// If the target is the current scanline, returns zero. When the target is
+    /// behind the current scanline, the next occurrence after wraparound is used.
+    pub fn run_until_scanline(
+        &mut self,
+        target_scanline: u16,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if target_scanline >= 228 {
+            return Ok(None);
+        }
+        if self.bus.video_scanline() == target_scanline {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.video_scanline() == target_scanline {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Executes up to the requested number of instructions, returning estimated total cycles.
     ///
     /// If an unsupported instruction is encountered, execution stops with that
@@ -237,6 +277,25 @@ mod tests {
         assert_eq!(machine.run_until_vblank(2).unwrap(), 2);
         assert!(!machine.bus().video_in_vblank());
         assert_eq!(machine.instructions_executed(), 2);
+    }
+
+    #[test]
+    fn cycle_budget_runs_no_work_for_zero_and_reaches_positive_budget() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_for_cycles(0).unwrap(), 0);
+        assert_eq!(machine.instructions_executed(), 0);
+        let elapsed = machine.run_for_cycles(7).unwrap();
+        assert!(elapsed >= 7);
+        assert_eq!(machine.cycles_elapsed(), elapsed);
+    }
+
+    #[test]
+    fn scanline_runner_handles_current_invalid_and_bounded_targets() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_scanline(0, 10).unwrap(), Some(0));
+        assert_eq!(machine.run_until_scanline(228, 10).unwrap(), None);
+        assert_eq!(machine.run_until_scanline(1, 1).unwrap(), Some(1));
+        assert_eq!(machine.bus().video_scanline(), 1);
     }
 
     #[test]
