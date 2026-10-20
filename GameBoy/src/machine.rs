@@ -147,6 +147,25 @@ impl GbaMachine {
         Ok(max_steps)
     }
 
+    /// Executes up to `max_steps` instructions, stopping when the PPU enters HBlank.
+    ///
+    /// Returns the number of instructions executed. If HBlank is already active,
+    /// returns zero; if the limit is reached first, inspect
+    /// `bus().video_in_hblank()`. Timing is instruction-granular and approximate,
+    /// so a transition can be observed only after the instruction that crosses it.
+    pub fn run_until_hblank(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        if self.bus.video_in_hblank() {
+            return Ok(0);
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.video_in_hblank() {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
+
     /// Sets the active-low keypad input through a pressed-key bitmask.
     ///
     /// Bits 0..9 correspond to A, B, Select, Start, Right, Left, Up, Down, R, L.
@@ -277,6 +296,19 @@ mod tests {
         assert_eq!(machine.run_until_vblank(2).unwrap(), 2);
         assert!(!machine.bus().video_in_vblank());
         assert_eq!(machine.instructions_executed(), 2);
+    }
+
+    #[test]
+    fn hblank_runner_respects_existing_state_and_step_limit() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_hblank(2).unwrap(), 2);
+        assert!(!machine.bus().video_in_hblank());
+
+        machine.bus_mut().advance_cycles(1000);
+        assert!(machine.bus().video_in_hblank());
+        let before = machine.instructions_executed();
+        assert_eq!(machine.run_until_hblank(2).unwrap(), 0);
+        assert_eq!(machine.instructions_executed(), before);
     }
 
     #[test]
