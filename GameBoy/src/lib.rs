@@ -22,7 +22,10 @@ pub use cpu::{ConditionFlags, Cpu, CpuError, StepOutcome};
 pub use memory::{MemoryBus, SramSizeError};
 pub use save::{EepromDevice, FlashDevice, SaveType};
 
+/// High-level machine facade connecting the CPU, bus, and video renderer.
+pub mod machine;
 /// Initial bitmap-mode renderer for the Game Boy Advance display.
 pub mod video;
 
+pub use machine::{GbaMachine, CARTRIDGE_ENTRY_POINT};
 pub use video::{render_bitmap_frame, VideoFrame, SCREEN_HEIGHT, SCREEN_WIDTH};
