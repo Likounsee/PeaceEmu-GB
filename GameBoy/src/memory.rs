@@ -158,7 +158,9 @@ impl MemoryBus {
     /// This is signature-based metadata; SRAM and Flash are mapped to their
     /// respective devices; EEPROM uses the serial Game Pak access path.
     pub fn cartridge_save_type(&self) -> Option<crate::SaveType> {
-        self.cartridge.save_type()
+        // This is detected once when the bus is constructed. Re-scanning a ROM
+        // (which may be 32 MiB) on every save snapshot is unnecessary work.
+        self.save_type
     }
 
     /// Returns the most recently latched signed PCM sample for FIFO A (0) or B (1).
