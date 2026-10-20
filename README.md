@@ -62,8 +62,12 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The initial program counter is 0x08000000. The facade is a development API,
-not a promise of complete commercial-game compatibility or accurate frame pacing.
+The machine facade also exposes `run_until_vblank(max_steps)` for bounded frontend
+synchronization and `run_until_interrupt(max_steps)` for observing enabled pending
+IRQs. These helpers stop at the requested event or step limit; IRQ exception entry
+is not implemented yet. The initial program counter is 0x08000000. The facade is a
+development API, not a promise of complete commercial-game compatibility or accurate
+frame pacing.
 
 ## Project status
 
