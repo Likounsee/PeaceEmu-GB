@@ -87,6 +87,26 @@ impl GbaMachine {
         Ok(max_steps)
     }
 
+    /// Executes up to `max_steps` instructions, stopping when the PPU enters VBlank.
+    ///
+    /// Returns the number of instructions executed. If VBlank is already active,
+    /// returns zero; if the limit is reached first, inspect
+    /// [`bus`](Self::bus) with [`MemoryBus::video_in_vblank`](crate::MemoryBus::video_in_vblank).
+    /// CPU timing remains approximate, so this is a synchronization helper rather
+    /// than a guarantee of hardware-accurate frame pacing.
+    pub fn run_until_vblank(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        if self.bus.video_in_vblank() {
+            return Ok(0);
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.video_in_vblank() {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
+
     /// Sets the active-low keypad input through a pressed-key bitmask.
     ///
     /// Bits 0..9 correspond to A, B, Select, Start, Right, Left, Up, Down, R, L.
