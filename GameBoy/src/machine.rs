@@ -213,8 +213,14 @@ mod tests {
         let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
 
         assert_eq!(machine.save_data().unwrap().len(), crate::memory::SRAM_SIZE);
-        assert!(machine.load_save_data(&vec![0x5A; crate::memory::SRAM_SIZE]).unwrap());
-        assert!(machine.save_data().unwrap().iter().all(|byte| *byte == 0x5A));
+        assert!(machine
+            .load_save_data(&vec![0x5A; crate::memory::SRAM_SIZE])
+            .unwrap());
+        assert!(machine
+            .save_data()
+            .unwrap()
+            .iter()
+            .all(|byte| *byte == 0x5A));
 
         let before = machine.save_data().unwrap();
         assert!(machine.load_save_data(&[0xFF; 4]).is_err());
