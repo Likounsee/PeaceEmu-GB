@@ -42,6 +42,18 @@ impl GbaMachine {
         Ok(cycles)
     }
 
+    /// Executes up to the requested number of instructions, returning estimated total cycles.
+    ///
+    /// If an unsupported instruction is encountered, execution stops with that
+    /// error; counters retain the progress made before the error.
+    pub fn run_steps(&mut self, count: usize) -> Result<u64, CpuError> {
+        let mut cycles = 0_u64;
+        for _ in 0..count {
+            cycles = cycles.saturating_add(u64::from(self.step()?));
+        }
+        Ok(cycles)
+    }
+
     /// Sets the active-low keypad input through a pressed-key bitmask.
     ///
     /// Bits 0..9 correspond to A, B, Select, Start, Right, Left, Up, Down, R, L.
@@ -154,6 +166,16 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
         assert_eq!(machine.bus().cartridge_save_type(), None);
+    }
+
+    #[test]
+    fn batch_execution_matches_machine_diagnostic_counters() {
+        let mut machine = GbaMachine::new(cartridge());
+        let cycles = machine.run_steps(8).unwrap();
+        assert!(cycles >= 8);
+        assert_eq!(machine.instructions_executed(), 8);
+        assert_eq!(machine.cycles_elapsed(), cycles);
+        assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 32));
     }
 
     #[test]
