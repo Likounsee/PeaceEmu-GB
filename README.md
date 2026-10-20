@@ -48,8 +48,10 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let cartridge = GbaCartridge::parse(rom_bytes)?;
     let mut machine = GbaMachine::new(cartridge);
 
-    // Execute one instruction; modeled peripherals advance by estimated cycles.
-    let cycles = machine.step()?;
+    // Run a small batch; modeled peripherals advance by estimated cycles.
+    let cycles = machine.run_steps(100)?;
+    machine.set_keys_pressed(0); // all buttons released
+    let _save_snapshot = machine.save_data(); // None if the ROM save type is unknown
     println!("step took {cycles} estimated cycles");
 
     if let Some(frame) = machine.render_frame() {
