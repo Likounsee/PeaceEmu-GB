@@ -368,6 +368,31 @@ mod tests {
     }
 
     #[test]
+    fn machine_save_api_round_trips_flash_and_eeprom_images() {
+        for (marker, save_type, size) in [
+            (b"FLASH_V".as_slice(), crate::SaveType::Flash64K, 64 * 1024),
+            (b"FLASH1M_V".as_slice(), crate::SaveType::Flash128K, 128 * 1024),
+            (b"EEPROM_V".as_slice(), crate::SaveType::Eeprom, 512),
+        ] {
+            let mut rom = vec![0; GBA_HEADER_SIZE + marker.len()];
+            rom[0xA0..0xAC].copy_from_slice(b"TEST GAME   ");
+            rom[0xAC..0xB0].copy_from_slice(b"TGME");
+            rom[0xB0..0xB2].copy_from_slice(b"01");
+            rom[0xBD] = rom[0xA0..=0xBC]
+                .iter()
+                .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+                .wrapping_neg();
+            rom[GBA_HEADER_SIZE..].copy_from_slice(marker);
+            let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+            assert_eq!(machine.bus().cartridge_save_type(), Some(save_type));
+            let image = vec![0xA5; size];
+            assert!(machine.load_save_data(&image).unwrap());
+            assert_eq!(machine.save_data().unwrap(), image);
+            assert!(!machine.load_save_data(&[0x11; 7]).unwrap_or(false));
+        }
+    }
+
+    #[test]
     fn cpu_reset_preserves_bus_state_and_clears_counters() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write32(0x0200_0000, 0x1234_5678);
