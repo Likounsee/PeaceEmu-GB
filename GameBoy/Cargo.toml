@@ -1,0 +1,8 @@
+[package]
+name = "gameboy"
+version = "0.1.0"
+description = "Game Boy Advance emulation core"
+edition = "2021"
+license = "LicenseRef-Proprietary"
+rust-version = "1.78"
+repository = "https://github.com/Likounsee/PeaceEmu"
