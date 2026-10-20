@@ -130,6 +130,16 @@ mod tests {
     }
 
     #[test]
+    fn step_advances_cpu_and_diagnostic_counters_together() {
+        let mut machine = GbaMachine::new(cartridge());
+        let cycles = machine.step().unwrap();
+        assert!(cycles > 0);
+        assert_eq!(machine.instructions_executed(), 1);
+        assert_eq!(machine.cycles_elapsed(), u64::from(cycles));
+        assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 4));
+    }
+
+    #[test]
     fn cpu_reset_preserves_bus_state_and_clears_counters() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write32(0x0200_0000, 0x1234_5678);
