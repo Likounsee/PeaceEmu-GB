@@ -294,7 +294,10 @@ mod tests {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_until_scanline(0, 10).unwrap(), Some(0));
         assert_eq!(machine.run_until_scanline(228, 10).unwrap(), None);
-        assert_eq!(machine.run_until_scanline(1, 1).unwrap(), Some(1));
+        machine.bus_mut().advance_cycles(1232);
+        assert_eq!(machine.bus().video_scanline(), 1);
+        assert_eq!(machine.run_until_scanline(1, 10).unwrap(), Some(0));
+        assert_eq!(machine.run_until_scanline(2, 1).unwrap(), None);
         assert_eq!(machine.bus().video_scanline(), 1);
     }
 
