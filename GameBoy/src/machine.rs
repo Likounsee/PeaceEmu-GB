@@ -166,6 +166,24 @@ impl GbaMachine {
         Ok(max_steps)
     }
 
+    /// Executes up to `max_steps` instructions until DISPSTAT's VCOUNT-match flag is set.
+    ///
+    /// Unlike `run_until_scanline`, this follows the compare value programmed in
+    /// DISPSTAT rather than a caller-supplied scanline. Returns zero if the match
+    /// is already active, or `max_steps` if the event was not reached in time.
+    pub fn run_until_vcount_match(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        if self.bus.video_vcount_match() {
+            return Ok(0);
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.video_vcount_match() {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
+
     /// Sets the active-low keypad input through a pressed-key bitmask.
     ///
     /// Bits 0..9 correspond to A, B, Select, Start, Right, Left, Up, Down, R, L.
@@ -296,6 +314,21 @@ mod tests {
         assert_eq!(machine.run_until_vblank(2).unwrap(), 2);
         assert!(!machine.bus().video_in_vblank());
         assert_eq!(machine.instructions_executed(), 2);
+    }
+
+    #[test]
+    fn vcount_match_runner_uses_dispstat_compare_flag() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0004, 0); // Compare against scanline zero.
+        assert!(machine.bus().video_vcount_match());
+        let before = machine.instructions_executed();
+        assert_eq!(machine.run_until_vcount_match(4).unwrap(), 0);
+        assert_eq!(machine.instructions_executed(), before);
+
+        machine.bus_mut().advance_cycles(1232); // Scanline one no longer matches zero.
+        assert!(!machine.bus().video_vcount_match());
+        assert_eq!(machine.run_until_vcount_match(2).unwrap(), 2);
+        assert!(!machine.bus().video_vcount_match());
     }
 
     #[test]
