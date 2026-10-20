@@ -54,6 +54,39 @@ impl GbaMachine {
         Ok(cycles)
     }
 
+    /// Returns the enabled interrupt sources currently requested by peripherals.
+    ///
+    /// This reports the IE/IF intersection even when IME is disabled.
+    pub fn pending_interrupts(&self) -> u16 {
+        self.bus.pending_interrupts()
+    }
+
+    /// Returns whether an enabled interrupt is ready for CPU service (IME, IE, and IF).
+    ///
+    /// This is a status query only; IRQ exception entry is not implemented yet.
+    pub fn interrupt_pending(&self) -> bool {
+        self.bus.interrupt_pending()
+    }
+
+    /// Executes up to `max_steps` instructions, stopping when a CPU-visible IRQ is pending.
+    ///
+    /// Returns the number of instructions executed. A return value equal to
+    /// `max_steps` does not by itself mean an interrupt occurred; check
+    /// [`interrupt_pending`](Self::interrupt_pending). If an unsupported
+    /// instruction is encountered, the error is returned and prior progress remains.
+    pub fn run_until_interrupt(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        if self.bus.interrupt_pending() {
+            return Ok(0);
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.interrupt_pending() {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
+
     /// Sets the active-low keypad input through a pressed-key bitmask.
     ///
     /// Bits 0..9 correspond to A, B, Select, Start, Right, Left, Up, Down, R, L.
@@ -176,6 +209,23 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 8);
         assert_eq!(machine.cycles_elapsed(), cycles);
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 32));
+    }
+
+    #[test]
+    fn machine_exposes_interrupt_status_and_can_run_until_an_irq_is_pending() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0100, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0102, 0x00C0);
+        machine.bus_mut().write16(0x0400_0200, 1 << 3);
+        machine.bus_mut().write16(0x0400_0208, 1);
+
+        assert_eq!(machine.pending_interrupts(), 0);
+        assert!(!machine.interrupt_pending());
+        let executed = machine.run_until_interrupt(8).unwrap();
+        assert_eq!(executed, 1);
+        assert_eq!(machine.pending_interrupts(), 1 << 3);
+        assert!(machine.interrupt_pending());
+        assert_eq!(machine.run_until_interrupt(8).unwrap(), 0);
     }
 
     #[test]
