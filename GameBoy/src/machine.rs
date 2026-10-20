@@ -388,7 +388,8 @@ mod tests {
             let image = vec![0xA5; size];
             assert!(machine.load_save_data(&image).unwrap());
             assert_eq!(machine.save_data().unwrap(), image);
-            assert!(!machine.load_save_data(&[0x11; 7]).unwrap_or(false));
+            assert!(machine.load_save_data(&[0x11; 7]).is_err());
+            assert_eq!(machine.save_data().unwrap(), image);
         }
     }
 
