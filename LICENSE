@@ -1,24 +1,28 @@
-PROPRIETARY LICENSE — PEACEEMU
+MIT License
 
-Copyright and Intellectual Property Notice
+Copyright (c) 2026 Likounsee
 
-PeaceEmu, including this repository and its source code, documentation, names,
-designs, and associated materials (collectively, the "Project"), is proprietary
-intellectual property. All rights, title, and interest in the Project belong to
-the person or legal entity that owns the intellectual property rights to
-PeaceEmu.
+PeaceEmu is a community-driven, open-source project. Copyright and other
+intellectual property rights in PeaceEmu and in contributions remain with their
+respective rights holders. Likounsee is the project owner and retains the rights
+to their own original contributions and to the PeaceEmu project identity, to
+the extent those rights belong to Likounsee. This notice does not claim
+ownership of third-party code or contributions owned by others.
 
-All rights are reserved. No license, permission, or other right to use, copy,
-modify, adapt, distribute, publish, sublicense, or create derivative works
-from the Project is granted by making this repository available, unless the
-rights holder gives prior express written permission.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Access to this repository does not transfer ownership or grant any intellectual
-property rights. Any use not expressly authorized in writing by the rights
-holder is prohibited to the fullest extent permitted by applicable law.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-For permission requests, contact the rights holder through the official
-PeaceEmu project channels.
-
-This notice is intended to state the proprietary status of the Project; it does
-not identify a particular individual or company by legal name.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
