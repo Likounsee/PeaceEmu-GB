@@ -232,6 +232,14 @@ mod tests {
     }
 
     #[test]
+    fn vblank_runner_respects_step_limit_without_claiming_a_frame() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_vblank(2).unwrap(), 2);
+        assert!(!machine.bus().video_in_vblank());
+        assert_eq!(machine.instructions_executed(), 2);
+    }
+
+    #[test]
     fn machine_exposes_interrupt_status_and_can_run_until_an_irq_is_pending() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0100, 0xFFFF);
