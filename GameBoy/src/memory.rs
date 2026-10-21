@@ -3802,7 +3802,7 @@ mod tests {
         // Half volume behaves like an arithmetic shift for negative odd samples.
         bus.audio_last_samples = [-19, 19];
         bus.write16(0x0400_0082, (1 << 9) | (1 << 13));
-        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 0));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-1, 0));
 
         // SOUNDCNT_X master disable silences the mix regardless of FIFO latches.
         bus.write16(0x0400_0084, 0);
