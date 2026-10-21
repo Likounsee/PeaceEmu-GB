@@ -263,17 +263,15 @@ impl Cpu {
                 || raw & 0xF800 == 0xF800
                 || (raw & 0xFC00 == 0x4400
                     && (((raw >> 8) & 3) == 3
-                        || (((raw >> 8) & 3) != 1
-                            && ((raw & 7) | ((raw >> 4) & 8)) == 15)))
+                        || (((raw >> 8) & 3) != 1 && ((raw & 7) | ((raw >> 4) & 8)) == 15)))
                 || (raw & 0xFE00 == 0xBC00 && raw & (1 << 8) != 0)
         } else {
-            let condition_passed = (instruction >> 28) != 0xF
-                && self.condition_passed(instruction >> 28);
+            let condition_passed =
+                (instruction >> 28) != 0xF && self.condition_passed(instruction >> 28);
             condition_passed
                 && ((instruction & 0x0E00_0000 == 0x0A00_0000)
                     || instruction & 0x0FFF_FFF0 == 0x012F_FF10
-                    || (instruction & 0x0C00_0000 == 0
-                        && (instruction >> 12) & 0xF == 15)
+                    || (instruction & 0x0C00_0000 == 0 && (instruction >> 12) & 0xF == 15)
                     || (instruction & 0x0C00_0000 == 0x0400_0000
                         && instruction & (1 << 20) != 0
                         && (instruction >> 12) & 0xF == 15)
