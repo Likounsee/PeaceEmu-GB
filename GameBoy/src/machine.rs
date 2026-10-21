@@ -2611,7 +2611,10 @@ mod tests {
             let snapshot = machine.diagnostic_snapshot();
             assert_eq!(snapshot.cartridge_save_type, Some(save_type));
             assert_eq!(snapshot.cartridge_save_size_bytes, Some(size));
-            assert_eq!(snapshot.cartridge_rom_size_bytes, GBA_HEADER_SIZE + marker.len());
+            assert_eq!(
+                snapshot.cartridge_rom_size_bytes,
+                GBA_HEADER_SIZE + marker.len()
+            );
             assert_eq!(machine.save_data_size_bytes(), Some(size));
             let image = vec![0xA5; size];
             assert!(machine.load_save_data(&image).unwrap());
