@@ -2466,10 +2466,7 @@ mod tests {
     #[test]
     fn obj_window_reveals_bg2_only_under_opaque_obj_pixels() {
         let mut bus = bus();
-        bus.write16(
-            0x0400_0000,
-            3 | (1 << 10) | (1 << 12) | (1 << 15),
-        ); // Mode 3, BG2, OBJ, and OBJ window.
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12) | (1 << 15)); // Mode 3, BG2, OBJ, and OBJ window.
         bus.write16(VRAM_BASE, 0x001F);
         bus.write16(VRAM_BASE + 8 * 2, 0x001F);
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
