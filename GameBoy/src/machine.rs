@@ -127,6 +127,44 @@ impl GbaMachine {
         Ok(max_steps)
     }
 
+    /// Executes until the PPU enters the next VBlank period, even if one is active now.
+    ///
+    /// Unlike [`run_until_vblank`](Self::run_until_vblank), this always waits for a
+    /// fresh entry: if VBlank is already active, it first waits for VBlank to end.
+    /// Returns the number of instructions executed, or `max_steps` if the next
+    /// entry was not reached. CPU timing remains instruction-granular.
+    pub fn run_until_next_vblank(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        let mut saw_vblank_end = !self.bus.video_in_vblank();
+        for executed in 0..max_steps {
+            self.step()?;
+            let in_vblank = self.bus.video_in_vblank();
+            if !in_vblank {
+                saw_vblank_end = true;
+            } else if saw_vblank_end {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
+
+    /// Executes until the PPU enters the next HBlank period, even if one is active now.
+    ///
+    /// Unlike [`run_until_hblank`](Self::run_until_hblank), this waits for a fresh
+    /// entry into HBlank. Returns the number of instructions executed, or
+    /// `max_steps` if the next entry was not reached.
+    pub fn run_until_next_hblank(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        let mut saw_hblank_end = !self.bus.video_in_hblank();
+        for executed in 0..max_steps {
+            self.step()?;
+            let in_hblank = self.bus.video_in_hblank();
+            if !in_hblank {
+                saw_hblank_end = true;
+            } else if saw_hblank_end {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
     /// Executes up to `max_steps` instructions, stopping when the PPU enters VBlank.
     ///
     /// Returns the number of instructions executed. If VBlank is already active,
@@ -316,6 +354,32 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 2);
     }
 
+    #[test]
+    fn next_vblank_runner_waits_for_a_fresh_transition() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_next_vblank(2).unwrap(), 2);
+        assert!(!machine.bus().video_in_vblank());
+
+        // Being inside VBlank is not enough: the runner waits for it to end
+        // and enter again rather than returning immediately.
+        machine.bus_mut().advance_cycles(160 * 1232);
+        assert!(machine.bus().video_in_vblank());
+        let before = machine.instructions_executed();
+        assert_eq!(machine.run_until_next_vblank(2).unwrap(), 2);
+        assert_eq!(machine.instructions_executed(), before + 2);
+        assert!(machine.bus().video_in_vblank());
+    }
+
+    #[test]
+    fn next_hblank_runner_waits_for_a_fresh_transition() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().advance_cycles(1000);
+        assert!(machine.bus().video_in_hblank());
+        let before = machine.instructions_executed();
+        assert_eq!(machine.run_until_next_hblank(2).unwrap(), 2);
+        assert_eq!(machine.instructions_executed(), before + 2);
+        assert!(machine.bus().video_in_hblank());
+    }
     #[test]
     fn vcount_match_runner_uses_dispstat_compare_flag() {
         let mut machine = GbaMachine::new(cartridge());
