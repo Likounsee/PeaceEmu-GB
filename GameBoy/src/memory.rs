@@ -4042,7 +4042,7 @@ mod tests {
         bus.write32(0x0400_00B4, 0x0300_0020);
         bus.write16(0x0400_00B8, 1);
         // DMA0: enable, VBlank timing, and completion IRQ.
-        bus.write16(0x0400_00BA, 0xD000);
+        bus.write16(0x0400_00BA, 0xD400);
 
         assert_eq!(bus.read32(0x0300_0020), 0);
         assert_eq!(bus.read16(0x0400_0202) & (1 << 8), 0);
