@@ -1801,6 +1801,23 @@ mod tests {
     }
 
     #[test]
+    fn machine_gamepak_width_timing_tracks_waitcnt_changes() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0204, 0);
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0800_0000, false, 1), Some(4));
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0800_0000, false, 2), Some(4));
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(6));
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0E00_0000, false, 4), Some(16));
+
+        machine.bus_mut().write16(0x0400_0204, 0x0417);
+        assert_eq!(machine.gamepak_wait_control(), 0x0417);
+        assert_eq!(machine.diagnostic_snapshot().gamepak_wait_control, 0x0417);
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(3));
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0200_0000, false, 4), None);
+    }
+
+    #[test]
     fn machine_forwards_gamepak_sequence_boundary_behavior() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0204, 0);
