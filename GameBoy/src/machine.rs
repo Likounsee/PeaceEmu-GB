@@ -448,6 +448,11 @@ impl GbaMachine {
         self.bus.timer_counter(timer)
     }
 
+    /// Returns the reload value configured for a hardware timer (timer 0–3).
+    pub fn timer_reload_value(&self, timer: usize) -> Option<u16> {
+        self.bus.timer_reload_value(timer)
+    }
+
     /// Returns whether a hardware timer (timer 0–3) is enabled.
     pub fn timer_enabled(&self, timer: usize) -> Option<bool> {
         self.bus.timer_enabled(timer)
@@ -456,6 +461,11 @@ impl GbaMachine {
     /// Estimates CPU cycles until a timer overflows, if its current mode supports it.
     pub fn timer_cycles_until_overflow(&self, timer: usize) -> Option<u64> {
         self.bus.timer_cycles_until_overflow(timer)
+    }
+
+    /// Returns the number of cycles elapsed in the current scanline.
+    pub fn video_cycles_into_scanline(&self) -> u16 {
+        self.bus.video_cycles_into_scanline()
     }
 
     /// Returns cycles until the next HBlank boundary.
@@ -1015,8 +1025,10 @@ mod tests {
         assert_eq!(machine.timer_enabled(4), None);
         assert_eq!(machine.timer_cycles_until_overflow(4), None);
         assert_eq!(machine.timer_counter(0), machine.bus().timer_counter(0));
+        assert_eq!(machine.timer_reload_value(0), machine.bus().timer_reload_value(0));
         assert_eq!(machine.timer_enabled(0), machine.bus().timer_enabled(0));
         assert_eq!(machine.timer_cycles_until_overflow(0), machine.bus().timer_cycles_until_overflow(0));
+        assert_eq!(machine.video_cycles_into_scanline(), machine.bus().video_cycles_into_scanline());
         assert_eq!(machine.video_cycles_until_hblank(), machine.bus().video_cycles_until_hblank());
         assert_eq!(machine.video_cycles_until_vblank(), machine.bus().video_cycles_until_vblank());
         assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), machine.bus().gamepak_sequence_cycles(0x0800_0000, false, 2, 3));
