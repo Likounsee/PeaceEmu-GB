@@ -349,9 +349,23 @@ fn render_text_backgrounds(
                 continue;
             }
             if mode == 0 || bg < 2 {
-                render_text_background(bus, bg, control, &palette, frame);
+                render_text_background(
+                    bus,
+                    bg,
+                    control,
+                    &palette,
+                    bitmap_brightness_effect(bus, display_control, bg as u16),
+                    frame,
+                );
             } else if bg >= 2 && (mode == 2 || bg == 2) {
-                render_affine_background(bus, bg, control, &palette, frame);
+                render_affine_background(
+                    bus,
+                    bg,
+                    control,
+                    &palette,
+                    bitmap_brightness_effect(bus, display_control, bg as u16),
+                    frame,
+                );
             }
         }
         // OBJ pixels have precedence over BG pixels at the same priority.
@@ -379,6 +393,7 @@ fn render_affine_background(
     bg: u32,
     control: u16,
     palette: &[u32; 256],
+    brightness_effect: Option<(bool, u16)>,
     frame: &mut VideoFrame,
 ) {
     let register_base = 0x0400_0020 + (bg - 2) * 0x10;
@@ -459,7 +474,8 @@ fn render_affine_background(
             let pixel_offset = ((source_y & 7) * 8 + (source_x & 7)) as usize;
             let palette_index = u32::from(pixels[pixel_offset]);
             if palette_index != 0 {
-                frame.pixels[y * SCREEN_WIDTH + x] = palette[palette_index as usize];
+                frame.pixels[y * SCREEN_WIDTH + x] =
+                    apply_brightness_effect(palette[palette_index as usize], brightness_effect);
             }
         }
     }
@@ -482,6 +498,7 @@ fn render_text_background(
     bg: u32,
     control: u16,
     palette: &[u32; 256],
+    brightness_effect: Option<(bool, u16)>,
     frame: &mut VideoFrame,
 ) {
     let hofs_address = BG0HOFS + bg * 4;
@@ -595,7 +612,8 @@ fn render_text_background(
             // Color index zero is transparent even when a 4bpp palette bank
             // makes its absolute palette index nonzero.
             if !transparent {
-                frame.pixels[y * SCREEN_WIDTH + x] = palette[palette_index as usize];
+                frame.pixels[y * SCREEN_WIDTH + x] =
+                    apply_brightness_effect(palette[palette_index as usize], brightness_effect);
             }
         }
     }
