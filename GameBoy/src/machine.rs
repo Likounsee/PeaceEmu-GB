@@ -127,6 +127,31 @@ impl GbaMachine {
         Ok(max_steps)
     }
 
+    /// Executes until the PPU reaches the next occurrence of a scanline.
+    ///
+    /// Unlike [`run_until_scanline`](Self::run_until_scanline), this waits for the
+    /// next occurrence even when `target_scanline` is the current line. Returns
+    /// `None` for an invalid line or when the step limit is reached.
+    pub fn run_until_next_scanline(
+        &mut self,
+        target_scanline: u16,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if target_scanline >= 228 {
+            return Ok(None);
+        }
+        let mut left_target = self.bus.video_scanline() != target_scanline;
+        for executed in 0..max_steps {
+            self.step()?;
+            let scanline = self.bus.video_scanline();
+            if scanline != target_scanline {
+                left_target = true;
+            } else if left_target {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
     /// Executes until the PPU enters the next VBlank period, even if one is active now.
     ///
     /// Unlike [`run_until_vblank`](Self::run_until_vblank), this always waits for a
@@ -354,6 +379,14 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 2);
     }
 
+    #[test]
+    fn next_scanline_runner_does_not_return_for_the_current_line() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_next_scanline(0, 2).unwrap(), None);
+        assert_eq!(machine.bus().video_scanline(), 0);
+        assert_eq!(machine.run_until_next_scanline(228, 2).unwrap(), None);
+        assert_eq!(machine.run_until_next_scanline(1, 2).unwrap(), None);
+    }
     #[test]
     fn next_vblank_runner_waits_for_a_fresh_transition() {
         let mut machine = GbaMachine::new(cartridge());
