@@ -274,15 +274,11 @@ impl MemoryBus {
         }
         let sound_control = self.read16(0x0400_0082);
         for fifo in 0..2 {
-            let route_mask = if fifo == 0 {
-                (1 << 8) | (1 << 9)
-            } else {
-                (1 << 12) | (1 << 13)
-            };
+            // FIFO consumption follows its selected timer even when neither
+            // speaker output is routed. SOUNDCNT_H routing only gates the DAC
+            // mix; it must not pause the FIFO or its low-water DMA requests.
             let timer_bit = if fifo == 0 { 10 } else { 14 };
-            if sound_control & route_mask == 0
-                || usize::from((sound_control >> timer_bit) & 1) != timer
-            {
+            if usize::from((sound_control >> timer_bit) & 1) != timer {
                 continue;
             }
             // Direct Sound holds the last DAC sample if the FIFO runs dry;
@@ -2052,6 +2048,23 @@ mod tests {
         bus.advance_cycles(1);
         assert_eq!(bus.audio_fifo_len(0), Some(3));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0x11));
+    }
+
+    #[test]
+    fn sound_fifo_consumes_samples_even_when_output_is_not_routed() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080); // Sound master enabled.
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        // No SOUNDCNT_H speaker-routing bits are enabled.
+        bus.write16(0x0400_0082, 0);
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080); // Timer 0 overflows every cycle.
+
+        bus.advance_cycles(1);
+
+        assert_eq!(bus.audio_fifo_len(0), Some(3));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x11));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 0));
     }
 
     #[test]
