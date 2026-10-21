@@ -1360,7 +1360,9 @@ impl MemoryBus {
                 self.io[io_offset] = value;
             } else {
                 let old_control = self.timer_control[timer];
-                let mask = 0x00C7_u16 & (0xFF_u16 << shift);
+                // Timer 0 has no cascade input; bit 2 is reserved on TM0.
+                let timer_control_mask = if timer == 0 { 0x00C3 } else { 0x00C7 };
+                let mask = timer_control_mask & (0xFF_u16 << shift);
                 self.timer_control[timer] =
                     (old_control & !mask) | (((value as u16) << shift) & mask);
                 if old_control & 0x0080 == 0 && self.timer_control[timer] & 0x0080 != 0 {
@@ -1555,7 +1557,9 @@ impl MemoryBus {
                 self.io[io_offset + 1] = bytes[1];
             } else {
                 let old_control = self.timer_control[timer];
-                self.timer_control[timer] = value & 0x00C7;
+                // TM0 has no cascade source, so its bit 2 reads back as zero.
+                let timer_control_mask = if timer == 0 { 0x00C3 } else { 0x00C7 };
+                self.timer_control[timer] = value & timer_control_mask;
                 if old_control & 0x0080 == 0 && self.timer_control[timer] & 0x0080 != 0 {
                     self.timer_counter[timer] = self.timer_reload[timer];
                     self.timer_prescaler_phase[timer] = 0;
@@ -2205,6 +2209,26 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0100), 0);
         bus.advance_cycles(1);
         assert_eq!(bus.read16(0x0400_0100), 1);
+    }
+
+    #[test]
+    fn timer_zero_masks_reserved_cascade_bit_for_halfword_and_byte_writes() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        bus.write16(0x0400_0102, 0x0084);
+        assert_eq!(bus.read16(0x0400_0102), 0x0080);
+        assert_eq!(bus.timer_cascade_enabled(0), Some(false));
+
+        // The same reserved bit must be masked when the control high byte is
+        // written independently, without disturbing the enable bit.
+        bus.write8(0x0400_0103, 0x84);
+        assert_eq!(bus.read16(0x0400_0102), 0x0080);
+        assert_eq!(bus.timer_cascade_enabled(0), Some(false));
+
+        // Timer 1 does support cascade clocking and must retain bit 2.
+        bus.write16(0x0400_0106, 0x0084);
+        assert_eq!(bus.read16(0x0400_0106), 0x0084);
+        assert_eq!(bus.timer_cascade_enabled(1), Some(true));
     }
 
     #[test]
