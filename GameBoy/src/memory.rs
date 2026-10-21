@@ -343,6 +343,16 @@ impl MemoryBus {
             })
     }
 
+    /// Returns the current prescaler phase for a timer (TM0..TM3).
+    ///
+    /// The phase is the number of CPU cycles accumulated toward the next
+    /// prescaled tick and is always smaller than the selected divisor. For
+    /// cascade-mode timers this value is not used to clock the timer. Returns
+    /// None for an invalid index.
+    pub fn timer_prescaler_phase(&self, timer: usize) -> Option<u16> {
+        self.timer_prescaler_phase.get(timer).copied()
+    }
+
     /// Returns whether a timer is configured to raise an IRQ on overflow.
     ///
     /// Returns None for an invalid index.
@@ -2031,6 +2041,8 @@ mod tests {
         assert_eq!(bus.timer_reload_value(0), Some(0));
         assert_eq!(bus.timer_enabled(0), Some(false));
         assert_eq!(bus.timer_cycles_until_overflow(0), None);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+        assert_eq!(bus.timer_prescaler_phase(4), None);
         assert_eq!(bus.timer_counter(4), None);
 
         bus.write16(0x0400_0100, 0xFFFE);
@@ -2038,8 +2050,10 @@ mod tests {
         assert_eq!(bus.timer_counter(0), Some(0xFFFE));
         assert_eq!(bus.timer_reload_value(0), Some(0xFFFE));
         assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
 
         bus.advance_cycles(17);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(17));
         assert_eq!(bus.timer_cycles_until_overflow(0), Some(111));
         bus.advance_cycles(111);
         assert_eq!(bus.timer_counter(0), Some(0xFFFE));
