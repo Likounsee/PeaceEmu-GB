@@ -3943,7 +3943,10 @@ mod tests {
         ram_cpu.set_register(15, 0x0300_0000);
         ram_bus.write32(0x0300_0000, 0xE1A0_0000);
         let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
-        assert_eq!(ram_cycles, 1, "IWRAM fetch must not receive Game Pak wait states");
+        assert_eq!(
+            ram_cycles, 1,
+            "IWRAM fetch must not receive Game Pak wait states"
+        );
     }
 
     #[test]
