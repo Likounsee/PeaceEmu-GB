@@ -582,20 +582,28 @@ impl MemoryBus {
             return None;
         }
         let first = self.gamepak_access_cycles(address, sequential)?;
+        let last_address = address.checked_add(u32::from(width_bytes) - 1)?;
         match address {
             0x0800_0000..=0x0DFF_FFFF => {
+                // A single access must not silently cross into a different
+                // WAITCNT ROM region, even when the starting byte is mapped.
+                let first_region = address >> 25;
+                if last_address >> 25 != first_region {
+                    return None;
+                }
                 if width_bytes == 4 {
                     let second_address = address.checked_add(2)?;
-                    let first_region = address >> 25;
-                    if second_address >> 25 != first_region {
-                        return None;
-                    }
                     first.checked_add(self.gamepak_access_cycles(second_address, true)?)
                 } else {
                     Some(first)
                 }
             }
-            0x0E00_0000..=0x0FFF_FFFF => first.checked_mul(u32::from(width_bytes)),
+            0x0E00_0000..=0x0FFF_FFFF => {
+                if last_address > 0x0FFF_FFFF {
+                    return None;
+                }
+                first.checked_mul(u32::from(width_bytes))
+            }
             _ => None,
         }
     }
@@ -2794,6 +2802,12 @@ mod tests {
         assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(8));
         assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, true), Some(4));
         assert_eq!(bus.gamepak_access_cycles(0x0200_0000, false), None);
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 1), Some(4));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 2), Some(4));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(6));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 2), None);
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0FFF_FFFF, false, 4), None);
 
         // Exercise the slowest non-sequential ROM and fastest sequential timings;
         // SRAM independently selects its encoded wait duration.
