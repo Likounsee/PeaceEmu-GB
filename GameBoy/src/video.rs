@@ -1996,7 +1996,7 @@ mod tests {
             oam[base + 2..base + 4].copy_from_slice(&0_u16.to_le_bytes());
         }
         let visible_object = 32 * 8;
-        oam[visible_object..visible_object + 2].copy_from_slice(&0_u16.to_le_bytes());
+        oam[visible_object..visible_object + 2].copy_from_slice(&8_u16.to_le_bytes());
         oam[visible_object + 2..visible_object + 4].copy_from_slice(&0_u16.to_le_bytes());
 
         let allowed = object_scanline_mask(&oam);
