@@ -140,10 +140,12 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     // Bitmap modes use BG2 as their framebuffer plane. If BG2 is disabled,
     // show the backdrop color instead; OBJ pixels can still appear over it.
     if mode >= 3 && display_control & (1 << 10) == 0 {
-        frame.pixels.fill(apply_brightness_effect(
+        fill_backdrop(
+            &mut frame,
             rgb555(bus.read16(PALETTE_BASE)),
             bitmap_brightness_effect(bus, display_control, 5),
-        ));
+            windows,
+        );
         let obj_palette = obj_palette_snapshot(bus);
         for priority in (0..=3).rev() {
             render_regular_objects(
@@ -194,10 +196,12 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 mosaic_height,
                 bg2_control & (1 << 13) != 0,
             );
-            frame.pixels.fill(apply_brightness_effect(
+            fill_backdrop(
+                &mut frame,
                 rgb555(bus.read16(PALETTE_BASE)),
                 bitmap_brightness_effect(bus, display_control, 5),
-            ));
+                windows,
+            );
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
                     let Some((source_x, source_y)) = transform.source_coordinates(x, y) else {
@@ -240,10 +244,12 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             // Palette RAM is unchanged during this snapshot render. Resolve it
             // once rather than issuing another bus read for every framebuffer pixel.
             let palette = palette_snapshot(bus);
-            frame.pixels.fill(apply_brightness_effect(
+            fill_backdrop(
+                &mut frame,
                 palette[0],
                 bitmap_brightness_effect(bus, display_control, 5),
-            ));
+                *windows,
+            );
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
                     let Some((source_x, source_y)) = transform.source_coordinates(x, y) else {
@@ -516,6 +522,27 @@ fn render_affine_background(
                     },
                 );
             }
+        }
+    }
+}
+
+/// Fills the backdrop while honoring each window's color-effect permission.
+fn fill_backdrop(
+    frame: &mut VideoFrame,
+    color: u32,
+    effect: Option<(bool, u16)>,
+    windows: WindowConfig,
+) {
+    for y in 0..SCREEN_HEIGHT {
+        for x in 0..SCREEN_WIDTH {
+            frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                color,
+                if windows.effects_allowed(x, y) {
+                    effect
+                } else {
+                    None
+                },
+            );
         }
     }
 }
