@@ -1274,6 +1274,20 @@ impl MemoryBus {
         self.interrupt_master_enable & 1 != 0 && self.pending_interrupts() != 0
     }
 
+    /// Returns the lowest-numbered enabled interrupt source awaiting service.
+    ///
+    /// The returned value is the source bit index (0–13), not a bitmask.
+    /// IME is deliberately ignored so callers can inspect priority while
+    /// globally masked. CPU IRQ exception entry is handled separately.
+    pub fn pending_interrupt_source(&self) -> Option<u8> {
+        let pending = self.pending_interrupts();
+        if pending == 0 {
+            None
+        } else {
+            Some(pending.trailing_zeros() as u8)
+        }
+    }
+
     /// Latches the keypad IRQ (interrupt bit 12) when its condition changes
     /// from inactive to active. IF remains latched until software writes one to clear it.
     fn latch_keypad_irq_on_rising_edge(&mut self, was_requested: bool) {
@@ -1892,6 +1906,24 @@ mod tests {
             bus.interrupt_request_flags(),
             0x3FFF & !((1 << 2) | (1 << 3) | (1 << 12))
         );
+    }
+
+    #[test]
+    fn pending_interrupt_source_uses_lowest_enabled_bit_and_ignores_ime() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.pending_interrupt_source(), None);
+
+        bus.write16(0x0400_0200, (1 << 9) | (1 << 2) | (1 << 5));
+        bus.request_interrupt((1 << 9) | (1 << 5));
+        assert_eq!(bus.pending_interrupt_source(), Some(5));
+        assert!(!bus.interrupt_pending());
+
+        bus.request_interrupt(1 << 2);
+        assert_eq!(bus.pending_interrupt_source(), Some(2));
+        bus.acknowledge_interrupts((1 << 2) | (1 << 5));
+        assert_eq!(bus.pending_interrupt_source(), Some(9));
+        bus.acknowledge_interrupts(1 << 9);
+        assert_eq!(bus.pending_interrupt_source(), None);
     }
 
     #[test]
