@@ -19,7 +19,7 @@ pub mod save;
 
 pub use cartridge::{CartridgeError, GbaCartridge};
 pub use cpu::{ConditionFlags, Cpu, CpuError, StepOutcome};
-pub use memory::{GbaButton, MemoryBus, SramSizeError};
+pub use memory::{AudioFifoStatus, GbaButton, MemoryBus, SramSizeError};
 pub use save::{EepromDevice, FlashDevice, SaveType};
 
 /// High-level machine facade connecting the CPU, bus, and video renderer.
