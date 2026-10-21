@@ -2647,6 +2647,49 @@ mod tests {
     }
 
     #[test]
+    fn unaligned_halfword_loads_follow_arm7tdmi_rotation_and_signed_byte_rules() {
+        let mut bus = bus_with_program(&[
+            0xE1D1_20B0, // LDRH r2, [r1]
+            0xE1D1_30F0, // LDRSH r3, [r1]
+        ]);
+        bus.write16(0x0200_0100, 0x80FF);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(1, 0x0200_0101);
+
+        // An odd LDRH rotates the aligned halfword by eight bits.
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(2), Some(0x0000_FF80));
+
+        // An odd LDRSH is treated as LDRSB and sign-extends the addressed byte.
+        cpu.reset(0x0200_0004);
+        cpu.set_register(1, 0x0200_0101);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(3), Some(0xFFFF_FFFF));
+    }
+
+    #[test]
+    fn arm_swap_and_swap_byte_report_expected_instruction_cycles() {
+        let mut bus = bus_with_program(&[
+            0xE102_1093, // SWP r1, r3, [r2]
+            0xE142_4095, // SWPB r4, r5, [r2]
+        ]);
+        bus.write32(0x0200_0100, 0x1234_5678);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(2, 0x0200_0100);
+        cpu.set_register(3, 0xAABB_CCDD);
+        cpu.set_register(5, 0x42);
+
+        assert_eq!(cpu.step_with_cycles(&mut bus).unwrap().1, 4);
+        assert_eq!(cpu.register(1), Some(0x1234_5678));
+        assert_eq!(bus.read32(0x0200_0100), 0xAABB_CCDD);
+        assert_eq!(cpu.step_with_cycles(&mut bus).unwrap().1, 4);
+        assert_eq!(cpu.register(4), Some(0xDD));
+        assert_eq!(bus.read8(0x0200_0100), 0x42);
+    }
+
+    #[test]
     fn halfword_and_signed_loads_use_correct_width_and_sign_extension() {
         let mut bus = bus_with_program(&[
             0xE1C1_00B0, // STRH r0, [r1]
