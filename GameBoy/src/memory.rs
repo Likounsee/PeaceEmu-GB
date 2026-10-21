@@ -1065,7 +1065,11 @@ impl MemoryBus {
             return;
         }
         if (address == 0x0400_0084 || address == 0x0400_0085) {
-            self.write_sound_master_control(value);
+            // SOUNDCNT_X's master-enable bit lives only in the low byte;
+            // writes to the reserved high byte must not change sound state.
+            if address == 0x0400_0084 {
+                self.write_sound_master_control(value);
+            }
             return;
         }
         if (address & !1) == 0x0400_0082 {
@@ -1962,6 +1966,17 @@ mod tests {
         bus.write16(0x0400_0083, 1 << 11);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
         assert_eq!(bus.read16(0x0400_0082) & (1 << 11), 0);
+    }
+
+    #[test]
+    fn sound_master_control_ignores_reserved_high_byte_writes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write8(0x0400_0085, 0x80);
+        assert_eq!(bus.read16(0x0400_0084), 0);
+        bus.write8(0x0400_0084, 0x80);
+        assert_eq!(bus.read16(0x0400_0084), 0x0080);
+        bus.write8(0x0400_0085, 0);
+        assert_eq!(bus.read16(0x0400_0084), 0x0080);
     }
 
     #[test]
