@@ -269,7 +269,8 @@ impl MemoryBus {
         let base = 0xB0 + channel * 12;
         let control_offset = base + 10;
         let control = u16::from_le_bytes([self.io[control_offset], self.io[control_offset + 1]]);
-        let destination = u32::from_le_bytes(self.io[base + 4..base + 8].try_into().unwrap());
+        let destination =
+            u32::from_le_bytes(self.io[base + 4..base + 8].try_into().unwrap()) & !3;
         let fifo_address = if fifo == 0 { 0x0400_00A0 } else { 0x0400_00A4 };
         // Sound FIFO DMA is supported only on DMA1/2, with word-sized
         // transfers, repeat enabled, incrementing source and fixed FIFO target.
@@ -2070,6 +2071,30 @@ mod tests {
 
         assert_eq!(bus.read16(0x0400_0202) & (1 << 9), 1 << 9);
         assert_eq!(bus.read32(0x0400_00BC), 0x0200_0210);
+    }
+
+    #[test]
+    fn sound_fifo_dma_matches_word_aligned_destination_address() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, 1 << 8); // FIFO A, timer 0.
+        bus.write32(0x0200_0000, 0x4433_2211);
+        bus.write32(0x0200_0004, 0x8877_6655);
+        bus.write32(0x0200_0008, 0xCCBB_AA99);
+        bus.write32(0x0200_000C, 0x00FF_EEDD);
+        bus.write32(0x0400_00B0, 0x0200_0000); // DMA1 source.
+        bus.write32(0x0400_00B4, 0x0400_00A3); // Low bits are ignored by the bus.
+        bus.write16(0x0400_00B8, 1);
+        bus.write16(0x0400_00BA, 0xB640); // Enable, repeat, word, FIFO timing.
+
+        bus.advance_cycles(1);
+        // A fresh FIFO request occurs on the next selected timer overflow.
+        bus.write16(0x0400_0102, 0xFFFF);
+        bus.write16(0x0400_0104, 0x0080); // Enable timer 0.
+        bus.advance_cycles(1);
+
+        assert_eq!(bus.audio_fifo_len(0), Some(16));
+        assert_eq!(bus.read32(0x0400_00B0), 0x0200_0010);
     }
 
     #[test]
