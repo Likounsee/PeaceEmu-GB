@@ -3591,15 +3591,16 @@ mod tests {
         bus.write32(0x0400_00A4, 0x1020_3040);
         assert_eq!(bus.audio_fifo_len(0), Some(4));
         assert_eq!(bus.audio_fifo_len(1), Some(4));
-        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x7F));
-        assert_eq!(bus.audio_fifo_last_sample(1), Some(0x10));
+
+        // Seed the currently held DAC samples: reset must silence only its FIFO.
+        bus.audio_last_samples = [12, -34];
 
         // FIFO A reset is a write-one command; FIFO B must remain intact.
         bus.write16(0x0400_0082, 1 << 11);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
         assert_eq!(bus.audio_fifo_len(1), Some(4));
-        assert_eq!(bus.audio_fifo_last_sample(1), Some(0x10));
+        assert_eq!(bus.audio_fifo_last_sample(1), Some(-34));
         assert_eq!(bus.read16(0x0400_0082) & (1 << 11), 0);
 
         bus.write16(0x0400_0082, 1 << 15);
