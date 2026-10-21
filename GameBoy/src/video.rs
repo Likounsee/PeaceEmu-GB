@@ -2470,7 +2470,7 @@ mod tests {
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12) | (1 << 15));
         bus.write16(VRAM_BASE, 0x001F);
         bus.write16(VRAM_BASE + 8 * 2, 0x001F);
-        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+        bus.write16(PALETTE_BASE, 0x03E0);
         // WINOBJ allows BG2; outside the OBJ window, BG2 is hidden.
         bus.write16(0x0400_004A, (1 << 2) << 8);
         // An 8x8 OBJ-window sprite using tile 512, the first available OBJ
