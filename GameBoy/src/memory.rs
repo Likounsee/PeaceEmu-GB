@@ -2783,6 +2783,29 @@ mod tests {
     }
 
     #[test]
+    fn direct_sound_mixer_preserves_full_signed_sum_and_independent_routes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+
+        // Both FIFOs at full volume can sum beyond the signed 8-bit range.
+        // The API reports the raw mix as i16 rather than clipping it early.
+        bus.audio_last_samples = [127, 127];
+        bus.write16(
+            0x0400_0082,
+            (1 << 2) | (1 << 3) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 13),
+        );
+        assert_eq!(bus.direct_sound_stereo_sample(), (254, 254));
+
+        bus.audio_last_samples = [-128, -128];
+        assert_eq!(bus.direct_sound_stereo_sample(), (-256, -256));
+
+        // Each FIFO can be routed to one side without affecting the other.
+        bus.audio_last_samples = [40, -30];
+        bus.write16(0x0400_0082, (1 << 2) | (1 << 3) | (1 << 8) | (1 << 13));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-30, 40));
+    }
+
+    #[test]
     fn direct_sound_stereo_mix_obeys_master_volume_and_routing() {
         let mut bus = MemoryBus::new(cartridge());
         bus.audio_last_samples = [64, -32];
