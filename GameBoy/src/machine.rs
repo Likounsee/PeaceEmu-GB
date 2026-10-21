@@ -2500,6 +2500,7 @@ mod tests {
     #[test]
     fn machine_interrupt_acknowledgement_preserves_unrelated_requests() {
         let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0200, 0b0000_0101);
         machine.request_interrupt(0b0000_0101);
         assert_eq!(machine.interrupt_request_flags() & 0b0101, 0b0101);
 
