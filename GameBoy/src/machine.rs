@@ -40,6 +40,12 @@ pub struct MachineSnapshot {
     pub interrupt_pending: bool,
     /// Estimated cycles until overflow for timers 0 through 3; `None` means disabled or invalid.
     pub timer_cycles_until_overflow: [Option<u64>; 4],
+    /// Current counter values for timers 0 through 3.
+    pub timer_counters: [Option<u16>; 4],
+    /// Enabled state for timers 0 through 3.
+    pub timer_enabled: [Option<bool>; 4],
+    /// Whether timers 0 through 3 request an IRQ on overflow.
+    pub timer_irq_enabled: [Option<bool>; 4],
     /// Enabled state of DMA channels 0 through 3.
     pub dma_enabled: [Option<bool>; 4],
     /// Queued byte counts for Direct Sound FIFOs A and B.
@@ -942,6 +948,24 @@ impl GbaMachine {
                 self.bus.timer_cycles_until_overflow(2),
                 self.bus.timer_cycles_until_overflow(3),
             ],
+            timer_counters: [
+                self.bus.timer_counter(0),
+                self.bus.timer_counter(1),
+                self.bus.timer_counter(2),
+                self.bus.timer_counter(3),
+            ],
+            timer_enabled: [
+                self.bus.timer_enabled(0),
+                self.bus.timer_enabled(1),
+                self.bus.timer_enabled(2),
+                self.bus.timer_enabled(3),
+            ],
+            timer_irq_enabled: [
+                self.bus.timer_irq_enabled(0),
+                self.bus.timer_irq_enabled(1),
+                self.bus.timer_irq_enabled(2),
+                self.bus.timer_irq_enabled(3),
+            ],
             dma_enabled: [
                 self.bus.dma_enabled(0),
                 self.bus.dma_enabled(1),
@@ -1522,6 +1546,9 @@ mod tests {
         assert_eq!(initial.pending_interrupt_source, None);
         assert!(!initial.interrupt_pending);
         assert_eq!(initial.timer_cycles_until_overflow[0], None);
+        assert_eq!(initial.timer_counters, [Some(0); 4]);
+        assert_eq!(initial.timer_enabled, [Some(false); 4]);
+        assert_eq!(initial.timer_irq_enabled, [Some(false); 4]);
         assert_eq!(initial.dma_enabled, [Some(false); 4]);
         assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
         assert_eq!(initial.audio_fifo_last_samples, [Some(0); 2]);
