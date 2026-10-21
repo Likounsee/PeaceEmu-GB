@@ -319,6 +319,39 @@ impl MemoryBus {
             .map(|control| control & 0x0080 != 0)
     }
 
+    /// Returns the masked control register for a timer (TM0..TM3).
+    ///
+    /// Bits 0–1 select the prescaler, bit 2 selects cascade mode (TM1–TM3),
+    /// bit 6 enables the timer overflow IRQ, and bit 7 enables the timer.
+    /// Returns None for an invalid index.
+    pub fn timer_control(&self, timer: usize) -> Option<u16> {
+        self.timer_control.get(timer).copied()
+    }
+
+    /// Returns whether a timer is configured to raise an IRQ on overflow.
+    ///
+    /// Returns None for an invalid index.
+    pub fn timer_irq_enabled(&self, timer: usize) -> Option<bool> {
+        self.timer_control
+            .get(timer)
+            .map(|control| control & 0x0040 != 0)
+    }
+
+    /// Returns whether a timer uses cascade clocking.
+    ///
+    /// Timer 0 cannot cascade; the method reports the register bit as configured.
+    /// Returns None for an invalid index.
+    pub fn timer_cascade_enabled(&self, timer: usize) -> Option<bool> {
+        self.timer_control
+            .get(timer)
+            .map(|control| control & 0x0004 != 0)
+    }
+
+    /// Returns the masked Game Pak WAITCNT configuration.
+    pub fn gamepak_wait_control(&self) -> u16 {
+        self.wait_control
+    }
+
     /// Estimates CPU cycles until the next overflow for a prescaled timer.
     ///
     /// Returns None for an invalid index, a disabled timer, or a timer using
