@@ -381,17 +381,39 @@ impl GbaMachine {
         // Do not reserve the caller-provided count up front: an untrusted or
         // accidental enormous count must not trigger an immediate allocation
         // panic when the first frame would fail its budget anyway.
-        if count == 0 {
-            return Ok(Some(Vec::new()));
-        }
         let mut frames = Vec::new();
-        for _ in 0..count {
+        let completed = self.for_each_frame(count, max_steps_per_frame, |_, frame| {
+            frames.push(frame);
+            true
+        })?;
+        Ok((completed == Some(count)).then_some(frames))
+    }
+
+    /// Captures frames one at a time without retaining the whole sequence.
+    ///
+    /// The callback receives each completed frame and its zero-based index. Return
+    /// true to continue or false to stop after that frame. Returns the number of
+    /// frames delivered, or None if the instruction budget prevents the next
+    /// frame from completing. A zero count returns Some(0) without invoking the
+    /// callback. This is useful for streaming frames to a frontend or encoder.
+    pub fn for_each_frame<F>(
+        &mut self,
+        count: usize,
+        max_steps_per_frame: usize,
+        mut on_frame: F,
+    ) -> Result<Option<usize>, CpuError>
+    where
+        F: FnMut(usize, VideoFrame) -> bool,
+    {
+        for index in 0..count {
             let Some(frame) = self.run_frame(max_steps_per_frame)? else {
                 return Ok(None);
             };
-            frames.push(frame);
+            if !on_frame(index, frame) {
+                return Ok(Some(index + 1));
+            }
         }
-        Ok(Some(frames))
+        Ok(Some(count))
     }
 
     /// Renders a frame from the current video-memory and register snapshot.
@@ -651,6 +673,38 @@ mod tests {
         assert_eq!(frame.width, crate::SCREEN_WIDTH);
         assert_eq!(frame.height, crate::SCREEN_HEIGHT);
         assert!(frame.is_well_formed());
+    }
+
+    #[test]
+    fn streaming_frame_capture_stops_without_buffering_remaining_frames() {
+        let mut machine = GbaMachine::new(cartridge());
+        // Reach the next VBlank boundary with a single instruction remaining.
+        machine.bus_mut().advance_cycles(160 * 1232 - 1);
+        let mut received = Vec::new();
+        let delivered = machine
+            .for_each_frame(usize::MAX, 4, |index, frame| {
+                received.push((index, frame.width, frame.height));
+                false
+            })
+            .unwrap();
+
+        assert_eq!(delivered, Some(1));
+        assert_eq!(received, vec![(0, crate::SCREEN_WIDTH, crate::SCREEN_HEIGHT)]);
+    }
+
+    #[test]
+    fn streaming_frame_capture_zero_count_does_not_call_callback() {
+        let mut machine = GbaMachine::new(cartridge());
+        let mut called = false;
+        assert_eq!(
+            machine.for_each_frame(0, 0, |_, _| {
+                called = true;
+                true
+            }).unwrap(),
+            Some(0)
+        );
+        assert!(!called);
+        assert_eq!(machine.instructions_executed(), 0);
     }
 
     #[test]
