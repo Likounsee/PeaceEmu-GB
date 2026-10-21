@@ -2672,4 +2672,31 @@ mod tests {
         );
         assert_eq!(machine.instructions_executed(), 2);
     }
+
+
+    #[test]
+    fn diagnostic_snapshot_is_read_only_and_tracks_waitcnt_updates() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+        let repeated = machine.diagnostic_snapshot();
+        assert_eq!(before.instructions_executed, repeated.instructions_executed);
+        assert_eq!(before.cycles_elapsed, repeated.cycles_elapsed);
+        assert_eq!(before.video_scanline, repeated.video_scanline);
+        assert_eq!(
+            before.video_cycles_into_scanline,
+            repeated.video_cycles_into_scanline
+        );
+
+        machine.bus_mut().write16(0x0400_0204, 0x1234);
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.gamepak_wait_control, 0x1234);
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+    }
+
 }
