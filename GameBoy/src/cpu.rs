@@ -2688,7 +2688,9 @@ mod tests {
         assert_eq!(store_cycles, 2);
         assert_eq!(bus.read16(0x0200_0102), 0x80FF);
 
-        bus.write8(0x0200_0101, 0x80);
+        // This encoding carries a +0xF immediate halfword offset.
+        // Keep the cycle assertion independent from the dedicated odd-address test.
+        bus.write16(0x0200_0110, 0xFF80);
         cpu.set_register(1, 0x0200_0101);
         let (_, signed_load_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(signed_load_cycles, 3);
