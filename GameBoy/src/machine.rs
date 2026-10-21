@@ -473,6 +473,29 @@ impl GbaMachine {
         self.bus.timer_enabled(timer)
     }
 
+    /// Returns the timer's masked control register (TM0..TM3), if valid.
+    pub fn timer_control(&self, timer: usize) -> Option<u16> {
+        self.bus.timer_control(timer)
+    }
+
+    /// Returns whether the timer is configured to request an IRQ on overflow.
+    pub fn timer_irq_enabled(&self, timer: usize) -> Option<bool> {
+        self.bus.timer_irq_enabled(timer)
+    }
+
+    /// Returns whether the timer is configured for cascade clocking.
+    pub fn timer_cascade_enabled(&self, timer: usize) -> Option<bool> {
+        self.bus.timer_cascade_enabled(timer)
+    }
+
+    /// Returns the configured Game Pak WAITCNT register.
+    ///
+    /// This is a configuration snapshot; WAITCNT timing is not yet integrated
+    /// into actual CPU memory-access cycle accounting.
+    pub fn gamepak_wait_control(&self) -> u16 {
+        self.bus.gamepak_wait_control()
+    }
+
     /// Estimates CPU cycles until a timer overflows, if its current mode supports it.
     pub fn timer_cycles_until_overflow(&self, timer: usize) -> Option<u64> {
         self.bus.timer_cycles_until_overflow(timer)
