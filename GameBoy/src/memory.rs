@@ -364,7 +364,7 @@ impl MemoryBus {
 
     /// Returns whether a timer uses cascade clocking.
     ///
-    /// Timer 0 cannot cascade; the method reports the register bit as configured.
+    /// Timer 0's reserved cascade bit is masked and always reports false.
     /// Returns None for an invalid index.
     pub fn timer_cascade_enabled(&self, timer: usize) -> Option<bool> {
         self.timer_control
