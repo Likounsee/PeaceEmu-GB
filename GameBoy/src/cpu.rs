@@ -384,9 +384,7 @@ impl Cpu {
 
         // ARM immediate-offset single data transfer. Register-shifted offsets
         // need the full barrel-shifter carry/shift semantics and are not guessed.
-        if instruction & 0x0C00_0000 == 0x0400_0000
-            && instruction & (1 << 25) == 0
-        {
+        if instruction & 0x0C00_0000 == 0x0400_0000 && instruction & (1 << 25) == 0 {
             let rn = ((instruction >> 16) & 0xF) as usize;
             let base = self.read_operand_register(rn, address);
             let offset = instruction & 0xFFF;
@@ -4087,7 +4085,10 @@ mod tests {
         ram_cpu.set_register(1, 0x0300_0100);
         let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
 
-        assert!(rom_cycles > ram_cycles, "ROM data reads must include WAITCNT latency");
+        assert!(
+            rom_cycles > ram_cycles,
+            "ROM data reads must include WAITCNT latency"
+        );
         assert_eq!(ram_cycles, 3, "IWRAM data reads keep the base estimate");
     }
 
@@ -4108,8 +4109,14 @@ mod tests {
         ram_cpu.set_register(1, 0x0300_0100);
         let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
 
-        assert!(rom_cycles > ram_cycles, "Thumb ROM data reads must include WAITCNT latency");
-        assert_eq!(ram_cycles, 3, "Thumb IWRAM data reads keep the base estimate");
+        assert!(
+            rom_cycles > ram_cycles,
+            "Thumb ROM data reads must include WAITCNT latency"
+        );
+        assert_eq!(
+            ram_cycles, 3,
+            "Thumb IWRAM data reads keep the base estimate"
+        );
     }
 
     #[test]
