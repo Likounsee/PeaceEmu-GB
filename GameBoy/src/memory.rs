@@ -173,6 +173,39 @@ impl MemoryBus {
         self.audio_fifos.get(fifo).map(VecDeque::len)
     }
 
+    /// Mixes the current Direct Sound FIFO DAC latches into a stereo sample.
+    ///
+    /// The returned pair is (left, right). SOUNDCNT_H routing and half/full
+    /// volume controls are applied, and disabled master sound produces silence.
+    /// This is a raw integer mix, not a resampled or filtered audio stream.
+    pub fn direct_sound_stereo_sample(&self) -> (i16, i16) {
+        if self.read16(0x0400_0084) & 0x0080 == 0 {
+            return (0, 0);
+        }
+
+        let control = self.read16(0x0400_0082);
+        let mut left = 0_i16;
+        let mut right = 0_i16;
+        for fifo in 0..2 {
+            let sample = i16::from(self.audio_last_samples[fifo]);
+            // SOUNDCNT_H bits 2 and 3 select full (1) or half (0) volume.
+            let volume_bit = if fifo == 0 { 2 } else { 3 };
+            let scaled = if control & (1 << volume_bit) != 0 {
+                sample * 2
+            } else {
+                sample
+            };
+            let (left_bit, right_bit) = if fifo == 0 { (9, 8) } else { (13, 12) };
+            if control & (1 << left_bit) != 0 {
+                left += scaled;
+            }
+            if control & (1 << right_bit) != 0 {
+                right += scaled;
+            }
+        }
+        (left, right)
+    }
+
     /// Returns the currently enabled interrupt sources (IE), with reserved bits removed.
     pub fn interrupt_enable_mask(&self) -> u16 {
         self.interrupt_enable & 0x3FFF
