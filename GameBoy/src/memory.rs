@@ -347,11 +347,6 @@ impl MemoryBus {
             .map(|control| control & 0x0004 != 0)
     }
 
-    /// Returns the masked Game Pak WAITCNT configuration.
-    pub fn gamepak_wait_control(&self) -> u16 {
-        self.wait_control
-    }
-
     /// Estimates CPU cycles until the next overflow for a prescaled timer.
     ///
     /// Returns None for an invalid index, a disabled timer, or a timer using
