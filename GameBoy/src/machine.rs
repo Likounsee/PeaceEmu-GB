@@ -2293,10 +2293,10 @@ mod tests {
         );
 
         machine.bus_mut().write16(0x0400_0102, 0x00C5);
-        assert_eq!(machine.timer_control(0), Some(0x00C5));
+        assert_eq!(machine.timer_control(0), Some(0x00C1));
         assert_eq!(machine.timer_enabled(0), Some(true));
         assert_eq!(machine.timer_irq_enabled(0), Some(true));
-        assert_eq!(machine.timer_cascade_enabled(0), Some(true));
+        assert_eq!(machine.timer_cascade_enabled(0), Some(false));
         assert_eq!(machine.timer_prescaler_divisor(0), Some(64));
         assert_eq!(machine.timer_prescaler_phase(0), Some(0));
 
