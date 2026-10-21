@@ -453,7 +453,8 @@ impl Cpu {
                 if instruction & (1 << 4) != 0 {
                     // Register-specified shifts use Rs[7:0]. A zero shift
                     // leaves Rm unchanged for all four shift types.
-                    let rs = self.read_operand_register(((instruction >> 8) & 0xF) as usize, address);
+                    let rs =
+                        self.read_operand_register(((instruction >> 8) & 0xF) as usize, address);
                     let amount = rs & 0xFF;
                     match shift_type {
                         0 => match amount {
