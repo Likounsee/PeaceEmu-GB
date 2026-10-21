@@ -1590,7 +1590,7 @@ mod tests {
         assert_eq!(bus.interrupt_request_flags(), 0);
         assert!(!bus.interrupt_pending());
 
-        bus.write16(0x0400_0204, 0x7FFF);
+        bus.write16(0x0400_0204, 0x7FFD);
         assert_eq!(bus.gamepak_wait_control(), bus.read16(0x0400_0204));
         assert_eq!(bus.gamepak_wait_control(), 0x7FFB);
     }
