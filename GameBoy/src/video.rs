@@ -111,7 +111,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     let display_control = bus.read16(0x0400_0000);
     let mode = display_control & 7;
     let forced_blank = display_control & (1 << 7) != 0;
-    let windows = WindowConfig::from_bus(bus);
+    let mut windows = WindowConfig::from_bus(bus);
     if !forced_blank && mode > 5 {
         return None;
     }
@@ -137,6 +137,25 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
         std::array::from_fn(|index| bus.read8(0x0700_0000 + index as u32));
     let allowed_lines = object_scanline_mask(&oam_snapshot);
 
+    // WINOBJ is a pixel-accurate mask, not the sprite bounding box. Reuse the
+    // normal OBJ sampler so affine transforms, flips, mosaic, tile addressing,
+    // transparency, and the 32-OBJ-per-scanline limit match visible sprites.
+    if windows.obj_window_enabled && display_control & (1 << 12) != 0 {
+        let obj_palette = obj_palette_snapshot(bus);
+        let mut mask_frame = VideoFrame {
+            width: SCREEN_WIDTH,
+            height: SCREEN_HEIGHT,
+            pixels: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT],
+        };
+        for priority in (0..=3).rev() {
+            render_regular_objects(
+                bus, display_control, priority, &obj_palette, &mut obj_tile_cache,
+                &oam_snapshot, &allowed_lines, None, None, Some(&mut windows.obj_window_mask),
+                &windows, &mut mask_frame,
+            );
+        }
+    }
+
     // Bitmap modes use BG2 as their framebuffer plane. If BG2 is disabled,
     // show the backdrop color instead; OBJ pixels can still appear over it.
     if mode >= 3 && display_control & (1 << 10) == 0 {
@@ -158,6 +177,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &allowed_lines,
                 None,
                 bitmap_brightness_effect(bus, display_control, 4),
+                None,
                 &windows,
                 &mut frame,
             );
@@ -346,6 +366,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &allowed_lines,
                 bitmap_alpha_blend(bus, display_control),
                 bitmap_brightness_effect(bus, display_control, 4),
+                None,
                 &windows,
                 &mut frame,
             );
@@ -372,7 +393,7 @@ fn render_text_backgrounds(
         frame,
         palette[0],
         bitmap_brightness_effect(bus, display_control, 5),
-        *windows,
+        windows.clone(),
     );
     for priority in (0..=3).rev() {
         // On equal priorities BG0 wins over BG1, then BG2, then BG3.
@@ -422,6 +443,7 @@ fn render_text_backgrounds(
             allowed_lines,
             None,
             bitmap_brightness_effect(bus, display_control, 4),
+            None,
             windows,
             frame,
         );
@@ -701,9 +723,12 @@ fn render_text_background(
 /// Returns whether a layer is visible at a screen pixel under WIN0/WIN1.
 /// Window coordinates use the GBA's half-open ranges and wrap when start exceeds end.
 /// Layer bits are BG0..BG3=0..3 and OBJ=4; window bit 5 controls color effects.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct WindowConfig {
     enabled: bool,
+    obj_window_enabled: bool,
+    obj_window_control: u16,
+    obj_window_mask: Vec<bool>,
     win0_enabled: bool,
     win1_enabled: bool,
     win0_x: (usize, usize),
@@ -720,12 +745,16 @@ impl WindowConfig {
         let display_control = bus.read16(0x0400_0000);
         let win0_enabled = display_control & (1 << 13) != 0;
         let win1_enabled = display_control & (1 << 14) != 0;
+        let obj_window_enabled = display_control & (1 << 15) != 0;
         let win0h = bus.read16(0x0400_0040);
         let win1h = bus.read16(0x0400_0042);
         let win0v = bus.read16(0x0400_0044);
         let win1v = bus.read16(0x0400_0046);
         Self {
-            enabled: win0_enabled || win1_enabled,
+            enabled: win0_enabled || win1_enabled || obj_window_enabled,
+            obj_window_enabled,
+            obj_window_control: bus.read16(0x0400_004A) >> 8 & 0x003F,
+            obj_window_mask: vec![false; SCREEN_WIDTH * SCREEN_HEIGHT],
             win0_enabled,
             win1_enabled,
             win0_x: (usize::from(win0h & 0xFF), usize::from(win0h >> 8)),
@@ -756,6 +785,8 @@ impl WindowConfig {
         } else if self.win1_enabled && Self::inside(x, self.win1_x) && Self::inside(y, self.win1_y)
         {
             self.win1_control
+        } else if self.obj_window_enabled && self.obj_window_mask[y * SCREEN_WIDTH + x] {
+            self.obj_window_control
         } else {
             self.outside_control
         }
@@ -919,6 +950,7 @@ fn render_regular_objects(
     allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
     bitmap_blend: Option<(u16, u16)>,
     bitmap_obj_effect: Option<(bool, u16)>,
+    obj_window_mask: Option<&mut [bool]>,
     windows: &WindowConfig,
     frame: &mut VideoFrame,
 ) {
@@ -950,10 +982,13 @@ fn render_regular_objects(
         // OBJ-window entries and prohibited OBJ modes do not draw regular
         // sprite pixels. Semi-transparent OBJ mode (1) still draws its source
         // pixels; alpha blending is handled by the compositor when available.
-        if (!affine && attr0 & (1 << 9) != 0) || object_mode >= 2 || (attr0 >> 14) & 3 == 3 {
+        if (!affine && attr0 & (1 << 9) != 0) || object_mode == 3 || (attr0 >> 14) & 3 == 3 {
             continue;
         }
-        if ((attr2 >> 10) & 3) != priority {
+        if ((obj_window_mask.is_some() && object_mode != 2)
+            || (obj_window_mask.is_none() && object_mode == 2)
+            || ((attr2 >> 10) & 3) != priority
+        ) {
             continue;
         }
 
@@ -1114,6 +1149,12 @@ fn render_regular_objects(
                     palette_bank * 16 + raw_index
                 };
                 if palette_index == 0 {
+                    continue;
+                }
+                if object_mode == 2 {
+                    if let Some(mask) = obj_window_mask.as_deref_mut() {
+                        mask[screen_y as usize * SCREEN_WIDTH + screen_x as usize] = true;
+                    }
                     continue;
                 }
                 // OBJ palette RAM is stable for this snapshot render. Reuse
