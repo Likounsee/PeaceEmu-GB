@@ -2076,6 +2076,25 @@ mod tests {
     }
 
     #[test]
+    fn timer_prescaler_phase_tracks_each_divisor() {
+        for (selector, divisor) in [(0_u16, 1_u16), (1, 64), (2, 256), (3, 1024)] {
+            let mut bus = MemoryBus::new(cartridge());
+            bus.write16(0x0400_0102, 0x0080 | selector);
+            assert_eq!(bus.timer_prescaler_divisor(0), Some(divisor));
+
+            if divisor > 1 {
+                bus.advance_cycles(u32::from(divisor - 1));
+                assert_eq!(bus.timer_prescaler_phase(0), Some(divisor - 1));
+                assert_eq!(bus.timer_counter(0), Some(0));
+            }
+
+            bus.advance_cycles(1);
+            assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+            assert_eq!(bus.timer_counter(0), Some(1));
+        }
+    }
+
+    #[test]
     fn video_memory_obeys_byte_and_halfword_write_widths() {
         let mut bus = MemoryBus::new(cartridge());
 
