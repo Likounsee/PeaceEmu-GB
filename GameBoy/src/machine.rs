@@ -151,8 +151,12 @@ impl GbaMachine {
         if target_scanline >= 228 || target_cycle >= 1232 {
             return Ok(None);
         }
-        let already_passed = self.bus.video_scanline() == target_scanline
-            && self.bus.video_cycles_into_scanline() >= target_cycle;
+        let current_scanline = self.bus.video_scanline();
+        let current_cycle = self.bus.video_cycles_into_scanline();
+        if current_scanline == target_scanline && current_cycle == target_cycle {
+            return Ok(Some(0));
+        }
+        let already_passed = current_scanline == target_scanline && current_cycle > target_cycle;
         let mut left_current_occurrence = !already_passed;
         for executed in 0..max_steps {
             self.step()?;
