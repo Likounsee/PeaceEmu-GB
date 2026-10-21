@@ -269,8 +269,7 @@ impl MemoryBus {
         let base = 0xB0 + channel * 12;
         let control_offset = base + 10;
         let control = u16::from_le_bytes([self.io[control_offset], self.io[control_offset + 1]]);
-        let destination =
-            u32::from_le_bytes(self.io[base + 4..base + 8].try_into().unwrap()) & !3;
+        let destination = u32::from_le_bytes(self.io[base + 4..base + 8].try_into().unwrap()) & !3;
         let fifo_address = if fifo == 0 { 0x0400_00A0 } else { 0x0400_00A4 };
         // Sound FIFO DMA is supported only on DMA1/2, with word-sized
         // transfers, repeat enabled, incrementing source and fixed FIFO target.
