@@ -328,6 +328,19 @@ impl MemoryBus {
         self.timer_control.get(timer).copied()
     }
 
+    /// Returns the timer's selected prescaler divisor (1, 64, 256, or 1024).
+    ///
+    /// This reports the selected divisor even when the timer is disabled or
+    /// configured for cascade mode. Returns None for an invalid index.
+    pub fn timer_prescaler_divisor(&self, timer: usize) -> Option<u16> {
+        self.timer_control.get(timer).map(|control| match control & 3 {
+            0 => 1,
+            1 => 64,
+            2 => 256,
+            _ => 1024,
+        })
+    }
+
     /// Returns whether a timer is configured to raise an IRQ on overflow.
     ///
     /// Returns None for an invalid index.
