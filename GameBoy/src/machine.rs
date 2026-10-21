@@ -964,7 +964,7 @@ mod tests {
 
     #[test]
     fn machine_exposes_audio_fifo_refill_distance() {
-        let mut machine = machine_with_nops();
+        let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(0));
         assert_eq!(machine.audio_fifo_bytes_until_refill(2), None);
         machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
