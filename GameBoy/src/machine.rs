@@ -6,7 +6,7 @@ use crate::{render_bitmap_frame, Cpu, CpuError, GbaButton, GbaCartridge, MemoryB
 pub const CARTRIDGE_ENTRY_POINT: u32 = 0x0800_0000;
 
 /// Immutable debugger snapshot of CPU, execution counters, video timing, and IRQ state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MachineSnapshot {
     /// Snapshot of modeled ARM7TDMI registers and flags.
     pub cpu: crate::CpuSnapshot,
