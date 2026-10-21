@@ -1511,6 +1511,11 @@ mod tests {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0100, 0x1234);
         machine.bus_mut().write16(0x0400_0102, 0x0080);
+        machine.bus_mut().write32(0x0400_00A0, 0x4433_2211);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0x9000);
         machine.bus_mut().advance_cycles(17);
         machine.cpu.set_register(0, 0xDEAD_BEEF);
         machine.instructions_executed = 7;
@@ -1524,6 +1529,11 @@ mod tests {
         assert_eq!(machine.cpu.register(15), Some(CARTRIDGE_ENTRY_POINT));
         assert_eq!(machine.bus().timer_counter(0), Some(0x1245));
         assert_eq!(machine.bus().video_cycles_into_scanline(), 17);
+        assert_eq!(machine.audio_fifo_len(0), Some(4));
+        assert_eq!(machine.dma_enabled(0), Some(true));
+        assert_eq!(machine.dma_source_address(0), Some(0x0200_0000));
+        assert_eq!(machine.dma_destination_address(0), Some(0x0300_0000));
+        assert_eq!(machine.dma_transfer_count(0), Some(1));
     }
 
     #[test]
