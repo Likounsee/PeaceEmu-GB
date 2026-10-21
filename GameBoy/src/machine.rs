@@ -14,6 +14,8 @@ pub struct MachineSnapshot {
     pub instructions_executed: u64,
     /// Approximate cycles elapsed since construction or CPU reset.
     pub cycles_elapsed: u64,
+    /// Current WAITCNT register value used to estimate Game Pak access durations.
+    pub gamepak_wait_control: u16,
     /// Current video scanline (0–227).
     pub video_scanline: u16,
     /// Cycles elapsed within the current scanline.
@@ -946,6 +948,7 @@ impl GbaMachine {
             cpu: self.cpu.snapshot(),
             instructions_executed: self.instructions_executed,
             cycles_elapsed: self.cycles_elapsed,
+            gamepak_wait_control: self.bus.gamepak_wait_control(),
             video_scanline: self.bus.video_scanline(),
             video_cycles_into_scanline: self.bus.video_cycles_into_scanline(),
             video_in_vblank: self.bus.video_in_vblank(),
@@ -1097,6 +1100,7 @@ mod tests {
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
+        assert_eq!(machine.diagnostic_snapshot().gamepak_wait_control, 0);
         assert_eq!(machine.bus().cartridge_save_type(), None);
     }
 
