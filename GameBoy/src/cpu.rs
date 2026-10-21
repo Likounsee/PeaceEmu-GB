@@ -403,12 +403,13 @@ impl Cpu {
     /// are not modeled yet.
     pub fn step(&mut self, bus: &mut MemoryBus) -> Result<StepOutcome, CpuError> {
         // Unsupported instructions are reported to the caller rather than
-        // vectored through an emulated exception. Keep the faulting PC stable
-        // so a debugger can inspect the instruction or retry after patching state.
-        let faulting_pc = self.registers[15];
+        // vectored through an emulated exception. Restore the small CPU state
+        // snapshot on failure so debuggers can inspect or retry the faulting
+        // instruction without partially modified registers or condition flags.
+        let state_before = self.clone();
         let result = self.step_inner(bus);
         if result.is_err() {
-            self.registers[15] = faulting_pc;
+            *self = state_before;
         }
         result
     }
@@ -1917,6 +1918,8 @@ mod tests {
         assert_eq!(error.address(), 0x0200_0000);
         assert_eq!(error.instruction(), 0xF000_0000);
         assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.flags(), ConditionFlags::default());
 
         bus.write16(0x0200_0000, 0xDE00); // Undefined Thumb conditional branch.
         cpu.thumb = true;
