@@ -350,6 +350,22 @@ impl GbaMachine {
         self.bus.is_button_pressed(button)
     }
 
+    /// Returns the total estimated CPU cycles executed since machine creation.
+    pub fn cycles_elapsed(&self) -> u64 {
+        self.cycles_elapsed
+    }
+
+    /// Returns the active-high mask of physically pressed keypad buttons.
+    pub fn keys_pressed(&self) -> u16 {
+        self.bus.keys_pressed()
+    }
+
+    /// Replaces the complete keypad state using an active-high pressed-button mask.
+    /// Bits outside the ten physical buttons are ignored. KEYINPUT reads remain active-low.
+    pub fn set_keys_pressed(&mut self, pressed: u16) {
+        self.bus.set_keys_pressed(pressed);
+    }
+
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
     /// The mix reflects SOUNDCNT_H volume and left/right routing. It is a sample
@@ -723,6 +739,21 @@ mod tests {
         );
         assert!(!called);
         assert_eq!(machine.instructions_executed(), 0);
+    }
+
+    #[test]
+    fn machine_exposes_cycle_counter_and_bulk_key_state() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.cycles_elapsed(), 0);
+        assert_eq!(machine.keys_pressed(), 0);
+
+        machine.set_keys_pressed(GbaButton::A.mask() | GbaButton::Down.mask() | (1 << 15));
+        assert_eq!(machine.keys_pressed(), GbaButton::A.mask() | GbaButton::Down.mask());
+        assert_eq!(machine.bus().read16(0x0400_0130) & 0x03FF,
+            !(GbaButton::A.mask() | GbaButton::Down.mask()) & 0x03FF);
+
+        machine.run_steps(1).unwrap();
+        assert!(machine.cycles_elapsed() > 0);
     }
 
     #[test]
