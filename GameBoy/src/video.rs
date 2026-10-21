@@ -629,7 +629,7 @@ fn render_text_background(
             };
             // Color index zero is transparent even when a 4bpp palette bank
             // makes its absolute palette index nonzero.
-            if !transparent && window_allows_layer(bus, x, y, bg as u16) {
+            if !transparent && windows.allows(x, y, bg as u16) {
                 frame.pixels[y * SCREEN_WIDTH + x] =
                     apply_brightness_effect(palette[palette_index as usize], brightness_effect);
             }
