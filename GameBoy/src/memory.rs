@@ -1067,7 +1067,7 @@ impl MemoryBus {
             self.write_sound_master_control(value);
             return;
         }
-        if address == 0x0400_0082 {
+        if (address & !1) == 0x0400_0082 {
             self.write_sound_control_high(value);
             return;
         }
@@ -1948,6 +1948,19 @@ mod tests {
         bus.write8(0x0400_0083, 0x80);
         assert_eq!(bus.audio_fifo_len(1), Some(0));
         assert_eq!(bus.read16(0x0400_0082) & (1 << 15), 0);
+    }
+
+    #[test]
+    fn unaligned_sound_control_halfword_write_uses_aligned_register() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write32(0x0400_00A0, 0xAABB_CCDD);
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+
+        // Halfword MMIO stores align down; this still addresses SOUNDCNT_H.
+        bus.write16(0x0400_0083, 1 << 11);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.read16(0x0400_0082) & (1 << 11), 0);
     }
 
     #[test]
