@@ -309,10 +309,11 @@ impl Cpu {
             0
         } else {
             data_access
-                .and_then(|(data_address, width)| {
-                    bus.gamepak_access_cycles_for_width(data_address, false, width)
+                .and_then(|(data_address, width, access_count)| {
+                    bus.gamepak_sequence_cycles(data_address, false, width, access_count)
+                        .map(|access_cycles| access_cycles.saturating_sub(access_count as u64))
                 })
-                .map(|access_cycles| access_cycles.saturating_sub(1))
+                .and_then(|penalty| u32::try_from(penalty).ok())
                 .unwrap_or(0)
         };
         let total_cycles = cycles
@@ -332,20 +333,45 @@ impl Cpu {
 
     /// Predicts the effective address and width for supported scalar memory
     /// instructions so WAITCNT can contribute excess data-access latency.
-    /// Register-offset ARM transfers and multi-register transfers are intentionally
-    /// left out until their shifter and burst sequencing can be modeled precisely.
+    /// Register-offset ARM scalar transfers are intentionally left out until their
+    /// shifter semantics can be modeled precisely. Multi-register transfers use
+    /// sequential burst estimates for supported Game Pak ranges.
     fn gamepak_data_access(
         &self,
         instruction: u32,
         was_thumb: bool,
         address: u32,
-    ) -> Option<(u32, u8)> {
+    ) -> Option<(u32, u8, usize)> {
         if was_thumb {
             let raw = instruction as u16;
+            // Thumb PUSH/POP and LDM/STM transfer registers in ascending
+            // address order. Their first bus access is non-sequential.
+            if raw & 0xF600 == 0xB400 {
+                let count = (raw & 0x00FF).count_ones() as usize
+                    + usize::from(raw & 0x0100 != 0);
+                if count == 0 {
+                    return None;
+                }
+                let push = raw & 0xFE00 == 0xB400;
+                let start = if push {
+                    self.registers[13].wrapping_sub((count as u32) * 4)
+                } else {
+                    self.registers[13]
+                };
+                return Some((start, 4, count));
+            }
+            if raw & 0xF000 == 0xC000 {
+                let count = (raw & 0x00FF).count_ones() as usize;
+                if count == 0 {
+                    return None;
+                }
+                let base = self.registers[usize::from((raw >> 8) & 7)];
+                return Some((base, 4, count));
+            }
             // Thumb literal load: LDR Rd, [PC, #imm].
             if raw & 0xF800 == 0x4800 {
                 let base = address.wrapping_add(4) & !3;
-                return Some((base.wrapping_add(u32::from(raw & 0x00FF) * 4), 4));
+                return Some((base.wrapping_add(u32::from(raw & 0x00FF) * 4), 4, 1));
             }
             // Register-offset transfer family (STR/STRH/STRB/LDSB/LDR/LDRH/LDRB/LDSH).
             if raw & 0xF000 == 0x5000 {
@@ -357,7 +383,7 @@ impl Cpu {
                     1 | 5 | 7 => 2,
                     _ => 1,
                 };
-                return Some((base.wrapping_add(offset), width));
+                return Some((base.wrapping_add(offset), width, 1));
             }
             // Immediate-offset word/byte transfer.
             if raw & 0xE000 == 0x6000 {
@@ -365,21 +391,54 @@ impl Cpu {
                 let scale = if byte { 1 } else { 4 };
                 let base = self.registers[usize::from((raw >> 3) & 7)];
                 let offset = u32::from((raw >> 6) & 0x1F) * scale;
-                return Some((base.wrapping_add(offset), if byte { 1 } else { 4 }));
+                return Some((base.wrapping_add(offset), if byte { 1 } else { 4 }, 1));
             }
             // Immediate-offset halfword transfer.
             if raw & 0xF000 == 0x8000 {
                 let base = self.registers[usize::from((raw >> 3) & 7)];
                 let offset = u32::from((raw >> 6) & 0x1F) * 2;
-                return Some((base.wrapping_add(offset), 2));
+                return Some((base.wrapping_add(offset), 2, 1));
             }
             // SP-relative word transfer.
             if raw & 0xF000 == 0x9000 {
                 let base = self.registers[13];
                 let offset = u32::from(raw & 0x00FF) * 4;
-                return Some((base.wrapping_add(offset), 4));
+                return Some((base.wrapping_add(offset), 4, 1));
             }
             return None;
+        }
+
+        // ARM LDM/STM burst: the core transfers the selected registers from
+        // the lowest address upward, regardless of increment/decrement mode.
+        if instruction & 0x0E00_0000 == 0x0800_0000 {
+            let register_list = instruction & 0xFFFF;
+            let count = register_list.count_ones() as usize;
+            if count == 0 {
+                // Empty lists transfer PC at the sixteenth word slot; they do
+                // not issue sixteen independent external data reads.
+                let rn = ((instruction >> 16) & 0xF) as usize;
+                let base = self.read_operand_register(rn, address);
+                let increment = instruction & (1 << 23) != 0;
+                let pre_index = instruction & (1 << 24) != 0;
+                let start = match (increment, pre_index) {
+                    (true, false) => base.wrapping_add(60),
+                    (true, true) => base.wrapping_add(64),
+                    (false, false) => base.wrapping_sub(60),
+                    (false, true) => base.wrapping_sub(64),
+                };
+                return Some((start, 4, 1));
+            }
+            let rn = ((instruction >> 16) & 0xF) as usize;
+            let base = self.read_operand_register(rn, address);
+            let increment = instruction & (1 << 23) != 0;
+            let pre_index = instruction & (1 << 24) != 0;
+            let start = match (increment, pre_index) {
+                (true, false) => base,
+                (true, true) => base.wrapping_add(4),
+                (false, false) => base.wrapping_sub((count as u32) * 4).wrapping_add(4),
+                (false, true) => base.wrapping_sub((count as u32) * 4),
+            };
+            return Some((start, 4, count));
         }
 
         // ARM immediate-offset single data transfer. Register-shifted offsets
@@ -398,7 +457,7 @@ impl Cpu {
             } else {
                 base
             };
-            return Some((effective, if instruction & (1 << 22) != 0 { 1 } else { 4 }));
+            return Some((effective, if instruction & (1 << 22) != 0 { 1 } else { 4 }, 1));
         }
 
         // ARM immediate-offset halfword and signed transfers.
@@ -420,7 +479,7 @@ impl Cpu {
             } else {
                 base
             };
-            return Some((effective, if operation == 2 { 1 } else { 2 }));
+            return Some((effective, if operation == 2 { 1 } else { 2 }, 1));
         }
         None
     }
@@ -4117,6 +4176,46 @@ mod tests {
             ram_cycles, 3,
             "Thumb IWRAM data reads keep the base estimate"
         );
+    }
+
+    #[test]
+    fn arm_multiple_gamepak_transfer_models_sequential_data_wait_states() {
+        let mut rom_bus = bus_with_program(&[0xE8B1_0005, 0xE1A0_0000]); // LDMIA r1!, {r0, r2}
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0300_0000);
+        rom_cpu.set_register(1, 0x0800_0100);
+        rom_bus.write16(0x0400_0204, 1 << 4);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[0xE8B1_0005, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0300_0000);
+        ram_cpu.set_register(1, 0x0300_0100);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+        assert_eq!(ram_cycles, 3);
+    }
+
+    #[test]
+    fn thumb_multiple_gamepak_transfer_models_sequential_data_wait_states() {
+        let mut rom_bus = bus_with_program(&[0x2001_C80A]); // LDMIA r0!, {r1, r3}
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0300_0000);
+        rom_cpu.set_execution_state(true);
+        rom_cpu.set_register(0, 0x0800_0100);
+        rom_bus.write16(0x0400_0204, 1 << 4);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[0x2001_C80A]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0300_0000);
+        ram_cpu.set_execution_state(true);
+        ram_cpu.set_register(0, 0x0300_0100);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+        assert_eq!(ram_cycles, 3);
     }
 
     #[test]
