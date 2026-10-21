@@ -229,9 +229,10 @@ impl Cpu {
     /// Executes one instruction and advances bus timers by an approximate cycle count.
     ///
     /// This is a transitional timing API: it accounts for common instruction
-    /// classes, but does not yet model Game Pak wait states, sequential accesses,
-    /// pipeline refill timing, or DMA stalls. Use `step` when callers need the
-    /// original instruction-only behavior.
+    /// classes and adds the excess WAITCNT latency for Game Pak instruction fetches.
+    /// Data-access wait states, exact pipeline refill timing, and DMA stalls remain
+    /// incomplete. Use `step` when callers need instruction execution without
+    /// advancing peripheral time.
     pub fn step_with_cycles(
         &mut self,
         bus: &mut MemoryBus,
@@ -3949,6 +3950,21 @@ mod tests {
             ram_cycles, 1,
             "IWRAM fetch must not receive Game Pak wait states"
         );
+    }
+
+    #[test]
+    fn thumb_gamepak_fetch_uses_halfword_waitcnt_timing() {
+        let mut bus = bus_with_program(&[0x2001_2002]);
+        let mut cpu = Cpu::new();
+        cpu.set_execution_state(true);
+        cpu.set_register(15, 0x0800_00C0);
+        bus.write16(0x0400_0204, 1 << 4); // WS0 sequential halfword: one cycle.
+
+        let (_, first_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        let (_, second_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+
+        assert!(first_cycles > second_cycles);
+        assert_eq!(cpu.register(0), Some(1));
     }
 
     #[test]
