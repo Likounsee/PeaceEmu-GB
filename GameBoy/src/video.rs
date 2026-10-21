@@ -2316,4 +2316,5 @@ mod tests {
         let frame = render_bitmap_frame(&bus).unwrap();
         assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
         assert_eq!(frame.pixel(4, 0), Some(0xFFFF_0000));
-    }}
+    }
+}
