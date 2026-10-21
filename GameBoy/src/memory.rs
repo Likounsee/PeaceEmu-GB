@@ -2352,8 +2352,8 @@ mod tests {
         assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, true), Some(4));
         assert_eq!(bus.gamepak_access_cycles(0x0200_0000, false), None);
 
-        // Set fastest non-sequential/sequence timings for all three ROM windows
-        // and the three fast SRAM encodings.
+        // Exercise the slowest non-sequential ROM and fastest sequential timings;
+        // SRAM independently selects its encoded wait duration.
         bus.write16(0x0400_0204, 0x7FFF);
         assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
         assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(8));
