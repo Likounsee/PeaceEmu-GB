@@ -146,10 +146,7 @@ impl GbaMachine {
     /// A zero instruction budget performs no work. Execution stops immediately
     /// on the first CPU error; counters and peripherals reflect only the
     /// instructions that completed successfully.
-    pub fn run_for_instructions(
-        &mut self,
-        instruction_budget: usize,
-    ) -> Result<u64, CpuError> {
+    pub fn run_for_instructions(&mut self, instruction_budget: usize) -> Result<u64, CpuError> {
         let mut elapsed = 0_u64;
         for _ in 0..instruction_budget {
             elapsed = elapsed.saturating_add(u64::from(self.step()?));
