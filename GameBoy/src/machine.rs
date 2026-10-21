@@ -155,7 +155,6 @@ impl GbaMachine {
         self.bus.pending_interrupts()
     }
 
-    /// Returns the interrupt-enable (IE) bitmask, with reserved bits removed.
     /// Returns the masked DMA control register for channel 0–3.
     pub fn dma_control(&self, channel: usize) -> Option<u16> {
         self.bus.dma_control(channel)
@@ -181,6 +180,7 @@ impl GbaMachine {
         self.bus.dma_irq_enabled(channel)
     }
 
+    /// Returns the interrupt-enable (IE) bitmask, with reserved bits removed.
     pub fn interrupt_enable_mask(&self) -> u16 {
         self.bus.interrupt_enable_mask()
     }
