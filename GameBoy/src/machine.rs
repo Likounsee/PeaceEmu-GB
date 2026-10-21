@@ -1357,6 +1357,14 @@ mod tests {
             machine.gamepak_sequence_cycles(0x09FF_FFFE, false, 2, 2),
             Some(6)
         );
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0200_0000, false, 2, 0),
+            Some(0)
+        );
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0800_0000, false, 3, 1),
+            None
+        );
         assert_eq!(machine.instructions_executed(), before_instructions);
         assert_eq!(machine.cycles_elapsed(), before_cycles);
 
