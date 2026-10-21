@@ -60,6 +60,22 @@ impl core::fmt::Display for CpuError {
     }
 }
 
+impl CpuError {
+    /// Returns the address of the instruction that could not be executed.
+    pub fn address(self) -> u32 {
+        match self {
+            Self::UnsupportedInstruction { address, .. } => address,
+        }
+    }
+
+    /// Returns the raw instruction word (Thumb instructions occupy its low 16 bits).
+    pub fn instruction(self) -> u32 {
+        match self {
+            Self::UnsupportedInstruction { instruction, .. } => instruction,
+        }
+    }
+}
+
 impl std::error::Error for CpuError {}
 
 /// ARM7TDMI CPU state, initially implementing ARM-state data processing,
@@ -386,6 +402,18 @@ impl Cpu {
     /// Thumb execution is supported, but exceptions, banked registers, and SPSRs
     /// are not modeled yet.
     pub fn step(&mut self, bus: &mut MemoryBus) -> Result<StepOutcome, CpuError> {
+        // Unsupported instructions are reported to the caller rather than
+        // vectored through an emulated exception. Keep the faulting PC stable
+        // so a debugger can inspect the instruction or retry after patching state.
+        let faulting_pc = self.registers[15];
+        let result = self.step_inner(bus);
+        if result.is_err() {
+            self.registers[15] = faulting_pc;
+        }
+        result
+    }
+
+    fn step_inner(&mut self, bus: &mut MemoryBus) -> Result<StepOutcome, CpuError> {
         if self.thumb {
             return self.step_thumb(bus);
         }
@@ -1878,6 +1906,25 @@ mod tests {
             bus.write32(0x0200_0000 + index as u32 * 4, *instruction);
         }
         bus
+    }
+
+    #[test]
+    fn unsupported_arm_and_thumb_instructions_preserve_faulting_pc() {
+        let mut bus = bus_with_program(&[0xF000_0000]);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        let error = cpu.step(&mut bus).unwrap_err();
+        assert_eq!(error.address(), 0x0200_0000);
+        assert_eq!(error.instruction(), 0xF000_0000);
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
+
+        bus.write16(0x0200_0000, 0xDE00); // Undefined Thumb conditional branch.
+        cpu.thumb = true;
+        cpu.set_register(15, 0x0200_0000);
+        let error = cpu.step(&mut bus).unwrap_err();
+        assert_eq!(error.address(), 0x0200_0000);
+        assert_eq!(error.instruction(), 0xDE00);
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
     }
 
     #[test]
