@@ -191,7 +191,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 mosaic_height,
                 display_control & (1 << 13) != 0,
             );
-            frame.pixels.fill(rgb555(bus.read16(PALETTE_BASE)));
+            frame.pixels.fill(apply_brightness_effect(
+                rgb555(bus.read16(PALETTE_BASE)),
+                bitmap_brightness_effect(bus, display_control, 5),
+            ));
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
                     let Some((source_x, source_y)) = transform.source_coordinates(x, y) else {
@@ -252,7 +255,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             // Mode 5 displays only a centered 160×128 bitmap. Pixels outside
             // that viewport show the backdrop color (palette entry zero), not
             // an unconditional black fill.
-            frame.pixels.fill(rgb555(bus.read16(PALETTE_BASE)));
+            frame.pixels.fill(apply_brightness_effect(
+                rgb555(bus.read16(PALETTE_BASE)),
+                bitmap_brightness_effect(bus, display_control, 5),
+            ));
             let bg2_control = bus.read16(BG0CNT + 4);
             let mosaic_enabled = bg2_control & (1 << 6) != 0;
             let mosaic = bus.read16(0x0400_004C);
@@ -323,7 +329,10 @@ fn render_text_backgrounds(
 ) {
     let palette = palette_snapshot(bus);
     let obj_palette = obj_palette_snapshot(bus);
-    frame.pixels.fill(palette[0]);
+    frame.pixels.fill(apply_brightness_effect(
+        palette[0],
+        bitmap_brightness_effect(bus, display_control, 5),
+    ));
     for priority in (0..=3).rev() {
         // On equal priorities BG0 wins over BG1, then BG2, then BG3.
         // Draw the lower-numbered background last so it remains in front.
