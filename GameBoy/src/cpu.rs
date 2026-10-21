@@ -4093,7 +4093,7 @@ mod tests {
 
     #[test]
     fn thumb_scalar_gamepak_data_access_adds_waitcnt_latency() {
-        let mut rom_bus = bus_with_program(&[0x6808_2001]); // LDR r0, [r1]; MOV r0, #1
+        let mut rom_bus = bus_with_program(&[0x2001_6808]); // LDR r0, [r1]; MOV r0, #1
         let mut rom_cpu = Cpu::new();
         rom_cpu.reset(0x0200_0000);
         rom_cpu.set_execution_state(true);
