@@ -275,7 +275,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 mosaic_enabled,
                 mosaic_width,
                 mosaic_height,
-                display_control & (1 << 13) != 0,
+                bg2_control & (1 << 13) != 0,
             );
             for y in 0..MODE_5_HEIGHT {
                 for x in 0..MODE_5_WIDTH {
