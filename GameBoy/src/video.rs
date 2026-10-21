@@ -1293,7 +1293,8 @@ mod tests {
     #[test]
     fn bitmap_mode3_affine_reference_wraps_when_overflow_is_enabled() {
         let mut bus = bus();
-        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 13));
+        bus.write16(0x0400_0000, 3 | (1 << 10));
+        bus.write16(0x0400_000C, 1 << 13); // BG2 affine overflow/wrap.
         bus.write16(0x0400_0028, 0xFFFF);
         bus.write16(0x0400_002A, 0x0FFF); // source x starts at -1
         bus.write16(VRAM_BASE + ((SCREEN_WIDTH - 1) * 2) as u32, 0x001F);
@@ -2304,7 +2305,9 @@ mod tests {
         bus.write16(0x0400_0000, (1 << 6) | (1 << 12) | (1 << 13)); // 1D OBJ, OBJ and WIN0.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
         bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
-        bus.write16(0x0601_0000, 0x1111);
+        for offset in (0..4).map(|index| index * 2) {
+            bus.write16(0x0601_0000 + offset, 0x1111);
+        }
         bus.write16(0x0700_0000, 0);
         bus.write16(0x0700_0002, 0);
         bus.write16(0x0700_0004, 0);
