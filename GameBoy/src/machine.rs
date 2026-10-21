@@ -2518,4 +2518,36 @@ mod tests {
         assert_eq!(machine.audio_fifo_last_sample(2), None);
         assert_eq!(machine.audio_fifo_bytes_until_refill(2), None);
     }
+
+    #[test]
+    fn machine_dma_diagnostics_reject_out_of_range_channels() {
+        let machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.dma_control(4), None);
+        assert_eq!(machine.dma_source_address(4), None);
+        assert_eq!(machine.dma_destination_address(4), None);
+        assert_eq!(machine.dma_count_register(4), None);
+        assert_eq!(machine.dma_transfer_count(4), None);
+        assert_eq!(machine.dma_enabled(4), None);
+        assert_eq!(machine.dma_start_timing(4), None);
+        assert_eq!(machine.dma_destination_control(4), None);
+        assert_eq!(machine.dma_source_control(4), None);
+        assert_eq!(machine.dma_repeat(4), None);
+        assert_eq!(machine.dma_word_transfer(4), None);
+        assert_eq!(machine.dma_irq_enabled(4), None);
+    }
+
+    #[test]
+    fn invalid_audio_refill_wait_does_not_execute_instructions() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+        assert_eq!(machine.run_until_audio_fifo_refill(2, 32).unwrap(), None);
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+    }
 }
