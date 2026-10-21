@@ -173,7 +173,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             &mut frame,
             rgb555(bus.read16(PALETTE_BASE)),
             bitmap_brightness_effect(bus, display_control, 5),
-            windows.clone(),
+            &windows,
         );
         let obj_palette = obj_palette_snapshot(bus);
         for priority in (0..=3).rev() {
@@ -230,7 +230,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut frame,
                 rgb555(bus.read16(PALETTE_BASE)),
                 bitmap_brightness_effect(bus, display_control, 5),
-                windows.clone(),
+                windows,
             );
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
@@ -569,7 +569,7 @@ fn fill_backdrop(
     frame: &mut VideoFrame,
     color: u32,
     effect: Option<(bool, u16)>,
-    windows: WindowConfig,
+    windows: &WindowConfig,
 ) {
     for y in 0..SCREEN_HEIGHT {
         for x in 0..SCREEN_WIDTH {
@@ -785,7 +785,7 @@ impl WindowConfig {
         }
     }
 
-    fn control_at(self, x: usize, y: usize) -> u16 {
+    fn control_at(&self, x: usize, y: usize) -> u16 {
         if !self.enabled {
             // With no windows enabled, layer visibility and color effects are unrestricted.
             return 0x3F;
@@ -802,12 +802,12 @@ impl WindowConfig {
         }
     }
 
-    fn allows(self, x: usize, y: usize, layer: u16) -> bool {
+    fn allows(&self, x: usize, y: usize, layer: u16) -> bool {
         self.control_at(x, y) & (1 << layer) != 0
     }
 
     /// Window control bit 5 independently gates color effects at each pixel.
-    fn effects_allowed(self, x: usize, y: usize) -> bool {
+    fn effects_allowed(&self, x: usize, y: usize) -> bool {
         self.control_at(x, y) & (1 << 5) != 0
     }
 }
@@ -960,7 +960,7 @@ fn render_regular_objects(
     allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
     bitmap_blend: Option<(u16, u16)>,
     bitmap_obj_effect: Option<(bool, u16)>,
-    obj_window_mask: Option<&mut [bool]>,
+    mut obj_window_mask: Option<&mut [bool]>,
     windows: &WindowConfig,
     frame: &mut VideoFrame,
 ) {
