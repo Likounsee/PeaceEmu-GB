@@ -226,7 +226,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 mosaic_enabled,
                 mosaic_width,
                 mosaic_height,
-                display_control & (1 << 13) != 0,
+                bg2_control & (1 << 13) != 0,
             );
             // Palette RAM is unchanged during this snapshot render. Resolve it
             // once rather than issuing another bus read for every framebuffer pixel.
@@ -2301,7 +2301,7 @@ mod tests {
     #[test]
     fn win0_can_hide_obj_pixels_while_leaving_background_visible() {
         let mut bus = bus();
-        bus.write16(0x0400_0000, (1 << 12) | (1 << 13)); // OBJ and WIN0.
+        bus.write16(0x0400_0000, (1 << 6) | (1 << 12) | (1 << 13)); // 1D OBJ, OBJ and WIN0.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
         bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
         bus.write16(0x0601_0000, 0x1111);
