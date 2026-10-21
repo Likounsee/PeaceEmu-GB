@@ -1000,9 +1000,11 @@ impl GbaMachine {
 
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
-    /// The mix reflects SOUNDCNT_H volume and left/right routing. It is a sample
-    /// snapshot, not a resampled audio stream; callers should sample it at their
-    /// chosen output rate and perform any required filtering or scaling.
+    /// The mix reflects SOUNDCNT_H volume and left/right routing. The result
+    /// is an unclipped signed integer sum (each side can range from -256 to 254
+    /// with the currently modeled two FIFOs), not a resampled audio stream.
+    /// Callers should sample it at their chosen output rate and perform any
+    /// required filtering, scaling, and final output clipping.
     pub fn direct_sound_stereo_sample(&self) -> (i16, i16) {
         self.bus.direct_sound_stereo_sample()
     }
