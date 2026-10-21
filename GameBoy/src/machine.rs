@@ -2431,4 +2431,43 @@ mod tests {
         assert_eq!(second.dma_irq_enabled[0], Some(true));
         assert_eq!(second.dma_word_transfer[0], Some(false));
     }
+
+    #[test]
+    fn gamepak_timing_queries_are_side_effect_free_and_validate_inputs() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0204, 0x0417);
+        let before = machine.diagnostic_snapshot();
+
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+            Some(4)
+        );
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 0),
+            Some(0)
+        );
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x09FF_FFFF, false, 4, 2),
+            None
+        );
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0200_0000, false, 2),
+            None
+        );
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0800_0000, false, 0),
+            None
+        );
+
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+        assert_eq!(after.gamepak_wait_control, before.gamepak_wait_control);
+    }
+
 }
