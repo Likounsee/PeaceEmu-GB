@@ -463,7 +463,7 @@ impl Cpu {
                         } else {
                             rm >> amount
                         }
-                    },
+                    }
                     2 => {
                         if amount == 0 {
                             if rm & 0x8000_0000 != 0 {
