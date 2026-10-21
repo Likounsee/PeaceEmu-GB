@@ -248,7 +248,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut frame,
                 palette[0],
                 bitmap_brightness_effect(bus, display_control, 5),
-                *windows,
+                windows,
             );
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
