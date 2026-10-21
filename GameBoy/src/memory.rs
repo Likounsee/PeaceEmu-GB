@@ -3257,8 +3257,14 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0204, 0);
 
-        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0), Some(0));
-        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), Some(8));
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0),
+            Some(0)
+        );
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
+            Some(8)
+        );
         assert_eq!(bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1), None);
         assert_eq!(bus.gamepak_sequence_cycles(0x0FFF_FFFF, false, 2, 1), None);
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
