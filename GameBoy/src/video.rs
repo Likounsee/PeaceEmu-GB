@@ -592,7 +592,9 @@ fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 12
         let attr1 = read_oam16(oam_snapshot, base + 2);
         let affine = attr0 & (1 << 8) != 0;
         let object_mode = (attr0 >> 10) & 3;
-        if (!affine && attr0 & (1 << 9) != 0) || object_mode >= 2 || (attr0 >> 14) & 3 == 3 {
+        // OBJ-window entries still consume per-scanline object evaluation; only the
+        // prohibited object mode is excluded from the hardware's 32-object limit.
+        if (!affine && attr0 & (1 << 9) != 0) || object_mode == 3 || (attr0 >> 14) & 3 == 3 {
             continue;
         }
         let shape = (attr0 >> 14) & 3;
@@ -1982,6 +1984,25 @@ mod tests {
 
         let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn obj_window_entries_consume_scanline_object_limit() {
+        let mut oam = [0_u8; 1024];
+        for index in 0..32_usize {
+            let base = index * 8;
+            // OBJ mode 2 is an OBJ-window entry; it still occupies an OAM slot.
+            oam[base..base + 2].copy_from_slice(&(2_u16 << 10).to_le_bytes());
+            oam[base + 2..base + 4].copy_from_slice(&0_u16.to_le_bytes());
+        }
+        let visible_object = 32 * 8;
+        oam[visible_object..visible_object + 2].copy_from_slice(&0_u16.to_le_bytes());
+        oam[visible_object + 2..visible_object + 4].copy_from_slice(&0_u16.to_le_bytes());
+
+        let allowed = object_scanline_mask(&oam);
+        assert!(allowed[..32].iter().all(|lines| lines[0]));
+        assert!(!allowed[32][0]);
+        assert!(allowed[32][8]);
     }
 
     #[test]
