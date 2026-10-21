@@ -2469,6 +2469,7 @@ mod tests {
         // Mode 3 with BG2, OBJ, and OBJ window enabled.
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12) | (1 << 15));
         bus.write16(VRAM_BASE, 0x001F);
+        bus.write16(VRAM_BASE + 2, 0x001F);
         bus.write16(VRAM_BASE + 8 * 2, 0x001F);
         bus.write16(PALETTE_BASE, 0x03E0);
         // WINOBJ allows BG2; outside the OBJ window, BG2 is hidden.
