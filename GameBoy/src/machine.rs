@@ -860,7 +860,7 @@ mod tests {
         assert!(!machine.interrupt_master_enabled());
 
         machine.bus_mut().write16(0x0400_0200, 0xFFFF);
-        machine.bus_mut().write16(0x0400_0202, 0xFFFF);
+        machine.bus_mut().request_interrupt(0x3FFF);
         machine.bus_mut().write16(0x0400_0208, 1);
         assert_eq!(machine.interrupt_enable_mask(), 0x3FFF);
         assert_eq!(machine.interrupt_request_flags(), 0x3FFF);
