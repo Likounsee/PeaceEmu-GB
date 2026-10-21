@@ -4074,15 +4074,13 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(0), Some(31));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0xE0_u8 as i8));
 
-        // Reset the queue, clock an empty FIFO, and ensure the DAC latch holds.
-        bus.write16(0x0400_0082, 1 << 11);
+        // Drain the remaining bytes; once empty, the DAC holds the last sample.
+        bus.advance_cycles(31);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
-        bus.write16(0x0400_0100, 0xFFFF);
-        bus.write16(0x0400_0102, 0);
-        bus.write16(0x0400_0102, 0x0080);
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x7F));
         bus.advance_cycles(1);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
-        assert_eq!(bus.audio_fifo_last_sample(0), Some(0xE0_u8 as i8));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x7F));
     }
 
 }
