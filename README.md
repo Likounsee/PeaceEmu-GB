@@ -94,7 +94,7 @@ event or limit; IRQ exception entry is not implemented yet. The initial program 
 development API, not a promise of complete commercial-game compatibility or accurate
 frame pacing.
 
-Timer inspection now includes the masked TM control register, overflow-IRQ enable, and cascade-mode bit through `timer_control()`, `timer_irq_enabled()`, and `timer_cascade_enabled()`. `gamepak_wait_control()` exposes the current WAITCNT configuration for frontends and timing diagnostics. These accessors inspect configuration only and do not add WAITCNT wait states to CPU instruction timing.
+Timer inspection now includes the masked TM control register, selected prescaler divisor, overflow-IRQ enable, and cascade-mode bit through `timer_control()`, `timer_prescaler_divisor()`, `timer_irq_enabled()`, and `timer_cascade_enabled()`. `gamepak_wait_control()` exposes the current WAITCNT configuration for frontends and timing diagnostics. These accessors inspect configuration only and do not add WAITCNT wait states to CPU instruction timing.
 
 The machine facade also forwards diagnostic snapshots for interrupt IE/IF/IME state (`interrupt_enable_mask()`, `interrupt_request_flags()`, and `interrupt_master_enabled()`), live video status (`video_scanline()`, `video_in_vblank()`, `video_in_hblank()`, and `video_vcount_match()`), Game Pak access-duration estimates (`gamepak_access_cycles()`), and Direct Sound FIFO queue/sample state (`audio_fifo_len()` and `audio_fifo_last_sample()`). These are inspection APIs and do not add CPU wait-state integration or IRQ exception entry.
 
