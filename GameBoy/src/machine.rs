@@ -961,7 +961,9 @@ mod tests {
     fn pending_interrupt_mask_is_independent_of_master_enable() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0200, (1 << 0) | (1 << 3));
-        machine.bus_mut().request_interrupt((1 << 0) | (1 << 2) | (1 << 3));
+        machine
+            .bus_mut()
+            .request_interrupt((1 << 0) | (1 << 2) | (1 << 3));
         assert_eq!(machine.pending_interrupts(), (1 << 0) | (1 << 3));
         assert!(!machine.interrupt_pending());
         machine.bus_mut().write16(0x0400_0208, 1);
