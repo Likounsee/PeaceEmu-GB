@@ -251,7 +251,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let index = usize::from(bus.read8(address));
                     if windows.allows(x, y, 2) {
                         frame.pixels[y * SCREEN_WIDTH + x] =
-                            apply_brightness_effect(palette[index], bitmap_effect);
+                            apply_brightness_effect(
+                                palette[index],
+                                if windows.effects_allowed(x, y) { bitmap_effect } else { None },
+                            );
                     }
                 }
             }
@@ -297,7 +300,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let screen_y = y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2;
                     if windows.allows(screen_x, screen_y, 2) {
                         frame.pixels[target] =
-                            apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                            apply_brightness_effect(
+                                rgb555(bus.read16(address)),
+                                if windows.effects_allowed(screen_x, screen_y) { bitmap_effect } else { None },
+                            );
                     }
                 }
             }
@@ -1075,14 +1081,21 @@ fn render_regular_objects(
                     continue;
                 }
                 let source_color = palette[palette_index as usize];
-                frame.pixels[destination] = if object_mode == 1 && mode >= 3 {
+                frame.pixels[destination] = if object_mode == 1 && mode >= 3 && windows.effects_allowed(screen_x as usize, screen_y as usize) {
                     if let Some((eva, evb)) = bitmap_blend {
                         blend_argb555(source_color, frame.pixels[destination], eva, evb)
                     } else {
                         source_color
                     }
                 } else {
-                    apply_brightness_effect(source_color, bitmap_obj_effect)
+                    apply_brightness_effect(
+                        source_color,
+                        if windows.effects_allowed(screen_x as usize, screen_y as usize) {
+                            bitmap_obj_effect
+                        } else {
+                            None
+                        },
+                    )
                 };
             }
         }
@@ -2353,6 +2366,24 @@ mod tests {
         let frame = render_bitmap_frame(&bus).unwrap();
         assert_eq!(frame.pixel(0, 0), Some(0xFFFFFFFF));
     }
+    #[test]
+    fn win0_color_effect_bit_disables_brightness_only_inside_window() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 13)); // Mode 3, BG2, WIN0.
+        bus.write16(VRAM_BASE, 0x001F); // Red bitmap pixel.
+        bus.write16(VRAM_BASE + 8 * 2, 0x001F);
+        bus.write16(0x0400_0040, 8 << 8); // WIN0 horizontal range [0,8).
+        bus.write16(0x0400_0044, 1 << 8); // WIN0 vertical range [0,1).
+        bus.write16(0x0400_0048, 1 << 2); // WIN0 allows BG2 but disables effects.
+        bus.write16(0x0400_004A, (1 << 2) | (1 << 5)); // Outside allows BG2 and effects.
+        bus.write16(0x0400_0050, (1 << 2) | (2 << 6)); // BG2 target, brighten.
+        bus.write16(0x0400_0054, 16);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(8, 0), Some(0xFFFFFFFF));
+    }
+
     #[test]
     fn win0_masks_selected_background_pixels_without_erasing_backdrop() {
         let mut bus = bus();
