@@ -195,7 +195,8 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         continue;
                     };
                     let address = VRAM_BASE + ((source_y * SCREEN_WIDTH + source_x) * 2) as u32;
-                    frame.pixels[y * SCREEN_WIDTH + x] =\n                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                    frame.pixels[y * SCREEN_WIDTH + x] =
+                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
                 }
             }
         }
@@ -269,7 +270,8 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let target = (y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2) * SCREEN_WIDTH
                         + x
                         + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
-                    frame.pixels[target] =\n                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                    frame.pixels[target] =
+                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
                 }
             }
         }
