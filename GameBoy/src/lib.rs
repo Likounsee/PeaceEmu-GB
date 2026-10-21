@@ -18,7 +18,7 @@ pub mod memory;
 pub mod save;
 
 pub use cartridge::{CartridgeError, GbaCartridge};
-pub use cpu::{ConditionFlags, Cpu, CpuError, StepOutcome};
+pub use cpu::{ConditionFlags, Cpu, CpuError, CpuSnapshot, StepOutcome};
 pub use memory::{AudioFifoStatus, GbaButton, MemoryBus, SramSizeError};
 pub use save::{EepromDevice, FlashDevice, SaveType};
 
