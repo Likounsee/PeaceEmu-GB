@@ -772,6 +772,23 @@ mod tests {
     }
 
     #[test]
+    fn machine_exposes_direct_sound_fifo_refill_status() {
+        let mut machine = GbaMachine::new(cartridge());
+        let status = machine.audio_fifo_status(0).unwrap();
+        assert_eq!(status.queued_bytes, 0);
+        assert_eq!(status.capacity, 32);
+        assert!(status.refill_threshold_reached);
+        assert_eq!(machine.audio_fifo_status(2), None);
+
+        for _ in 0..5 {
+            machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
+        }
+        let status = machine.audio_fifo_status(0).unwrap();
+        assert_eq!(status.queued_bytes, 20);
+        assert!(!status.refill_threshold_reached);
+    }
+
+    #[test]
     fn machine_exposes_the_current_direct_sound_stereo_mix() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0084, 0x0080);
