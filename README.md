@@ -12,8 +12,8 @@ PeaceEmu-GB is a community-driven, open-source Rust project. It is an early hard
 - Timer progression, scanline/VBlank/HBlank timing, interrupt flags, and several DMA paths.
 - WAITCNT decoding for ROM0/ROM1/ROM2 and SRAM, including transfer-width-aware bus-duration estimates for 8-, 16-, and 32-bit accesses (not yet integrated into CPU instruction timing).
 - SRAM, Flash, and EEPROM save-device handling and save-data import/export APIs.
-- Initial rendering for tiled backgrounds and bitmap display modes, plus regular and affine OBJ rendering.
-- A high-level machine facade for bounded execution, VBlank-synchronized frame capture, multi-frame capture, and callback-based frame streaming.
+- Initial rendering for tiled backgrounds and bitmap display modes, plus regular and affine OBJ rendering. Frame export supports RGB/RGBA/BGRA/BGR888, RGB555, and RGB565 byte layouts.
+- A high-level machine facade for bounded execution, program-counter breakpoints/revisit waits, VBlank-synchronized frame capture, multi-frame capture, and callback-based frame streaming.
 - Initial Direct Sound FIFO queueing, timer-driven FIFO consumption, stereo sample inspection, and FIFO status snapshots (queue length/capacity/refill-threshold hint).
 
 These features are partial implementations. Passing unit tests does not imply compatibility with every commercial game or hardware edge case.
@@ -69,17 +69,20 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         let bgra = frame.to_bgra8888().expect("valid framebuffer");
         let rgb565 = frame.to_rgb565_le().expect("valid framebuffer");
         let rgb565_be = frame.to_rgb565_be().expect("valid framebuffer");
+        let rgb555 = frame.to_rgb555_le().expect("valid framebuffer");
         let bgr = frame.to_bgr888().expect("valid framebuffer");
         println!("RGB bytes: {}, RGBA bytes: {}", rgb.len(), rgba.len());
         println!("BGRA bytes: {}, BGR bytes: {}", bgra.len(), bgr.len());
         println!("RGB565 LE bytes: {}, BE bytes: {}", rgb565.len(), rgb565_be.len());
+        println!("RGB555 LE bytes: {}", rgb555.len());
     }
     Ok(())
 }
 ```
 
 The machine facade also exposes `run_for_cycles(budget)` for approximate cycle-budget
-execution, `run_until_audio_fifo_refill(fifo, max_steps)` to run until Direct Sound FIFO A (0)
+execution, `run_until_pc(address, max_steps)` for a bounded PC breakpoint and
+`run_until_pc_revisit(address, max_steps)` for waiting until an address is revisited, `run_until_audio_fifo_refill(fifo, max_steps)` to run until Direct Sound FIFO A (0)
 or B (1) reaches its 16-byte refill threshold, `run_until_scanline(line, max_steps)` for bounded scanline synchronization,
 `run_until_vblank(max_steps)` for VBlank synchronization, `run_until_hblank(max_steps)`
 for HBlank synchronization, `run_until_vcount_match(max_steps)` for the programmed DISPSTAT compare event,
