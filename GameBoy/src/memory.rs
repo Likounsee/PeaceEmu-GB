@@ -3334,7 +3334,7 @@ mod tests {
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, true, 2, 4), Some(4));
 
         // A separate WAITCNT field changes WS1 without changing WS0.
-        bus.write16(0x0400_0204, (1 << 2) | (1 << 4) | (2 << 5));
+        bus.write16(0x0400_0204, (1 << 2) | (1 << 4) | (2 << 5) | (1 << 7));
         assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(3));
         assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, false), Some(2));
         assert_eq!(bus.gamepak_sequence_cycles(0x0A00_0000, false, 2, 4), Some(5));
