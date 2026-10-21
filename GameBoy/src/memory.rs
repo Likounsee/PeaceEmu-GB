@@ -2708,6 +2708,36 @@ mod tests {
     }
 
     #[test]
+    fn disabling_sound_master_clears_both_fifos_samples_and_direct_sound_controls() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0080, 0xFFFF);
+        bus.write16(0x0400_0082, 0xFFFF);
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        bus.write32(0x0400_00A4, 0x8877_6655);
+        bus.audio_last_samples = [12, -34];
+
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+        assert_eq!(bus.audio_fifo_len(1), Some(4));
+        bus.write16(0x0400_0084, 0);
+
+        assert_eq!(bus.read16(0x0400_0084), 0);
+        assert_eq!(bus.read16(0x0400_0080), 0);
+        assert_eq!(bus.read16(0x0400_0082), 0);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 0));
+
+        // Re-enabling the master does not resurrect stale FIFO or control state.
+        bus.write16(0x0400_0084, 0x0080);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+        assert_eq!(bus.read16(0x0400_0082), 0);
+    }
+
+    #[test]
     fn direct_sound_stereo_mix_obeys_master_volume_and_routing() {
         let mut bus = MemoryBus::new(cartridge());
         bus.audio_last_samples = [64, -32];
