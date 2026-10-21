@@ -1987,6 +1987,21 @@ mod tests {
     }
 
     #[test]
+    fn disabled_and_prohibited_objects_do_not_consume_scanline_limit() {
+        let mut oam = [0_u8; 1024];
+        for index in 0..16_usize {
+            let base = index * 8;
+            // Prohibited OBJ mode 3.
+            oam[base..base + 2].copy_from_slice(&(3_u16 << 10).to_le_bytes());
+            // Non-affine disabled OBJ entries.
+            let disabled = (16 + index) * 8;
+            oam[disabled..disabled + 2].copy_from_slice(&(1_u16 << 9).to_le_bytes());
+        }
+        let allowed = object_scanline_mask(&oam);
+        assert!(allowed[32][0]);
+    }
+
+    #[test]
     fn obj_window_entries_consume_scanline_object_limit() {
         let mut oam = [0_u8; 1024];
         for index in 0..32_usize {
