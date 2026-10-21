@@ -598,6 +598,64 @@ fn render_regular_objects(
     let object_mosaic_width = u32::from(((mosaic >> 8) & 0xF) + 1);
     let object_mosaic_height = u32::from(((mosaic >> 12) & 0xF) + 1);
 
+    // The GBA can evaluate at most 32 OBJ entries on each scanline.
+    // Select eligible entries in OAM order before drawing back-to-front, so
+    // lower OAM indices keep their hardware priority when the line is crowded.
+    let mut allowed_lines = [[false; SCREEN_HEIGHT]; 128];
+    let mut objects_per_line = [0_u8; SCREEN_HEIGHT];
+    for index in 0..128_u32 {
+        let base = OAM_BASE + index * 8;
+        let attr0 = read_oam16(oam_snapshot, base);
+        let attr1 = read_oam16(oam_snapshot, base + 2);
+        let affine = attr0 & (1 << 8) != 0;
+        let object_mode = (attr0 >> 10) & 3;
+        if (!affine && attr0 & (1 << 9) != 0)
+            || object_mode >= 2
+            || (attr0 >> 14) & 3 == 3
+        {
+            continue;
+        }
+        let shape = (attr0 >> 14) & 3;
+        let size = (attr1 >> 14) & 3;
+        let (width, height) = match (shape, size) {
+            (0, 0) => (8_u32, 8_u32),
+            (0, 1) => (16, 16),
+            (0, 2) => (32, 32),
+            (0, 3) => (64, 64),
+            (1, 0) => (16, 8),
+            (1, 1) => (32, 8),
+            (1, 2) => (32, 16),
+            (1, 3) => (64, 32),
+            (2, 0) => (8, 16),
+            (2, 1) => (8, 32),
+            (2, 2) => (16, 32),
+            (2, 3) => (32, 64),
+            _ => continue,
+        };
+        let bounding_height = if affine && attr0 & (1 << 9) != 0 {
+            height * 2
+        } else {
+            height
+        };
+        let raw_y = u32::from(attr0 & 0x00FF);
+        let origin_y = if raw_y >= 256 - bounding_height {
+            raw_y as i32 - 256
+        } else {
+            raw_y as i32
+        };
+        for dy in 0..bounding_height {
+            let screen_y = origin_y + dy as i32;
+            if !(0..SCREEN_HEIGHT as i32).contains(&screen_y) {
+                continue;
+            }
+            let line = screen_y as usize;
+            if objects_per_line[line] < 32 {
+                allowed_lines[index as usize][line] = true;
+                objects_per_line[line] += 1;
+            }
+        }
+    }
+
     for index in (0..128_u32).rev() {
         let base = OAM_BASE + index * 8;
         let attr0 = read_oam16(oam_snapshot, base);
@@ -691,6 +749,9 @@ fn render_regular_objects(
         for dy in 0..bounding_height {
             let screen_y = origin_y + dy as i32;
             if !(0..SCREEN_HEIGHT as i32).contains(&screen_y) {
+                continue;
+            }
+            if !allowed_lines[index as usize][screen_y as usize] {
                 continue;
             }
             let sampled_y = if mosaic_enabled {
@@ -1566,6 +1627,33 @@ mod tests {
 
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn only_first_32_oam_entries_are_evaluated_per_scanline() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12); // OBJ enabled
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // index 1: red
+        bus.write16(PALETTE_BASE + 0x204, 0x7C00); // index 2: blue
+        bus.write16(0x0601_0000, 0x1111); // tile 0 is red
+        bus.write16(0x0601_0020, 0x2222); // tile 1 is blue
+
+        // Thirty-two higher-priority OAM entries occupy the scanline.
+        // Entry 32 is placed elsewhere on the same line and must be dropped.
+        for index in 0..32_u32 {
+            let base = 0x0700_0000 + index * 8;
+            bus.write16(base, 0);
+            bus.write16(base + 2, 0);
+            bus.write16(base + 4, 0);
+        }
+        let dropped = 0x0700_0000 + 32 * 8;
+        bus.write16(dropped, 0);
+        bus.write16(dropped + 2, 8);
+        bus.write16(dropped + 4, 1);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(8, 0), Some(0xFF00_0000));
     }
 
     #[test]
