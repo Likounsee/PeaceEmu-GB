@@ -78,6 +78,8 @@ pub struct MachineSnapshot {
     pub audio_fifo_lengths: [Option<usize>; 2],
     /// Last signed sample values for Direct Sound FIFOs A and B.
     pub audio_fifo_last_samples: [Option<i8>; 2],
+    /// Bytes remaining until Direct Sound FIFOs A and B reach the 16-byte refill threshold.
+    pub audio_fifo_bytes_until_refill: [Option<usize>; 2],
     /// Active-high pressed-button mask (bits 0–9 map to A, B, Select, Start, directions, R, L).
     pub keypad_pressed: u16,
     /// Whether the configured KEYCNT selected-button condition is currently satisfied.
@@ -1211,6 +1213,10 @@ impl GbaMachine {
                 self.bus.audio_fifo_last_sample(0),
                 self.bus.audio_fifo_last_sample(1),
             ],
+            audio_fifo_bytes_until_refill: [
+                self.bus.audio_fifo_bytes_until_refill(0),
+                self.bus.audio_fifo_bytes_until_refill(1),
+            ],
             keypad_pressed: self.bus.keys_pressed(),
             keypad_irq_requested: self.bus.keypad_irq_requested(),
         }
@@ -1448,6 +1454,23 @@ mod tests {
 
         machine.bus_mut().write32(0x0400_00A0, 0x0000_4040);
         assert_eq!(machine.audio_fifo_len(0), Some(4));
+    }
+
+    #[test]
+    fn machine_snapshot_reports_audio_fifo_refill_distance_without_advancing_time() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+        assert_eq!(before.audio_fifo_bytes_until_refill, [Some(0), Some(0)]);
+
+        for word in 0..5_u32 {
+            machine.bus_mut().write32(0x0400_00A0, word);
+        }
+        let queued = machine.diagnostic_snapshot();
+        assert_eq!(queued.audio_fifo_lengths, [Some(20), Some(0)]);
+        assert_eq!(queued.audio_fifo_bytes_until_refill, [Some(4), Some(0)]);
+        assert_eq!(machine.diagnostic_snapshot(), queued);
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
     }
 
     #[test]
