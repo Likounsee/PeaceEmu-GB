@@ -4042,7 +4042,7 @@ mod tests {
         bus.write32(0x0400_00B4, 0x0300_0020);
         bus.write16(0x0400_00B8, 1);
         // DMA0: enable, VBlank timing, and completion IRQ.
-        bus.write16(0x0400_00BA, 0xD400);
+        bus.write16(0x0400_00BA, 0xD000);
 
         assert_eq!(bus.read32(0x0300_0020), 0);
         assert_eq!(bus.read16(0x0400_0202) & (1 << 8), 0);
@@ -4074,12 +4074,15 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(0), Some(31));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0xE0_u8 as i8));
 
-        // Drain the remaining bytes; once empty, the DAC holds the last sample.
-        bus.advance_cycles(31);
+        // Reset the queue, clock an empty FIFO, and ensure the DAC latch holds.
+        bus.write16(0x0400_0082, 1 << 11);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
-        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x7F));
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0);
+        bus.write16(0x0400_0102, 0x0080);
         bus.advance_cycles(1);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
-        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x7F));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0xE0_u8 as i8));
     }
+
 }

@@ -100,6 +100,8 @@ pub struct Cpu {
     registers: [u32; 16],
     flags: ConditionFlags,
     thumb: bool,
+    /// Expected address of the next sequential instruction fetch and its state.
+    last_fetch_next: Option<(u32, bool)>,
 }
 
 impl Default for Cpu {
@@ -117,6 +119,7 @@ impl Cpu {
             registers: [0; 16],
             flags: ConditionFlags::default(),
             thumb: false,
+            last_fetch_next: None,
         }
     }
 
@@ -126,6 +129,7 @@ impl Cpu {
         self.registers[15] = entry_point & !3;
         self.flags = ConditionFlags::default();
         self.thumb = false;
+        self.last_fetch_next = None;
     }
 
     /// Returns a general-purpose register, including r15 as the current PC.
@@ -181,6 +185,7 @@ impl Cpu {
     /// a word in ARM state. Normal guest software should use BX to switch state.
     pub fn set_execution_state(&mut self, thumb: bool) {
         self.thumb = thumb;
+        self.last_fetch_next = None;
         self.registers[15] = if thumb {
             self.registers[15] & !1
         } else {
@@ -229,6 +234,8 @@ impl Cpu {
     ) -> Result<(StepOutcome, u32), CpuError> {
         let address = self.registers[15];
         let was_thumb = self.thumb;
+        let fetch_width = if was_thumb { 2 } else { 4 };
+        let fetch_sequential = self.last_fetch_next == Some((address, was_thumb));
         let instruction = if was_thumb {
             u32::from(bus.read16(address & !1))
         } else {
@@ -255,8 +262,24 @@ impl Cpu {
         } else {
             estimated_cycles
         };
-        bus.advance_cycles(cycles);
-        Ok((outcome, cycles))
+        // The base instruction estimate assumes the normal low-wait-state
+        // instruction fetch. Add only the excess duration for Game Pak fetches;
+        // RAM and I/O execution retain the existing instruction timing model.
+        let fetch_cycles = bus
+            .gamepak_access_cycles_for_width(address, fetch_sequential, fetch_width)
+            .unwrap_or(fetch_width as u32 / 2);
+        let base_fetch_cycles = u32::from(fetch_width / 2);
+        let wait_penalty = fetch_cycles.saturating_sub(base_fetch_cycles);
+        let total_cycles = cycles.saturating_add(wait_penalty);
+        self.last_fetch_next = if self.thumb == was_thumb
+            && self.registers[15] == address.wrapping_add(u32::from(fetch_width))
+        {
+            Some((address.wrapping_add(u32::from(fetch_width)), was_thumb))
+        } else {
+            None
+        };
+        bus.advance_cycles(total_cycles);
+        Ok((outcome, total_cycles))
     }
 
     /// Returns ARM7TDMI's approximate internal multiply cycles (1–4),
@@ -3901,5 +3924,34 @@ mod tests {
         assert_eq!(bus.read32(0x0200_0100), 0x1234_5678);
         assert_eq!(cpu.register(1), Some(0x0200_0100));
         assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+    #[test]
+    fn gamepak_instruction_fetch_wait_states_affect_cycles_but_ram_does_not() {
+        let mut bus = MemoryBus::new(cartridge());
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0800_0000);
+        // The test cartridge is filled with a supported ARM NOP/data-processing
+        // instruction pattern; timing is checked independently of its result.
+        bus.write16(0x0400_0204, 0);
+        let (_, rom_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(rom_cycles >= 4, "ROM fetch should include WAITCNT latency");
+
+        let mut ram_bus = MemoryBus::new(cartridge());
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.set_register(15, 0x0300_0000);
+        ram_bus.write32(0x0300_0000, 0xE1A0_0000);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+        assert_eq!(ram_cycles, 1, "IWRAM fetch must not receive Game Pak wait states");
+    }
+
+    #[test]
+    fn gamepak_sequential_fetch_uses_waitcnt_sequential_duration() {
+        let mut bus = MemoryBus::new(cartridge());
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0800_0000);
+        bus.write16(0x0400_0204, 1 << 4); // WS0 sequential halfword: one cycle.
+        let (_, first_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        let (_, second_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(first_cycles > second_cycles);
     }
 }
