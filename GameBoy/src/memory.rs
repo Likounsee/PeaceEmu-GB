@@ -3058,10 +3058,11 @@ mod tests {
             bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
             Some(6)
         );
-        // A single physical word access may not straddle the ROM bank boundary.
+        // The CPU's unaligned word address is aligned down to 0x09FFFFFC.
+        // Its two physical halfword transfers both remain in ROM0 (4 + 1 cycles).
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x09FF_FFFE, false, 4),
-            None
+            Some(5)
         );
     }
 
