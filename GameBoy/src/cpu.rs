@@ -4182,14 +4182,14 @@ mod tests {
     fn arm_multiple_gamepak_transfer_models_sequential_data_wait_states() {
         let mut rom_bus = bus_with_program(&[0xE8B1_0005, 0xE1A0_0000]); // LDMIA r1!, {r0, r2}
         let mut rom_cpu = Cpu::new();
-        rom_cpu.reset(0x0300_0000);
+        rom_cpu.reset(0x0200_0000);
         rom_cpu.set_register(1, 0x0800_0100);
         rom_bus.write16(0x0400_0204, 1 << 4);
         let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
 
         let mut ram_bus = bus_with_program(&[0xE8B1_0005, 0xE1A0_0000]);
         let mut ram_cpu = Cpu::new();
-        ram_cpu.reset(0x0300_0000);
+        ram_cpu.reset(0x0200_0000);
         ram_cpu.set_register(1, 0x0300_0100);
         let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
 
@@ -4201,7 +4201,7 @@ mod tests {
     fn thumb_multiple_gamepak_transfer_models_sequential_data_wait_states() {
         let mut rom_bus = bus_with_program(&[0x2001_C80A]); // LDMIA r0!, {r1, r3}
         let mut rom_cpu = Cpu::new();
-        rom_cpu.reset(0x0300_0000);
+        rom_cpu.reset(0x0200_0000);
         rom_cpu.set_execution_state(true);
         rom_cpu.set_register(0, 0x0800_0100);
         rom_bus.write16(0x0400_0204, 1 << 4);
@@ -4209,7 +4209,7 @@ mod tests {
 
         let mut ram_bus = bus_with_program(&[0x2001_C80A]);
         let mut ram_cpu = Cpu::new();
-        ram_cpu.reset(0x0300_0000);
+        ram_cpu.reset(0x0200_0000);
         ram_cpu.set_execution_state(true);
         ram_cpu.set_register(0, 0x0300_0100);
         let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
