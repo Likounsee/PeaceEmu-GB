@@ -1201,12 +1201,19 @@ fn render_regular_objects(
                     continue;
                 }
                 let source_color = palette[palette_index as usize];
-                frame.pixels[destination] = if object_mode == 1
-                    && mode >= 3
-                    && windows.effects_allowed(screen_x as usize, screen_y as usize)
-                {
-                    if let Some((eva, evb)) = bitmap_blend {
-                        blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                frame.pixels[destination] = if object_mode == 1 {
+                    // Semi-transparent OBJ pixels are forced first targets for
+                    // alpha blending. If alpha blending is unavailable or
+                    // masked by the current window, they render normally; they
+                    // must not fall through to ordinary OBJ brighten/darken.
+                    if mode >= 3
+                        && windows.effects_allowed(screen_x as usize, screen_y as usize)
+                    {
+                        if let Some((eva, evb)) = bitmap_blend {
+                            blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                        } else {
+                            source_color
+                        }
                     } else {
                         source_color
                     }
@@ -2326,6 +2333,23 @@ mod tests {
 
         let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn semi_transparent_obj_ignores_brightness_when_alpha_is_not_enabled() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12)); // Mode 3, BG2 and OBJ.
+        bus.write16(VRAM_BASE, 0x03E0); // Green BG2 pixel.
+        bus.write16(PALETTE_BASE + 0x202, 0x0001); // Very dark red OBJ.
+        bus.write16(0x0601_4000, 0x1111);
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent OBJ.
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 512);
+        bus.write16(0x0400_0050, (2 << 6) | (1 << 4)); // Brighten, OBJ first target.
+        bus.write16(0x0400_0054, 16); // Maximum brightness.
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(rgb555(0x0001)));
     }
 
     #[test]
