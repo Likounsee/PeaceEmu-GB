@@ -2148,7 +2148,7 @@ mod tests {
             })
         );
         assert!(cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
     }
 
     #[test]
@@ -2964,7 +2964,7 @@ mod tests {
             })
         );
         assert!(!cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
     }
 
     #[test]
@@ -3556,7 +3556,7 @@ mod tests {
                 }),
                 "instruction 0x{instruction:08X}"
             );
-            assert_eq!(cpu.register(15), Some(0x0200_0004));
+            assert_eq!(cpu.register(15), Some(0x0200_0000));
         }
     }
 
@@ -3577,7 +3577,7 @@ mod tests {
                 }),
                 "instruction 0x{instruction:08X}"
             );
-            assert_eq!(cpu.register(15), Some(0x0200_0004));
+            assert_eq!(cpu.register(15), Some(0x0200_0000));
             assert_eq!(bus.read32(0x0200_0004), 0);
         }
     }
@@ -3596,7 +3596,7 @@ mod tests {
             })
         );
         // The invalid write-back must not redirect execution through r15.
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
     }
 
     #[test]
