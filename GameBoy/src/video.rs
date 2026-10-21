@@ -38,6 +38,43 @@ impl VideoFrame {
         self.pixels
     }
 
+    /// Converts the frame to tightly packed RGB888 bytes in row-major order.
+    ///
+    /// The source pixels use 0xFFRRGGBB; alpha is omitted. Returns None for
+    /// malformed public frame values instead of silently truncating the image.
+    pub fn to_rgb888(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let byte_count = self.pixels.len().checked_mul(3)?;
+        let mut bytes = Vec::with_capacity(byte_count);
+        for &pixel in &self.pixels {
+            bytes.push((pixel >> 16) as u8);
+            bytes.push((pixel >> 8) as u8);
+            bytes.push(pixel as u8);
+        }
+        Some(bytes)
+    }
+
+    /// Converts the frame to tightly packed RGBA8888 bytes in row-major order.
+    ///
+    /// The source pixels use 0xFFRRGGBB, so the output order is R, G, B, A
+    /// and alpha is always opaque (255). Malformed frames return None.
+    pub fn to_rgba8888(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let byte_count = self.pixels.len().checked_mul(4)?;
+        let mut bytes = Vec::with_capacity(byte_count);
+        for &pixel in &self.pixels {
+            bytes.push((pixel >> 16) as u8);
+            bytes.push((pixel >> 8) as u8);
+            bytes.push(pixel as u8);
+            bytes.push(0xFF);
+        }
+        Some(bytes)
+    }
+
     /// Returns whether the dimensions exactly match the backing pixel buffer.
     ///
     /// The check uses checked multiplication so malformed public frame values
@@ -1374,6 +1411,31 @@ mod tests {
             frame.into_pixels(),
             vec![0xFF00_0001, 0xFF00_0002, 0xFF00_0003, 0xFF00_0004]
         );
+    }
+
+    #[test]
+    fn video_frame_exports_rgb888_and_rgba8888_in_channel_order() {
+        let frame = VideoFrame {
+            width: 2,
+            height: 1,
+            pixels: vec![0xFF12_3456, 0xFFAB_CDEF],
+        };
+        assert_eq!(frame.to_rgb888(), Some(vec![0x12, 0x34, 0x56, 0xAB, 0xCD, 0xEF]));
+        assert_eq!(
+            frame.to_rgba8888(),
+            Some(vec![0x12, 0x34, 0x56, 0xFF, 0xAB, 0xCD, 0xEF, 0xFF])
+        );
+    }
+
+    #[test]
+    fn video_frame_export_rejects_incomplete_buffers() {
+        let malformed = VideoFrame {
+            width: 2,
+            height: 1,
+            pixels: vec![0xFF12_3456],
+        };
+        assert_eq!(malformed.to_rgb888(), None);
+        assert_eq!(malformed.to_rgba8888(), None);
     }
 
     fn bus() -> MemoryBus {
