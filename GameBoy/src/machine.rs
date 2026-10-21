@@ -1885,8 +1885,14 @@ mod tests {
                 encoding as u16
             );
         }
-        assert_eq!(machine.gamepak_access_cycles_for_width(0x0E00_0000, false, 3), None);
-        assert_eq!(machine.gamepak_access_cycles_for_width(0x0FFF_FFFE, false, 4), None);
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0E00_0000, false, 3),
+            None
+        );
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0FFF_FFFE, false, 4),
+            None
+        );
     }
 
     #[test]
