@@ -20,6 +20,8 @@ pub struct MachineSnapshot {
     pub cartridge_rom_size_bytes: usize,
     /// Backup-device type inferred from the loaded cartridge ROM, if recognized.
     pub cartridge_save_type: Option<crate::SaveType>,
+    /// Currently allocated save-image size in bytes, if a save image is available.
+    pub cartridge_save_size_bytes: Option<usize>,
     /// Fixed byte from cartridge header offset 0xB2 (normally 0x96 in retail ROMs).
     pub cartridge_header_fixed_value: u8,
     /// Software revision byte from cartridge header offset 0xBC.
@@ -1163,6 +1165,7 @@ impl GbaMachine {
             gamepak_wait_control: self.bus.gamepak_wait_control(),
             cartridge_rom_size_bytes: self.bus.cartridge_rom_size_bytes(),
             cartridge_save_type: self.bus.cartridge_save_type(),
+            cartridge_save_size_bytes: self.save_data_size_bytes(),
             cartridge_header_fixed_value: self.bus.cartridge_header_fixed_value(),
             cartridge_software_version: self.bus.cartridge_software_version(),
             video_scanline: self.bus.video_scanline(),
@@ -1382,6 +1385,7 @@ mod tests {
         let snapshot = machine.diagnostic_snapshot();
         assert_eq!(snapshot.cartridge_rom_size_bytes, GBA_HEADER_SIZE);
         assert_eq!(snapshot.cartridge_save_type, None);
+        assert_eq!(snapshot.cartridge_save_size_bytes, None);
         assert_eq!(snapshot.cartridge_header_fixed_value, 0x96);
         assert_eq!(snapshot.cartridge_software_version, 7);
         assert_eq!(machine.cartridge_header_checksum(), rom[0xBD]);
@@ -2557,6 +2561,10 @@ mod tests {
         assert_eq!(
             machine.diagnostic_snapshot().cartridge_save_type,
             Some(crate::SaveType::Sram)
+        );
+        assert_eq!(
+            machine.diagnostic_snapshot().cartridge_save_size_bytes,
+            Some(crate::memory::SRAM_SIZE)
         );
         assert_eq!(
             machine.save_data_size_bytes(),
