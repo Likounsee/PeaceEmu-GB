@@ -2793,9 +2793,9 @@ mod tests {
 
         bus.write16(0x0400_0084, 0x0080);
         // FIFO A: full volume, routed left and right. FIFO B: half volume,
-        // routed left only. Expected left = 128 - 32, right = 128.
+        // routed left only. Expected left = 64 - 16, right = 64.
         bus.write16(0x0400_0082, (1 << 2) | (1 << 8) | (1 << 9) | (1 << 13));
-        assert_eq!(bus.direct_sound_stereo_sample(), (96, 128));
+        assert_eq!(bus.direct_sound_stereo_sample(), (48, 64));
     }
 
     #[test]
@@ -3190,7 +3190,7 @@ mod tests {
         bus.advance_cycles(1);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(37));
-        assert_eq!(bus.direct_sound_stereo_sample(), (0, 37));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 18));
 
         bus.write16(0x0400_0084, 0);
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
@@ -3785,7 +3785,7 @@ mod tests {
         bus.audio_last_samples = [10, -20];
         bus.write16(0x0400_0084, 0x0080); // Master sound enabled.
         bus.write16(0x0400_0082, (1 << 9) | (1 << 8) | (1 << 13));
-        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 5));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-5, 5));
 
         // Full volume restores FIFO A to its source sample; FIFO B remains half volume.
         bus.write16(0x0400_0082, (1 << 2) | (1 << 9) | (1 << 8) | (1 << 13));
@@ -3797,7 +3797,7 @@ mod tests {
 
         // FIFO B's full-volume bit also selects the unattenuated signed sample.
         bus.write16(0x0400_0082, (1 << 2) | (1 << 3) | (1 << 9) | (1 << 13));
-        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 5));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 0));
 
         // Half volume behaves like an arithmetic shift for negative odd samples.
         bus.audio_last_samples = [-19, 19];
