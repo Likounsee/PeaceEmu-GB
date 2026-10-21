@@ -2705,6 +2705,14 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0084), 0x0080);
         bus.write8(0x0400_0085, 0);
         assert_eq!(bus.read16(0x0400_0084), 0x0080);
+
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        bus.audio_last_samples[0] = 0x22;
+        // Reserved-byte writes must not accidentally reset active audio state.
+        bus.write8(0x0400_0085, 0xFF);
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x22));
+        assert_eq!(bus.read16(0x0400_0084), 0x0080);
     }
 
     #[test]
