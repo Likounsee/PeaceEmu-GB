@@ -24,6 +24,20 @@ pub const IO_SIZE: usize = 1024;
 /// SRAM backup-device capacity (32 KiB); the 64 KiB bus window mirrors it.
 pub const SRAM_SIZE: usize = 32 * 1024;
 
+/// Snapshot of one Direct Sound FIFO's frontend-relevant state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AudioFifoStatus {
+    /// Number of queued sample bytes (0 through 32).
+    pub queued_bytes: usize,
+    /// Hardware queue capacity in bytes (32).
+    pub capacity: usize,
+    /// Last signed 8-bit sample latched by the FIFO DAC.
+    pub last_sample: i8,
+    /// Whether the queue has reached the 16-byte-or-less refill threshold.
+    /// This is a status hint, not proof that a valid DMA channel is configured.
+    pub refill_threshold_reached: bool,
+}
+
 /// A physical button on the Game Boy Advance keypad.
 ///
 /// The discriminant is the button's bit in the active-high pressed-key mask.
@@ -220,6 +234,21 @@ impl MemoryBus {
     /// Returns the number of queued bytes in FIFO A (0) or B (1).
     pub fn audio_fifo_len(&self, fifo: usize) -> Option<usize> {
         self.audio_fifos.get(fifo).map(VecDeque::len)
+    }
+
+    /// Returns a coherent status snapshot for Direct Sound FIFO A (0) or B (1).
+    ///
+    /// Returns `None` for any other FIFO index. The refill threshold is true at
+    /// 16 queued bytes or fewer, matching the GBA sound-DMA refill point; actual
+    /// DMA service still depends on the configured channel and timer.
+    pub fn audio_fifo_status(&self, fifo: usize) -> Option<AudioFifoStatus> {
+        let queue = self.audio_fifos.get(fifo)?;
+        Some(AudioFifoStatus {
+            queued_bytes: queue.len(),
+            capacity: 32,
+            last_sample: self.audio_last_samples[fifo],
+            refill_threshold_reached: queue.len() <= 16,
+        })
     }
 
     /// Mixes the current Direct Sound FIFO DAC latches into a stereo sample.
@@ -2211,6 +2240,29 @@ mod tests {
         // Clock an empty FIFO: the DAC latch must keep the most recent sample.
         bus.advance_cycles(1);
         assert_eq!(bus.audio_fifo_last_sample(0), Some(127));
+    }
+
+    #[test]
+    fn sound_fifo_status_reports_capacity_samples_and_refill_threshold() {
+        let mut bus = MemoryBus::new(cartridge());
+        let empty = bus.audio_fifo_status(0).unwrap();
+        assert_eq!(empty.queued_bytes, 0);
+        assert_eq!(empty.capacity, 32);
+        assert_eq!(empty.last_sample, 0);
+        assert!(empty.refill_threshold_reached);
+        assert_eq!(bus.audio_fifo_status(2), None);
+
+        for word in 0..4_u32 {
+            bus.write32(0x0400_00A0, 0x8081_8283 + word * 0x0404_0404);
+        }
+        let half_full = bus.audio_fifo_status(0).unwrap();
+        assert_eq!(half_full.queued_bytes, 16);
+        assert!(half_full.refill_threshold_reached);
+
+        bus.write32(0x0400_00A0, 0x8485_8687);
+        let above_threshold = bus.audio_fifo_status(0).unwrap();
+        assert_eq!(above_threshold.queued_bytes, 20);
+        assert!(!above_threshold.refill_threshold_reached);
     }
 
     #[test]
