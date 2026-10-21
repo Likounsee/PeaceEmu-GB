@@ -478,6 +478,11 @@ impl GbaMachine {
         self.bus.timer_control(timer)
     }
 
+    /// Returns the timer's selected prescaler divisor (1, 64, 256, or 1024).
+    pub fn timer_prescaler_divisor(&self, timer: usize) -> Option<u16> {
+        self.bus.timer_prescaler_divisor(timer)
+    }
+
     /// Returns whether the timer is configured to request an IRQ on overflow.
     pub fn timer_irq_enabled(&self, timer: usize) -> Option<bool> {
         self.bus.timer_irq_enabled(timer)
@@ -1181,6 +1186,8 @@ mod tests {
         assert_eq!(machine.timer_control(0), machine.bus().timer_control(0));
         assert_eq!(machine.timer_irq_enabled(0), Some(false));
         assert_eq!(machine.timer_cascade_enabled(0), Some(false));
+        assert_eq!(machine.timer_prescaler_divisor(0), Some(1));
+        assert_eq!(machine.timer_prescaler_divisor(4), None);
         assert_eq!(
             machine.timer_reload_value(0),
             machine.bus().timer_reload_value(0)
@@ -1251,6 +1258,7 @@ mod tests {
         assert_eq!(machine.timer_enabled(0), Some(true));
         assert_eq!(machine.timer_irq_enabled(0), Some(true));
         assert_eq!(machine.timer_cascade_enabled(0), Some(true));
+        assert_eq!(machine.timer_prescaler_divisor(0), Some(64));
     }
 
     #[test]
