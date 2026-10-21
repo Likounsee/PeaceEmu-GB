@@ -214,6 +214,9 @@ impl MemoryBus {
         self.io[0x85] = 0;
         // Turning the sound master off resets the Direct Sound FIFO state too.
         if was_enabled && !enabled {
+            // Disabling the master sound circuit resets the implemented
+            // Direct Sound control state as well as both FIFO/DAC latches.
+            self.io[0x80..0x84].fill(0);
             for fifo in 0..2 {
                 self.audio_fifos[fifo].clear();
                 self.audio_last_samples[fifo] = 0;
@@ -1919,6 +1922,7 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0084), 0);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
         assert_eq!(bus.audio_fifo_len(1), Some(0));
+        assert_eq!(bus.read16(0x0400_0082), 0);
 
         // The disabled master cannot be re-enabled by writing reserved status bits.
         bus.write8(0x0400_0085, 0xFF);
