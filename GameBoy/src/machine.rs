@@ -2388,7 +2388,8 @@ mod tests {
         machine.bus_mut().write16(0x0400_0100, 0xFFFF);
         machine.bus_mut().write16(0x0400_0102, 0x0080);
         machine.bus_mut().advance_cycles(1);
-        assert_eq!(machine.direct_sound_stereo_sample(), (64, 64));
+        // The mixer returns half-volume samples unless SOUNDCNT_H selects full volume.
+        assert_eq!(machine.direct_sound_stereo_sample(), (32, 32));
     }
 
     #[test]
