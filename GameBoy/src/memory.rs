@@ -3518,7 +3518,10 @@ mod tests {
             bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
             Some(8)
         );
-        assert_eq!(bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1), Some(6));
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1),
+            Some(6)
+        );
         assert_eq!(bus.gamepak_sequence_cycles(0x0FFF_FFFF, false, 2, 1), None);
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
         assert_eq!(
@@ -3540,7 +3543,9 @@ mod tests {
         );
         // The final odd address in a ROM bank aligns to the last valid
         // halfword instead of being misclassified as a cross-bank transfer.
-        assert!(bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 2).is_some());
+        assert!(bus
+            .gamepak_access_cycles_for_width(0x09FF_FFFF, false, 2)
+            .is_some());
     }
 
     #[test]
