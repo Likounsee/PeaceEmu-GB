@@ -171,6 +171,39 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Executes until the next occurrence of a raster position.
+    ///
+    /// Unlike `run_until_video_position`, this always waits for a fresh
+    /// occurrence: if the machine is exactly at the requested position, it
+    /// waits for the next frame. If the position is still ahead on the current
+    /// scanline, it can be reached during that scanline. Invalid positions and
+    /// exhausted step budgets return `None`.
+    pub fn run_until_next_video_position(
+        &mut self,
+        target_scanline: u16,
+        target_cycle: u16,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if target_scanline >= 228 || target_cycle >= 1232 {
+            return Ok(None);
+        }
+        let current_scanline = self.bus.video_scanline();
+        let current_cycle = self.bus.video_cycles_into_scanline();
+        let mut left_current_occurrence = current_scanline != target_scanline
+            || current_cycle < target_cycle;
+        for executed in 0..max_steps {
+            self.step()?;
+            let scanline = self.bus.video_scanline();
+            let cycle = self.bus.video_cycles_into_scanline();
+            if scanline != target_scanline {
+                left_current_occurrence = true;
+            } else if left_current_occurrence && cycle >= target_cycle {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Executes until the PPU reaches a requested scanline or the instruction limit.
     ///
     /// The target must be in the GBA scanline range 0..228. Returns `None` for
