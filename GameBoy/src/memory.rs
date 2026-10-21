@@ -3731,6 +3731,47 @@ mod tests {
     }
 
     #[test]
+    fn direct_sound_mix_applies_independent_routing_volume_and_master_gate() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // FIFO A contributes +10 at half volume; FIFO B contributes -20
+        // at half volume. Routing is independent for each stereo channel.
+        bus.audio_last_samples = [10, -20];
+        bus.write16(0x0400_0084, 0x0080); // Master sound enabled.
+        bus.write16(0x0400_0082, (1 << 9) | (1 << 8) | (1 << 13));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 10));
+
+        // Full volume doubles only FIFO A; FIFO B remains half volume.
+        bus.write16(0x0400_0082, (1 << 2) | (1 << 9) | (1 << 8) | (1 << 13));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 20));
+
+        // The B-left route can be removed without changing either right route.
+        bus.write16(0x0400_0082, (1 << 2) | (1 << 9) | (1 << 8));
+        assert_eq!(bus.direct_sound_stereo_sample(), (20, 20));
+
+        // SOUNDCNT_X master disable silences the mix regardless of FIFO latches.
+        bus.write16(0x0400_0084, 0);
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 0));
+    }
+
+    #[test]
+    fn keypad_or_mode_matches_any_selected_pressed_key() {
+        let mut bus = MemoryBus::new(cartridge());
+        let selected = GbaButton::A.mask() | GbaButton::B.mask();
+        bus.write16(0x0400_0132, (1 << 14) | selected);
+
+        bus.set_button_pressed(GbaButton::A, true);
+        assert!(bus.keypad_irq_requested());
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
+
+        bus.set_button_pressed(GbaButton::A, false);
+        assert!(!bus.keypad_irq_requested());
+        bus.set_button_pressed(GbaButton::B, true);
+        assert!(bus.keypad_irq_requested());
+        assert_eq!(bus.keys_pressed(), GbaButton::B.mask());
+    }
+
+    #[test]
     fn sound_fifo_caps_at_32_bytes_and_refill_query_tracks_low_watermark() {
         let mut bus = MemoryBus::new(cartridge());
         assert_eq!(bus.audio_fifo_status(0).unwrap().queued_bytes, 0);
