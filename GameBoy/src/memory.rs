@@ -1285,7 +1285,7 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(
             0x0400_0132,
-            GbaButton::A.mask() | GbaButton::Start.mask(), // OR mode: either selected key requests IRQ
+            (1 << 14) | GbaButton::A.mask() | GbaButton::Start.mask(), // IRQ enabled, OR mode
         );
         bus.set_button_pressed(GbaButton::Start, true);
         assert!(bus.is_button_pressed(GbaButton::Start));
@@ -1309,7 +1309,7 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(
             0x0400_0132,
-            (1 << 14) | GbaButton::A.mask() | GbaButton::Start.mask(),
+            (1 << 14) | (1 << 15) | GbaButton::A.mask() | GbaButton::Start.mask(),
         );
 
         bus.set_button_pressed(GbaButton::Start, true);
