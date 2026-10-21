@@ -3031,11 +3031,11 @@ mod tests {
             bus.gamepak_access_cycles_for_width(0x0200_0000, false, 4),
             None
         );
-        // A word straddling two independently configured ROM wait-state regions
-        // is intentionally not represented as one homogeneous transfer.
+        // The CPU's unaligned word address is aligned down before the two
+        // physical halfword transfers, so both remain in ROM bank 0x08/0x09.
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x09FF_FFFE, false, 4),
-            None
+            Some(6)
         );
 
         // Verify every non-sequential encoding and both sequential choices for each ROM bank.
