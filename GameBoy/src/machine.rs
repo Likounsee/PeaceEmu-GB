@@ -853,6 +853,33 @@ mod tests {
     }
 
     #[test]
+    fn machine_forwards_interrupt_register_diagnostics() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.interrupt_enable_mask(), 0);
+        assert_eq!(machine.interrupt_request_flags(), 0);
+        assert!(!machine.interrupt_master_enabled());
+
+        machine.bus_mut().write16(0x0400_0200, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0202, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        assert_eq!(machine.interrupt_enable_mask(), 0x3FFF);
+        assert_eq!(machine.interrupt_request_flags(), 0x3FFF);
+        assert!(machine.interrupt_master_enabled());
+    }
+
+    #[test]
+    fn machine_forwards_audio_fifo_sample_and_queue_diagnostics() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.audio_fifo_len(0), Some(0));
+        assert_eq!(machine.audio_fifo_last_sample(0), Some(0));
+        assert_eq!(machine.audio_fifo_len(2), None);
+        assert_eq!(machine.audio_fifo_last_sample(2), None);
+
+        machine.bus_mut().write32(0x0400_00A0, 0x0000_4040);
+        assert_eq!(machine.audio_fifo_len(0), Some(4));
+    }
+
+    #[test]
     fn next_interrupt_runner_does_not_claim_an_event_without_pending_irq() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_until_next_interrupt(2).unwrap(), 2);
@@ -1130,6 +1157,10 @@ mod tests {
             machine.timer_cycles_until_overflow(0),
             machine.bus().timer_cycles_until_overflow(0)
         );
+        assert_eq!(machine.video_scanline(), machine.bus().video_scanline());
+        assert_eq!(machine.video_in_vblank(), machine.bus().video_in_vblank());
+        assert_eq!(machine.video_in_hblank(), machine.bus().video_in_hblank());
+        assert_eq!(machine.video_vcount_match(), machine.bus().video_vcount_match());
         assert_eq!(
             machine.video_cycles_into_scanline(),
             machine.bus().video_cycles_into_scanline()
@@ -1150,6 +1181,14 @@ mod tests {
         );
         assert_eq!(
             machine.gamepak_sequence_cycles(0x0800_0000, false, 3, 2),
+            None
+        );
+        assert_eq!(
+            machine.gamepak_access_cycles(0x0800_0000, false),
+            machine.bus().gamepak_access_cycles(0x0800_0000, false)
+        );
+        assert_eq!(
+            machine.gamepak_access_cycles(0x0200_0000, false),
             None
         );
     }
