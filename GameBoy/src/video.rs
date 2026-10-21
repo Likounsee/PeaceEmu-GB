@@ -651,7 +651,10 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
         return None;
     }
     let coefficients = bus.read16(0x0400_0052);
-    Some(((coefficients & 0x1F).min(16), ((coefficients >> 8) & 0x1F).min(16)))
+    Some((
+        (coefficients & 0x1F).min(16),
+        ((coefficients >> 8) & 0x1F).min(16),
+    ))
 }
 
 fn blend_argb555(source: u32, target: u32, eva: u16, evb: u16) -> u32 {
@@ -1913,8 +1916,10 @@ mod tests {
     #[test]
     fn bitmap_alpha_blend_clamps_coefficients_and_blends_5bit_channels() {
         assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 8, 8), 0xFF7B_0000);
-        assert_eq!(blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31), 0xFFFF_FFFF);
+        assert_eq!(
+            blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31),
+            0xFFFF_FFFF
+        );
         assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 0, 16), 0xFF00_0000);
     }
-
 }
