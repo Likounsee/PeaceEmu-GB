@@ -1092,7 +1092,7 @@ impl MemoryBus {
             return;
         }
         // WAITCNT exposes SRAM/Game Pak wait-state, PHI, and prefetch controls;
-        // reserved bits 2 and 15 read as zero; bits 12–14 are valid controls.
+        // bit 15 reads as zero; the modeled timing and high-byte controls are preserved.
         if (0x0400_0204..=0x0400_0205).contains(&address) {
             let shift = (address - 0x0400_0204) * 8;
             let byte_mask = 0xFF_u16 << shift;
@@ -1249,7 +1249,7 @@ impl MemoryBus {
             return;
         }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
-            self.wait_control = value & 0x7FFB;
+            self.wait_control = value & 0x7FFF;
             return;
         }
         if (address == 0x0400_0084 || address == 0x0400_0085) {
