@@ -3045,6 +3045,29 @@ mod tests {
     }
 
     #[test]
+    fn gamepak_sequence_restarts_nonsequential_timing_at_rom_bank_boundaries() {
+        let mut bus = MemoryBus::new(cartridge());
+        // ROM0 uses its default four-cycle non-sequential wait; ROM1 uses two.
+        bus.write16(0x0400_0204, 2 << 5);
+
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 2, 2),
+            Some(6)
+        );
+        // The same access within one bank remains sequential after the first.
+        bus.write16(0x0400_0204, 1 << 4);
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
+            Some(6)
+        );
+        // A single physical word access may not straddle the ROM bank boundary.
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x09FF_FFFE, false, 4),
+            None
+        );
+    }
+
+    #[test]
     fn gamepak_width_timing_models_rom_halfwords_and_sram_bytes() {
         let mut bus = MemoryBus::new(cartridge());
 
