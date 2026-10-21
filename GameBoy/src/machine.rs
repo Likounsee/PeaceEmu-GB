@@ -1350,7 +1350,7 @@ mod tests {
 
         // ROM1's configured wait must take effect after crossing from ROM0;
         // timing inspection must not advance CPU or peripheral counters.
-        machine.bus_mut().write16(0x0400_0204, (1 << 2) | (2 << 5));
+        machine.bus_mut().write16(0x0400_0204, 2 << 5);
         let before_instructions = machine.instructions_executed();
         let before_cycles = machine.cycles_elapsed();
         assert_eq!(
