@@ -133,6 +133,22 @@ impl GbaMachine {
         Ok(cycles)
     }
 
+    /// Executes at most the requested number of instructions and returns their estimated cycles.
+    ///
+    /// A zero instruction budget performs no work. Execution stops immediately
+    /// on the first CPU error; counters and peripherals reflect only the
+    /// instructions that completed successfully.
+    pub fn run_for_instructions(
+        &mut self,
+        instruction_budget: usize,
+    ) -> Result<u64, CpuError> {
+        let mut elapsed = 0_u64;
+        for _ in 0..instruction_budget {
+            elapsed = elapsed.saturating_add(u64::from(self.step()?));
+        }
+        Ok(elapsed)
+    }
+
     /// Executes instructions until at least `cycle_budget` estimated cycles have elapsed.
     ///
     /// Since instructions are indivisible at this API level, the returned cycle
@@ -1389,6 +1405,26 @@ mod tests {
         assert_eq!(snapshot.cartridge_header_fixed_value, 0x96);
         assert_eq!(snapshot.cartridge_software_version, 7);
         assert_eq!(machine.cartridge_header_checksum(), rom[0xBD]);
+    }
+
+    #[test]
+    fn instruction_batch_runner_matches_repeated_single_steps() {
+        let mut batched = GbaMachine::new(cartridge());
+        let mut stepped = GbaMachine::new(cartridge());
+
+        assert_eq!(batched.run_for_instructions(0).unwrap(), 0);
+        assert_eq!(batched.diagnostic_snapshot(), stepped.diagnostic_snapshot());
+
+        let batched_cycles = batched.run_for_instructions(12).unwrap();
+        let mut stepped_cycles = 0_u64;
+        for _ in 0..12 {
+            stepped_cycles += u64::from(stepped.step().unwrap());
+        }
+
+        assert_eq!(batched_cycles, stepped_cycles);
+        assert_eq!(batched.diagnostic_snapshot(), stepped.diagnostic_snapshot());
+        assert_eq!(batched.instructions_executed(), 12);
+        assert_eq!(batched.cycles_elapsed(), batched_cycles);
     }
 
     #[test]
