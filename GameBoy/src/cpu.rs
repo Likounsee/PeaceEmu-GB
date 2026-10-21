@@ -2669,6 +2669,32 @@ mod tests {
     }
 
     #[test]
+    fn halfword_transfers_report_load_and_store_cycle_estimates() {
+        let mut bus = bus_with_program(&[
+            0xE1D1_20B0, // LDRH r2, [r1]
+            0xE1C1_20B2, // STRH r2, [r1, #2]
+            0xE1D1_30F0, // LDRSH r3, [r1]
+        ]);
+        bus.write16(0x0200_0100, 0x80FF);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(1, 0x0200_0100);
+
+        let (_, load_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(load_cycles, 3);
+        assert_eq!(cpu.register(2), Some(0x0000_80FF));
+
+        let (_, store_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(store_cycles, 2);
+        assert_eq!(bus.read16(0x0200_0102), 0x80FF);
+
+        bus.write8(0x0200_0101, 0x80);
+        let (_, signed_load_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(signed_load_cycles, 3);
+        assert_eq!(cpu.register(3), Some(0xFFFF_FF80));
+    }
+
+    #[test]
     fn arm_swap_and_swap_byte_report_expected_instruction_cycles() {
         let mut bus = bus_with_program(&[
             0xE102_1093, // SWP r1, r3, [r2]
