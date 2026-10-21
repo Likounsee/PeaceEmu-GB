@@ -1527,7 +1527,9 @@ mod tests {
         assert!(pending.interrupt_pending);
         assert_eq!(pending.cpu.pc, machine.cpu().register(15).unwrap());
 
-        machine.bus_mut().write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
+        machine
+            .bus_mut()
+            .write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
         machine.set_button_pressed(GbaButton::A, true);
         let keypad = machine.diagnostic_snapshot();
         assert_eq!(keypad.keypad_pressed, GbaButton::A.mask());
