@@ -1334,6 +1334,8 @@ mod tests {
         assert_eq!(machine.cycles_elapsed(), 0);
         assert_eq!(machine.diagnostic_snapshot().gamepak_wait_control, 0);
         assert_eq!(machine.cartridge_rom_size_bytes(), GBA_HEADER_SIZE);
+        assert_eq!(machine.cartridge_save_type(), None);
+        assert_eq!(machine.save_data_size_bytes(), None);
         assert_eq!(machine.cartridge_title(), "TEST GAME");
         assert_eq!(machine.cartridge_game_code(), "TGME");
         assert_eq!(machine.cartridge_maker_code(), "01");
