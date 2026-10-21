@@ -215,6 +215,29 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Executes until the lifetime estimated-cycle counter reaches `target_cycles`, or the step limit.
+    ///
+    /// Returns the number of instructions executed by this call. The target is an
+    /// absolute counter value; because execution is instruction-granular, the final
+    /// cycle count may exceed the target. Returns `Some(0)` if the target has already
+    /// been reached and `None` if the step limit expires first. CPU errors propagate.
+    pub fn run_until_cycle_count(
+        &mut self,
+        target_cycles: u64,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if self.cycles_elapsed >= target_cycles {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.cycles_elapsed >= target_cycles {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Executes until the lifetime instruction counter reaches `target_count`, or the step limit.
     ///
     /// Returns the number of instructions executed by this call. If the target has
@@ -1183,6 +1206,19 @@ mod tests {
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
         assert_eq!(machine.run_until_instruction_count(1, 1).unwrap(), Some(1));
         assert_eq!(machine.instructions_executed(), 1);
+    }
+
+    #[test]
+    fn cycle_count_runner_uses_absolute_counter_and_allows_instruction_overshoot() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_cycle_count(0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_cycle_count(100, 2).unwrap(), None);
+        assert_eq!(machine.instructions_executed(), 2);
+
+        let target = machine.cycles_elapsed() + 1;
+        assert_eq!(machine.run_until_cycle_count(target, 1).unwrap(), Some(1));
+        assert!(machine.cycles_elapsed() >= target);
+        assert_eq!(machine.run_until_cycle_count(1, 0).unwrap(), Some(0));
     }
 
     #[test]
