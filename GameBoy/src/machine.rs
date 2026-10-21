@@ -917,10 +917,7 @@ impl GbaMachine {
                 self.bus.dma_enabled(2),
                 self.bus.dma_enabled(3),
             ],
-            audio_fifo_lengths: [
-                self.bus.audio_fifo_len(0),
-                self.bus.audio_fifo_len(1),
-            ],
+            audio_fifo_lengths: [self.bus.audio_fifo_len(0), self.bus.audio_fifo_len(1)],
             audio_fifo_last_samples: [
                 self.bus.audio_fifo_last_sample(0),
                 self.bus.audio_fifo_last_sample(1),
