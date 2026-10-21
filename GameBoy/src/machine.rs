@@ -740,6 +740,27 @@ impl GbaMachine {
         }
     }
 
+    /// Returns the backup-device type inferred from the loaded cartridge ROM.
+    ///
+    /// This reports the detected device even before a save image is loaded.
+    pub fn cartridge_save_type(&self) -> Option<crate::SaveType> {
+        self.bus.cartridge_save_type()
+    }
+
+    /// Returns the currently allocated save-image size without copying its data.
+    ///
+    /// Returns None when the cartridge has no recognized save device or when
+    /// that device has no accessible image.
+    pub fn save_data_size_bytes(&self) -> Option<usize> {
+        match self.cartridge_save_type()? {
+            crate::SaveType::Sram => Some(self.bus.sram_data().len()),
+            crate::SaveType::Flash64K | crate::SaveType::Flash128K => {
+                self.bus.flash_data().map(<[u8]>::len)
+            }
+            crate::SaveType::Eeprom => self.bus.eeprom_data().map(<[u8]>::len),
+        }
+    }
+
     /// Returns the current CPU state for debugging and inspection.
     pub fn cpu(&self) -> &Cpu {
         &self.cpu
@@ -2513,6 +2534,8 @@ mod tests {
         rom[GBA_HEADER_SIZE..GBA_HEADER_SIZE + 7].copy_from_slice(b"SRAM_V1");
         let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
 
+        assert_eq!(machine.cartridge_save_type(), Some(crate::SaveType::Sram));
+        assert_eq!(machine.save_data_size_bytes(), Some(crate::memory::SRAM_SIZE));
         assert_eq!(machine.save_data().unwrap().len(), crate::memory::SRAM_SIZE);
         assert!(machine
             .load_save_data(&vec![0x5A; crate::memory::SRAM_SIZE])
@@ -2550,6 +2573,8 @@ mod tests {
             rom[GBA_HEADER_SIZE..].copy_from_slice(marker);
             let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
             assert_eq!(machine.bus().cartridge_save_type(), Some(save_type));
+            assert_eq!(machine.cartridge_save_type(), Some(save_type));
+            assert_eq!(machine.save_data_size_bytes(), Some(size));
             let image = vec![0xA5; size];
             assert!(machine.load_save_data(&image).unwrap());
             assert_eq!(machine.save_data().unwrap(), image);
