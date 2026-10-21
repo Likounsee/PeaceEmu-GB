@@ -3473,6 +3473,9 @@ mod tests {
         }
         assert_eq!(bus.gamepak_access_cycles(0x07FF_FFFF, false), None);
         assert_eq!(bus.gamepak_access_cycles(0x1000_0000, false), None);
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3),
+            None
+        );
     }
 }
