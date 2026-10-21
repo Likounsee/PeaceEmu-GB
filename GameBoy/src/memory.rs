@@ -3944,4 +3944,73 @@ mod tests {
         assert_eq!(bus.audio_fifo_status(0).unwrap().capacity, 32);
         assert_eq!(bus.audio_fifo_len(1), Some(0));
     }
+
+
+    #[test]
+    fn dispstat_vcount_irq_latches_only_on_match_rising_edge() {
+        let mut bus = MemoryBus::new(cartridge());
+        let vcount_irq = 1 << 2;
+
+        // The compare value matches the initial scanline, so enabling the
+        // IRQ while the match flag is already high must not synthesize an edge.
+        bus.write16(0x0400_0004, (1 << 8) | (1 << 5));
+        assert_eq!(bus.read16(0x0400_0004) & (1 << 2), 0);
+        assert_eq!(bus.interrupt_request_flags() & vcount_irq, 0);
+
+        // VCOUNT is read-only, and DISPSTAT status bits cannot be forced by writes.
+        bus.write16(0x0400_0006, 1);
+        bus.write16(0x0400_0004, (1 << 2) | (1 << 5));
+        assert_eq!(bus.read16(0x0400_0006), 0);
+        assert_eq!(bus.read16(0x0400_0004) & (1 << 2), 0);
+
+        // Matching the current line through the compare field creates exactly
+        // one IRQ edge; rewriting the same match does not relatch it.
+        bus.write16(0x0400_0004, (1 << 5));
+        assert_eq!(bus.read16(0x0400_0004) & (1 << 2), 1 << 2);
+        assert_eq!(bus.interrupt_request_flags() & vcount_irq, vcount_irq);
+        bus.acknowledge_interrupts(vcount_irq);
+        bus.write16(0x0400_0004, (1 << 5));
+        assert_eq!(bus.interrupt_request_flags() & vcount_irq, 0);
+    }
+
+    #[test]
+    fn timer_prescaler_and_cascade_follow_real_overflow_edges() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // Timer 0 overflows after one tick; timer 1 is clocked only by that
+        // overflow, not by the CPU-cycle prescaler.
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.write16(0x0400_0104, 0x1234);
+        bus.write16(0x0400_0106, 0x0084);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFF));
+        assert_eq!(bus.timer_counter(1), Some(0x1234));
+
+        bus.advance_cycles(1);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFF));
+        assert_eq!(bus.timer_counter(1), Some(0x1235));
+        assert_eq!(bus.interrupt_request_flags() & (1 << 3), 0);
+
+        // A divided timer advances only when its prescaler phase reaches 64.
+        bus.write16(0x0400_0102, 0x0081);
+        let before = bus.timer_counter(0).unwrap();
+        bus.advance_cycles(63);
+        assert_eq!(bus.timer_counter(0), Some(before));
+        bus.advance_cycles(1);
+        assert_eq!(bus.timer_counter(0), Some(before.wrapping_add(1)));
+    }
+
+    #[test]
+    fn vram_byte_write_replicates_after_hardware_mirroring() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // The 32 KiB region at 0x18000 mirrors the final 8 KiB of physical VRAM.
+        bus.write8(0x0601_8001, 0xA6);
+        assert_eq!(bus.read16(0x0601_8000), 0xA6A6);
+        assert_eq!(bus.read16(0x0601_0000), 0xA6A6);
+
+        // Byte writes in VRAM replicate to both lanes of the aligned halfword.
+        bus.write8(0x0600_0003, 0x5C);
+        assert_eq!(bus.read16(0x0600_0002), 0x5C5C);
+    }
 }

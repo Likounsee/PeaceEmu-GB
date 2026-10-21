@@ -26,6 +26,8 @@ These features are partial implementations. Passing unit tests does not imply co
 - Rust toolchain **1.78 or newer** (stable recommended).
 - Cargo, included with Rust.
 
+Hardware regression coverage now also checks DISPSTAT/VCOUNT read-only status semantics and VCOUNT IRQ edge-latching, timer prescaler/cascade overflow sequencing, and VRAM byte-write replication after the 96 KiB mirror mapping. These tests target MMIO edge cases; they do not claim cycle-accurate CPU wait-state integration or full commercial-game compatibility.
+
 ## Build and test
 
 From the repository root:
