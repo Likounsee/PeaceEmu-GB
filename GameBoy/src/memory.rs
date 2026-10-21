@@ -2361,6 +2361,16 @@ mod tests {
         assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, true), Some(1));
         assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(1));
         assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, false), Some(8));
+
+        // All four SRAM wait-state encodings map to 4, 3, 2, and 8 cycles.
+        for (encoding, expected) in [(0_u16, 4_u32), (1, 3), (2, 2), (3, 8)] {
+            bus.write16(0x0400_0204, 0x7FFC | encoding);
+            assert_eq!(
+                bus.gamepak_access_cycles(0x0E00_0000, false),
+                Some(expected),
+                "SRAM wait-state encoding {encoding:02b}"
+            );
+        }
     }
 
     #[test]
