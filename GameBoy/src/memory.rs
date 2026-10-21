@@ -193,6 +193,20 @@ impl MemoryBus {
         self.wait_control
     }
 
+    fn write_sound_control_high(&mut self, value: u16) {
+        if value & (1 << 11) != 0 {
+            self.audio_fifos[0].clear();
+            self.audio_last_samples[0] = 0;
+        }
+        if value & (1 << 15) != 0 {
+            self.audio_fifos[1].clear();
+            self.audio_last_samples[1] = 0;
+        }
+        // FIFO reset bits are write-one commands and read back as zero.
+        let control = value & 0x770F;
+        self.io[0x82..0x84].copy_from_slice(&control.to_le_bytes());
+    }
+
     fn write_sound_master_control(&mut self, value: u16) {
         let was_enabled = self.io[0x84] & 0x80 != 0;
         let enabled = value & 0x0080 != 0;
@@ -902,6 +916,19 @@ impl MemoryBus {
             return;
         }
 
+        // SOUNDCNT_H supports byte writes too; reset commands in its high
+        // byte must not be lost by the generic I/O backing-store path.
+        if (0x0400_0082..=0x0400_0083).contains(&address) {
+            let aligned = address & !1;
+            let current = u16::from_le_bytes([self.io[0x82], self.io[0x83]]);
+            let shift = (address & 1) * 8;
+            let mask = 0x00FF_u16 << shift;
+            let next = (current & !mask) | (u16::from(value) << shift);
+            self.write_sound_control_high(next);
+            let _ = aligned;
+            return;
+        }
+
         // SOUNDCNT_X exposes only the sound-master enable bit to software.
         if (0x0400_0084..=0x0400_0085).contains(&address) {
             if address == 0x0400_0084 {
@@ -1040,17 +1067,7 @@ impl MemoryBus {
             return;
         }
         if address == 0x0400_0082 {
-            let mut control = value & 0x770F;
-            if value & (1 << 11) != 0 {
-                self.audio_fifos[0].clear();
-                self.audio_last_samples[0] = 0;
-            }
-            if value & (1 << 15) != 0 {
-                self.audio_fifos[1].clear();
-                self.audio_last_samples[1] = 0;
-            }
-            control &= !((1 << 11) | (1 << 15));
-            self.io[0x82..0x84].copy_from_slice(&control.to_le_bytes());
+            self.write_sound_control_high(value);
             return;
         }
         if (0x0400_00A0..=0x0400_00A7).contains(&address) {
@@ -1908,6 +1925,27 @@ mod tests {
         // The disabled master cannot be re-enabled by writing reserved status bits.
         bus.write8(0x0400_0085, 0xFF);
         assert_eq!(bus.read16(0x0400_0084), 0);
+    }
+
+    #[test]
+    fn sound_control_high_byte_writes_trigger_fifo_reset_commands() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write32(0x0400_00A0, 0x1122_3344);
+        bus.write32(0x0400_00A4, 0x5566_7788);
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+        assert_eq!(bus.audio_fifo_len(1), Some(4));
+
+        // Bit 3 of the high byte is SOUNDCNT_H bit 11 (FIFO A reset).
+        bus.write8(0x0400_0083, 0x08);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(1), Some(4));
+        assert_eq!(bus.read16(0x0400_0082) & (1 << 11), 0);
+
+        // Bit 7 of the high byte is FIFO B reset (bit 15).
+        bus.write8(0x0400_0083, 0x80);
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+        assert_eq!(bus.read16(0x0400_0082) & (1 << 15), 0);
     }
 
     #[test]
