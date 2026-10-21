@@ -689,7 +689,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(delivered, Some(1));
-        assert_eq!(received, vec![(0, crate::SCREEN_WIDTH, crate::SCREEN_HEIGHT)]);
+        assert_eq!(
+            received,
+            vec![(0, crate::SCREEN_WIDTH, crate::SCREEN_HEIGHT)]
+        );
     }
 
     #[test]
@@ -697,10 +700,12 @@ mod tests {
         let mut machine = GbaMachine::new(cartridge());
         let mut called = false;
         assert_eq!(
-            machine.for_each_frame(0, 0, |_, _| {
-                called = true;
-                true
-            }).unwrap(),
+            machine
+                .for_each_frame(0, 0, |_, _| {
+                    called = true;
+                    true
+                })
+                .unwrap(),
             Some(0)
         );
         assert!(!called);
