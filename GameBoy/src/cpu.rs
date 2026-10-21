@@ -3781,7 +3781,6 @@ mod tests {
         assert_eq!(cpu.register(1), Some(0x0200_0128));
     }
 
-
     #[test]
     fn long_multiply_cycle_estimates_distinguish_signed_and_unsigned_extension() {
         let cases = [
@@ -3807,5 +3806,4 @@ mod tests {
             );
         }
     }
-
 }
