@@ -2455,6 +2455,31 @@ mod tests {
         assert_eq!(frame.pixel(0, 0), Some(0xFFFFFFFF));
     }
     #[test]
+    fn obj_window_reveals_bg2_only_under_opaque_obj_pixels() {
+        let mut bus = bus();
+        bus.write16(
+            0x0400_0000,
+            3 | (1 << 10) | (1 << 12) | (1 << 15),
+        ); // Mode 3, BG2, OBJ, and OBJ window.
+        bus.write16(VRAM_BASE, 0x001F);
+        bus.write16(VRAM_BASE + 8 * 2, 0x001F);
+        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+        // WINOBJ allows BG2; outside the OBJ window, BG2 is hidden.
+        bus.write16(0x0400_004A, (1 << 2) << 8);
+        // An 8x8 OBJ-window sprite using tile 512, the first available OBJ
+        // tile in bitmap mode. Color index 1 is opaque; index 0 stays transparent.
+        bus.write16(0x0700_0000, 2 << 10);
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 512);
+        bus.write16(VRAM_BASE + 0x4000, 0x1111);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(1, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(8, 0), Some(0xFF00_FF00));
+    }
+
+    #[test]
     fn win0_color_effect_bit_disables_brightness_only_inside_window() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 13)); // Mode 3, BG2, WIN0.
