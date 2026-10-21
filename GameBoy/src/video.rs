@@ -151,13 +151,14 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &oam_snapshot,
                 &allowed_lines,
                 None,
+                None,
                 &mut frame,
             );
         }
         return Some(frame);
     }
 
-    let bitmap_effect = if mode >= 3 {\n        bitmap_brightness_effect(bus, display_control)\n    } else {\n        None\n    };\n\n    match mode {
+    let bitmap_effect = if mode >= 3 {\n        bitmap_brightness_effect(bus, display_control, 2)\n    } else {\n        None\n    };\n\n    match mode {
         0..=2 => render_text_backgrounds(
             bus,
             display_control,
@@ -286,6 +287,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &oam_snapshot,
                 &allowed_lines,
                 bitmap_alpha_blend(bus, display_control),
+                bitmap_brightness_effect(bus, display_control, 4),
                 &mut frame,
             );
         }
@@ -662,12 +664,12 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
 
 /// Returns BG2 brightness/darkness settings for bitmap modes when BG2 is a first target.
 /// Alpha blending is handled separately because it needs the second compositing target.
-fn bitmap_brightness_effect(bus: &MemoryBus, display_control: u16) -> Option<(bool, u16)> {
+fn bitmap_brightness_effect(\n    bus: &MemoryBus,\n    display_control: u16,\n    target_bit: u16,\n) -> Option<(bool, u16)> {
     if display_control & (1 << 10) == 0 {
         return None;
     }
     let control = bus.read16(0x0400_0050);
-    if control & (1 << 2) == 0 {
+    if control & (1 << target_bit) == 0 {
         return None;
     }
     let brighten = match (control >> 6) & 3 {
@@ -720,6 +722,7 @@ fn render_regular_objects(
     oam_snapshot: &[u8; 1024],
     allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
     bitmap_blend: Option<(u16, u16)>,
+    bitmap_obj_effect: Option<(bool, u16)>,
     frame: &mut VideoFrame,
 ) {
     if display_control & (1 << 12) == 0 {
@@ -928,7 +931,7 @@ fn render_regular_objects(
                         source_color
                     }
                 } else {
-                    source_color
+                    apply_brightness_effect(source_color, bitmap_obj_effect)
                 };
             }
         }
@@ -2086,11 +2089,22 @@ mod tests {
         bus.write16(0x0400_0000, 1 << 10);
         bus.write16(0x0400_0050, (1 << 2) | (2 << 6));
         bus.write16(0x0400_0054, 16);
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), Some((true, 16)));
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), Some((true, 16)));
         bus.write16(0x0400_0050, (1 << 6) | (1 << 2));
         assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), None);
         bus.write16(0x0400_0050, 2 << 6);
         assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), None);
+    }
+
+    #[test]
+    fn bitmap_obj_brightness_requires_obj_first_target_selection() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12);
+        bus.write16(0x0400_0050, (1 << 4) | (2 << 6));
+        bus.write16(0x0400_0054, 8);
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 4), Some((true, 8)));
+        bus.write16(0x0400_0050, (1 << 2) | (2 << 6));
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 4), None);
     }
 
     #[test]
