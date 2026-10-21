@@ -443,6 +443,45 @@ impl GbaMachine {
         &mut self.bus
     }
 
+    /// Returns the current value of a hardware timer counter (timer 0–3).
+    pub fn timer_counter(&self, timer: usize) -> Option<u16> {
+        self.bus.timer_counter(timer)
+    }
+
+    /// Returns whether a hardware timer (timer 0–3) is enabled.
+    pub fn timer_enabled(&self, timer: usize) -> Option<bool> {
+        self.bus.timer_enabled(timer)
+    }
+
+    /// Estimates CPU cycles until a timer overflows, if its current mode supports it.
+    pub fn timer_cycles_until_overflow(&self, timer: usize) -> Option<u64> {
+        self.bus.timer_cycles_until_overflow(timer)
+    }
+
+    /// Returns cycles until the next HBlank boundary.
+    pub fn video_cycles_until_hblank(&self) -> u32 {
+        self.bus.video_cycles_until_hblank()
+    }
+
+    /// Returns cycles until the next VBlank entry, based on the current scanline phase.
+    pub fn video_cycles_until_vblank(&self) -> u32 {
+        self.bus.video_cycles_until_vblank()
+    }
+
+    /// Estimates total Game Pak bus cycles for a sequence of same-width accesses.
+    ///
+    /// This inspection helper does not advance emulation. The first access uses
+    /// first_sequential; later accesses are modeled as sequential.
+    pub fn gamepak_sequence_cycles(
+        &self,
+        address: u32,
+        first_sequential: bool,
+        width_bytes: u8,
+        access_count: usize,
+    ) -> Option<u64> {
+        self.bus.gamepak_sequence_cycles(address, first_sequential, width_bytes, access_count)
+    }
+
     /// Updates one physical keypad button while preserving the other button states.
     ///
     /// This is a convenience wrapper around the memory bus input API. Keypad
@@ -967,6 +1006,21 @@ mod tests {
             machine.bus().read16(0x0400_0130) & 0x03FF,
             (!(GbaButton::Left.mask())) & 0x03FF
         );
+    }
+
+    #[test]
+    fn machine_forwards_timer_video_and_gamepak_inspection() {
+        let machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.timer_counter(4), None);
+        assert_eq!(machine.timer_enabled(4), None);
+        assert_eq!(machine.timer_cycles_until_overflow(4), None);
+        assert_eq!(machine.timer_counter(0), machine.bus().timer_counter(0));
+        assert_eq!(machine.timer_enabled(0), machine.bus().timer_enabled(0));
+        assert_eq!(machine.timer_cycles_until_overflow(0), machine.bus().timer_cycles_until_overflow(0));
+        assert_eq!(machine.video_cycles_until_hblank(), machine.bus().video_cycles_until_hblank());
+        assert_eq!(machine.video_cycles_until_vblank(), machine.bus().video_cycles_until_vblank());
+        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), machine.bus().gamepak_sequence_cycles(0x0800_0000, false, 2, 3));
+        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 3, 2), None);
     }
 
     #[test]
