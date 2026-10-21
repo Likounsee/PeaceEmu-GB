@@ -2197,4 +2197,37 @@ mod tests {
         assert_eq!(blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31), 0xFFFF_FFFF);
         assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 0, 16), 0xFF00_0000);
     }
+
+    #[test]
+    fn text_background_brightness_only_affects_selected_first_targets() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 8); // Mode 0, BG0 enabled.
+        bus.write16(VRAM_BASE, 1); // BG0 map selects tile 1.
+        bus.write8(VRAM_BASE + 32, 1); // Tile 1 pixel 0 uses palette entry 1.
+        bus.write16(PALETTE_BASE + 2, 0x03E0); // Green.
+        bus.write16(0x0400_0050, (1 << 0) | (2 << 6)); // BG0 target, brighten.
+        bus.write16(0x0400_0054, 16);
+
+        let bright = render_bitmap_frame(&bus).unwrap();
+        assert_eq!(bright.pixel(0, 0), Some(0xFFFFFFFF));
+
+        bus.write16(0x0400_0050, (1 << 1) | (2 << 6)); // BG1 selected, not BG0.
+        let unchanged = render_bitmap_frame(&bus).unwrap();
+        assert_eq!(unchanged.pixel(0, 0), Some(0xFF00_FF00));
+    }
+
+    #[test]
+    fn affine_background_brightness_uses_bg2_target_bit() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 2 | (1 << 10)); // Mode 2, BG2 enabled.
+        bus.write16(BG0CNT + 4, 0); // BG2 priority 0, affine map at block 0.
+        bus.write8(VRAM_BASE, 1); // First map entry selects tile 1.
+        bus.write8(VRAM_BASE + 64, 1); // Tile 1 pixel 0 uses palette entry 1.
+        bus.write16(PALETTE_BASE + 2, 0x03E0); // Green.
+        bus.write16(0x0400_0050, (1 << 2) | (2 << 6)); // BG2 target, brighten.
+        bus.write16(0x0400_0054, 16);
+
+        let frame = render_bitmap_frame(&bus).unwrap();
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFFFFFF));
+    }
 }
