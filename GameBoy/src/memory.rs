@@ -1276,8 +1276,13 @@ mod tests {
             .fold(0_u16, |mask, button| mask | button.mask());
         assert_eq!(GbaButton::ALL.len(), 10);
         assert_eq!(combined, 0x03FF);
-        assert_eq!(GbaButton::ALL.iter().map(|button| button.mask()).collect::<Vec<_>>(),
-            (0..10).map(|bit| 1_u16 << bit).collect::<Vec<_>>());
+        assert_eq!(
+            GbaButton::ALL
+                .iter()
+                .map(|button| button.mask())
+                .collect::<Vec<_>>(),
+            (0..10).map(|bit| 1_u16 << bit).collect::<Vec<_>>()
+        );
     }
 
     #[test]
