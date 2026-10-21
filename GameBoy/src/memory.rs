@@ -3512,7 +3512,6 @@ mod tests {
         assert_eq!(bus.dma_transfer_count(4), None);
     }
 
-
     #[test]
     fn waitcnt_byte_writes_preserve_other_fields_and_mask_reserved_bits() {
         let mut bus = MemoryBus::new(cartridge());
@@ -3534,5 +3533,4 @@ mod tests {
         bus.write16(0x0400_0204, 0xFFFF);
         assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
     }
-
 }
