@@ -276,12 +276,14 @@ impl MemoryBus {
         let mut right = 0_i16;
         for fifo in 0..2 {
             let sample = i16::from(self.audio_last_samples[fifo]);
-            // SOUNDCNT_H bits 2 and 3 select full (1) or half (0) volume.
+            // SOUNDCNT_H bits 2 and 3 select half (0) or full (1)
+            // Direct Sound volume. The FIFO sample is already signed 8-bit PCM,
+            // so full volume passes it through and half volume attenuates it.
             let volume_bit = if fifo == 0 { 2 } else { 3 };
             let scaled = if control & (1 << volume_bit) != 0 {
-                sample * 2
-            } else {
                 sample
+            } else {
+                sample / 2
             };
             let (left_bit, right_bit) = if fifo == 0 { (9, 8) } else { (13, 12) };
             if control & (1 << left_bit) != 0 {
@@ -3778,20 +3780,20 @@ mod tests {
     fn direct_sound_mix_applies_independent_routing_volume_and_master_gate() {
         let mut bus = MemoryBus::new(cartridge());
 
-        // FIFO A contributes +10 at half volume; FIFO B contributes -20
+        // FIFO A contributes +5 at half volume; FIFO B contributes -10
         // at half volume. Routing is independent for each stereo channel.
         bus.audio_last_samples = [10, -20];
         bus.write16(0x0400_0084, 0x0080); // Master sound enabled.
         bus.write16(0x0400_0082, (1 << 9) | (1 << 8) | (1 << 13));
-        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 10));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 5));
 
-        // Full volume doubles only FIFO A; FIFO B remains half volume.
+        // Full volume restores FIFO A to its source sample; FIFO B remains half volume.
         bus.write16(0x0400_0082, (1 << 2) | (1 << 9) | (1 << 8) | (1 << 13));
-        assert_eq!(bus.direct_sound_stereo_sample(), (0, 20));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 10));
 
         // The B-left route can be removed without changing either right route.
         bus.write16(0x0400_0082, (1 << 2) | (1 << 9) | (1 << 8));
-        assert_eq!(bus.direct_sound_stereo_sample(), (20, 20));
+        assert_eq!(bus.direct_sound_stereo_sample(), (10, 10));
 
         // SOUNDCNT_X master disable silences the mix regardless of FIFO latches.
         bus.write16(0x0400_0084, 0);
