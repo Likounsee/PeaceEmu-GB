@@ -4084,5 +4084,4 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(0), Some(0));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0xE0_u8 as i8));
     }
-
 }
