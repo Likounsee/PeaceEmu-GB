@@ -2587,7 +2587,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn gamepak_sequence_cycles_accumulates_sequential_accesses_safely() {
         let mut bus = MemoryBus::new(cartridge());
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0), Some(0));
@@ -2600,6 +2599,7 @@ mod tests {
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), Some(6));
     }
 
+    #[test]
     fn gamepak_width_timing_models_rom_halfwords_and_sram_bytes() {
         let mut bus = MemoryBus::new(cartridge());
 
