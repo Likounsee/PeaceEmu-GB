@@ -3152,6 +3152,47 @@ mod tests {
     }
 
     #[test]
+    fn disabling_sound_master_resets_direct_sound_controls_fifos_and_samples() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, (1 << 9) | (1 << 8));
+        bus.write32(0x0400_00A0, 0x7F40_20E0);
+        bus.audio_last_samples = [42, -42];
+
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(42));
+        bus.write16(0x0400_0084, 0);
+
+        assert_eq!(bus.read16(0x0400_0084), 0);
+        assert_eq!(bus.read16(0x0400_0082), 0);
+        assert_eq!(bus.read16(0x0400_0080), 0);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 0));
+    }
+
+    #[test]
+    fn direct_sound_dry_fifo_holds_last_dac_sample_until_master_reset() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, 1 << 8); // FIFO A routed right, timer 0.
+        bus.write32(0x0400_00A0, 0x0000_0000);
+        bus.audio_fifos[0].clear();
+        bus.audio_last_samples[0] = 37;
+
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(37));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 37));
+
+        bus.write16(0x0400_0084, 0);
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 0));
+    }
+
+    #[test]
     fn sound_fifo_dma_rejects_incompatible_channel_configuration() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);
