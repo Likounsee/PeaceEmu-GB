@@ -1511,6 +1511,28 @@ mod tests {
     }
 
     #[test]
+    fn video_position_runner_validates_targets_and_waits_for_the_requested_phase() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_video_position(228, 0, 10).unwrap(), None);
+        assert_eq!(machine.run_until_video_position(0, 1232, 10).unwrap(), None);
+        assert_eq!(machine.run_until_video_position(0, 0, 10).unwrap(), Some(0));
+
+        // Starting before the HBlank boundary on scanline zero should reach
+        // the requested phase with a bounded number of CPU steps.
+        machine.bus_mut().advance_cycles(950);
+        assert_eq!(machine.video_scanline(), 0);
+        let steps = machine.run_until_video_position(0, 960, 8).unwrap();
+        assert!(steps.is_some_and(|count| count > 0 && count <= 8));
+        assert_eq!(machine.video_scanline(), 0);
+        assert!(machine.video_cycles_into_scanline() >= 960);
+
+        // If the requested position has passed, it must wait for the next
+        // occurrence rather than reporting an immediate success.
+        let steps = machine.run_until_video_position(0, 900, 1).unwrap();
+        assert_eq!(steps, None);
+    }
+
+    #[test]
     fn scanline_runner_handles_current_invalid_and_bounded_targets() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_until_scanline(0, 10).unwrap(), Some(0));
