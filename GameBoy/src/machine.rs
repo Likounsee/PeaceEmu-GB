@@ -175,6 +175,11 @@ impl GbaMachine {
         self.bus.dma_count_register(channel)
     }
 
+    /// Returns the effective DMA transfer length, expanding zero to the channel maximum.
+    pub fn dma_transfer_count(&self, channel: usize) -> Option<u32> {
+        self.bus.dma_transfer_count(channel)
+    }
+
     /// Returns whether a DMA channel is enabled.
     pub fn dma_enabled(&self, channel: usize) -> Option<bool> {
         self.bus.dma_enabled(channel)
@@ -1352,6 +1357,10 @@ mod tests {
         assert_eq!(machine.dma_source_address(0), Some(0x0200_1234));
         assert_eq!(machine.dma_destination_address(0), Some(0x0300_5678));
         assert_eq!(machine.dma_count_register(0), Some(0x3FFF));
+        assert_eq!(machine.dma_transfer_count(0), Some(0x3FFF));
+        machine.bus_mut().write16(0x0400_00B8, 0);
+        assert_eq!(machine.dma_transfer_count(0), Some(0x4000));
+        assert_eq!(machine.dma_transfer_count(3), Some(0x1_0000));
         assert_eq!(machine.dma_source_address(4), None);
         assert_eq!(machine.dma_destination_address(4), None);
         assert_eq!(machine.dma_count_register(4), None);
