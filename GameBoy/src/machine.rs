@@ -1173,8 +1173,14 @@ mod tests {
         let machine = GbaMachine::new(cartridge());
         assert_eq!(machine.timer_counter(4), None);
         assert_eq!(machine.timer_enabled(4), None);
+        assert_eq!(machine.timer_control(4), None);
+        assert_eq!(machine.timer_irq_enabled(4), None);
+        assert_eq!(machine.timer_cascade_enabled(4), None);
         assert_eq!(machine.timer_cycles_until_overflow(4), None);
         assert_eq!(machine.timer_counter(0), machine.bus().timer_counter(0));
+        assert_eq!(machine.timer_control(0), machine.bus().timer_control(0));
+        assert_eq!(machine.timer_irq_enabled(0), Some(false));
+        assert_eq!(machine.timer_cascade_enabled(0), Some(false));
         assert_eq!(
             machine.timer_reload_value(0),
             machine.bus().timer_reload_value(0)
@@ -1228,6 +1234,33 @@ mod tests {
         assert_eq!(snapshot.registers[15], CARTRIDGE_ENTRY_POINT);
         assert!(!snapshot.thumb);
         assert_eq!(snapshot.cpsr, machine.cpu().cpsr_flags());
+    }
+
+    #[test]
+    fn machine_exposes_waitcnt_and_timer_control_bits() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0204, 0x4017);
+        assert_eq!(machine.gamepak_wait_control(), 0x4017);
+        assert_eq!(machine.gamepak_wait_control(), machine.bus().gamepak_wait_control());
+
+        machine.bus_mut().write16(0x0400_0102, 0x00C5);
+        assert_eq!(machine.timer_control(0), Some(0x00C5));
+        assert_eq!(machine.timer_enabled(0), Some(true));
+        assert_eq!(machine.timer_irq_enabled(0), Some(true));
+        assert_eq!(machine.timer_cascade_enabled(0), Some(true));
+    }
+
+    #[test]
+    fn audio_fifo_refill_runner_handles_threshold_invalid_index_and_budget() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_audio_fifo_refill(0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_refill(2, 10).unwrap(), None);
+
+        for _ in 0..5 {
+            machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
+        }
+        assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(12));
+        assert_eq!(machine.run_until_audio_fifo_refill(0, 0).unwrap(), None);
     }
 
     #[test]
