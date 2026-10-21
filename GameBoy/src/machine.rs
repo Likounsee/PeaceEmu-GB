@@ -610,19 +610,6 @@ impl GbaMachine {
         &self.bus
     }
 
-    /// Returns the configured Game Pak wait-state register (WAITCNT).
-    pub fn gamepak_wait_control(&self) -> u16 {
-        self.bus.gamepak_wait_control()
-    }
-
-    /// Returns configured Game Pak access duration for an address and access type.
-    ///
-    /// This is a timing query only: CPU stepping does not yet apply these wait states.
-    /// Returns None for addresses outside Game Pak ROM and SRAM regions.
-    pub fn gamepak_access_cycles(&self, address: u32, sequential: bool) -> Option<u32> {
-        self.bus.gamepak_access_cycles(address, sequential)
-    }
-
     /// Returns mutable access to the memory bus for input, save data, and test setup.
     pub fn bus_mut(&mut self) -> &mut MemoryBus {
         &mut self.bus
