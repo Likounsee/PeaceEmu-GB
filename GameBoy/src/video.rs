@@ -1461,7 +1461,10 @@ mod tests {
             height: 1,
             pixels: vec![0xFF12_3456, 0xFFAB_CDEF],
         };
-        assert_eq!(frame.to_rgb888(), Some(vec![0x12, 0x34, 0x56, 0xAB, 0xCD, 0xEF]));
+        assert_eq!(
+            frame.to_rgb888(),
+            Some(vec![0x12, 0x34, 0x56, 0xAB, 0xCD, 0xEF])
+        );
         assert_eq!(
             frame.to_rgba8888(),
             Some(vec![0x12, 0x34, 0x56, 0xFF, 0xAB, 0xCD, 0xEF, 0xFF])
