@@ -957,6 +957,34 @@ impl MemoryBus {
         self.video_cycles_in_line
     }
 
+    /// Returns CPU cycles until the next HBlank entry (the cycle-960 boundary).
+    ///
+    /// Returns 960 cycles at the start of a scanline and 1 cycle immediately
+    /// before HBlank. During HBlank, the result wraps to the next scanline.
+    pub fn video_cycles_until_hblank(&self) -> u32 {
+        let position = u32::from(self.video_cycles_in_line);
+        if position < 960 {
+            960 - position
+        } else {
+            1232 - position + 960
+        }
+    }
+
+    /// Returns CPU cycles until the next VBlank entry at the start of line 160.
+    ///
+    /// If VBlank is already active, this returns the distance to the next
+    /// frame's VBlank entry rather than zero.
+    pub fn video_cycles_until_vblank(&self) -> u32 {
+        let line = u32::from(self.vcount);
+        let position = u32::from(self.video_cycles_in_line);
+        let lines_until_entry = if line < 160 {
+            160 - line
+        } else {
+            228 - line + 160
+        };
+        lines_until_entry * 1232 - position
+    }
+
     /// Returns whether the video timing state is currently in VBlank.
     pub fn video_in_vblank(&self) -> bool {
         self.dispstat & (1 << 0) != 0
@@ -1496,6 +1524,23 @@ mod tests {
         bus.advance_cycles(1232 * 159);
         assert_eq!(bus.video_scanline(), 160);
         assert!(bus.video_in_vblank());
+    }
+
+    #[test]
+    fn video_cycle_distance_helpers_track_next_blank_events() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.video_cycles_until_hblank(), 960);
+        assert_eq!(bus.video_cycles_until_vblank(), 160 * 1232);
+
+        bus.advance_cycles(959);
+        assert_eq!(bus.video_cycles_until_hblank(), 1);
+        bus.advance_cycles(1);
+        assert_eq!(bus.video_cycles_until_hblank(), 1232);
+
+        bus.advance_cycles(1232 * 159);
+        assert_eq!(bus.video_scanline(), 160);
+        assert!(bus.video_in_vblank());
+        assert_eq!(bus.video_cycles_until_vblank(), (228 - 160 + 160) * 1232);
     }
 
     #[test]
