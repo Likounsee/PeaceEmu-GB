@@ -656,8 +656,7 @@ impl MemoryBus {
             } else {
                 previous_region == Some(region)
             };
-            let cycles =
-                self.gamepak_access_cycles_for_width(current, sequential, width_bytes)?;
+            let cycles = self.gamepak_access_cycles_for_width(current, sequential, width_bytes)?;
             total = total.checked_add(u64::from(cycles))?;
             previous_region = Some(region);
         }
