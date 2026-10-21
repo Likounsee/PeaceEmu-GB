@@ -150,9 +150,18 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
         let mask_windows = windows.clone();
         for priority in (0..=3).rev() {
             render_regular_objects(
-                bus, display_control, priority, &obj_palette, &mut obj_tile_cache,
-                &oam_snapshot, &allowed_lines, None, None, Some(&mut windows.obj_window_mask),
-                &mask_windows, &mut mask_frame,
+                bus,
+                display_control,
+                priority,
+                &obj_palette,
+                &mut obj_tile_cache,
+                &oam_snapshot,
+                &allowed_lines,
+                None,
+                None,
+                Some(&mut windows.obj_window_mask),
+                &mask_windows,
+                &mut mask_frame,
             );
         }
     }
@@ -988,8 +997,8 @@ fn render_regular_objects(
         }
         if ((obj_window_mask.is_some() && object_mode != 2)
             || (obj_window_mask.is_none() && object_mode == 2)
-            || ((attr2 >> 10) & 3) != priority
-        ) {
+            || ((attr2 >> 10) & 3) != priority)
+        {
             continue;
         }
 
