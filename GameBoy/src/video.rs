@@ -629,7 +629,7 @@ fn render_text_background(
 
 /// Returns whether a layer is visible at a screen pixel under WIN0/WIN1.
 /// Window coordinates use the GBA's half-open ranges and wrap when start exceeds end.
-/// Layer bits are BG0..BG3=0..3, OBJ=4, backdrop=5.
+/// Layer bits are BG0..BG3=0..3 and OBJ=4; window bit 5 controls color effects.
 fn window_allows_layer(bus: &MemoryBus, x: usize, y: usize, layer: u16) -> bool {
     let display_control = bus.read16(0x0400_0000);
     let win0_enabled = display_control & (1 << 13) != 0;
@@ -2306,12 +2306,28 @@ mod tests {
         bus.write16(0x0400_0040, 8); // WIN0 horizontal range [0,8).
         bus.write16(0x0400_0044, 1); // WIN0 vertical range [0,1).
         bus.write16(0x0400_0048, 0); // WIN0 hides all layers.
-        bus.write16(0x0400_004A, (1 << 0) | (1 << 5)); // Outside: BG0 and backdrop.
+        bus.write16(0x0400_004A, (1 << 0) | (1 << 5)); // Outside: BG0 and color effects.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
 
         let frame = render_bitmap_frame(&bus).unwrap();
         assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
         assert_eq!(frame.pixel(8, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn win1_masks_bitmap_background_inside_its_horizontal_range() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 14)); // BG2 and WIN1.
+        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+        bus.write16(VRAM_BASE, 0x001F); // Red bitmap pixel.
+        bus.write16(0x0400_0042, 4); // WIN1 horizontal range [0,4).
+        bus.write16(0x0400_0046, 1); // WIN1 vertical range [0,1).
+        bus.write16(0x0400_0048, 1 << 8); // WIN1 allows BG0 but not BG2.
+        bus.write16(0x0400_004A, 1 << 2); // Outside allows BG2.
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
+        assert_eq!(frame.pixel(4, 0), Some(0xFFFF_0000));
     }
 
     #[test]
