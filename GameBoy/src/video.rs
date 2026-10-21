@@ -645,9 +645,10 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
         return None;
     }
     let blend_control = bus.read16(0x0400_0050);
-    // Semi-transparent OBJ pixels force alpha blending; BG2 must be selected
-    // as a second target for the bitmap underneath to participate.
-    if blend_control & (1 << 8) == 0 {
+    // BLDCNT bits 6-7 select the effect; semi-transparent OBJ pixels only
+    // alpha-blend when that effect is enabled. BG2 is target 2 at bit 10
+    // (bits 8-11 select BG0-BG3 respectively).
+    if (blend_control >> 6) & 3 != 1 || blend_control & (1 << 10) == 0 {
         return None;
     }
     let coefficients = bus.read16(0x0400_0052);
