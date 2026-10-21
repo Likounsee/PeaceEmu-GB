@@ -139,7 +139,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     // Bitmap modes use BG2 as their framebuffer plane. If BG2 is disabled,
     // show the backdrop color instead; OBJ pixels can still appear over it.
     if mode >= 3 && display_control & (1 << 10) == 0 {
-        frame.pixels.fill(rgb555(bus.read16(PALETTE_BASE)));
+        frame.pixels.fill(apply_brightness_effect(
+            rgb555(bus.read16(PALETTE_BASE)),
+            bitmap_brightness_effect(bus, display_control, 5),
+        ));
         let obj_palette = obj_palette_snapshot(bus);
         for priority in (0..=3).rev() {
             render_regular_objects(
@@ -223,7 +226,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             // Palette RAM is unchanged during this snapshot render. Resolve it
             // once rather than issuing another bus read for every framebuffer pixel.
             let palette = palette_snapshot(bus);
-            frame.pixels.fill(palette[0]);
+            frame.pixels.fill(apply_brightness_effect(
+        palette[0],
+        bitmap_brightness_effect(bus, display_control, 5),
+    ));
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
                     let Some((source_x, source_y)) = transform.source_coordinates(x, y) else {
@@ -349,7 +355,7 @@ fn render_text_backgrounds(
             oam_snapshot,
             allowed_lines,
             None,
-            None,
+            bitmap_brightness_effect(bus, display_control, 4),
             frame,
         );
     }
@@ -2126,6 +2132,22 @@ mod tests {
         bus.write16(0x0400_0050, (1 << 2) | (2 << 6));
         assert_eq!(
             bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 4),
+            None
+        );
+    }
+
+    #[test]
+    fn backdrop_brightness_requires_backdrop_first_target_selection() {
+        let mut bus = bus();
+        bus.write16(0x0400_0050, (1 << 5) | (2 << 6));
+        bus.write16(0x0400_0054, 16);
+        assert_eq!(
+            bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 5),
+            Some((true, 16))
+        );
+        bus.write16(0x0400_0050, (1 << 2) | (2 << 6));
+        assert_eq!(
+            bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 5),
             None
         );
     }
