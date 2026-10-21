@@ -423,6 +423,9 @@ mod tests {
         // then verify the runner waits for the next occurrence of line zero
         // instead of treating the stale match as a new event.
         machine.bus_mut().write16(0x0400_0004, 0);
+        // Use zero-filled EWRAM as a safe instruction stream; the tiny test
+        // cartridge intentionally has no executable bytes beyond its header.
+        machine.cpu.set_register(15, 0x0200_0000);
         assert!(machine.bus().video_vcount_match());
         machine.bus_mut().advance_cycles(1232);
         assert!(!machine.bus().video_vcount_match());
