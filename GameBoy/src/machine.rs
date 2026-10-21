@@ -1538,8 +1538,14 @@ mod tests {
         assert_eq!(initial.cycles_elapsed, 0);
         assert_eq!(initial.video_scanline, machine.video_scanline());
         assert_eq!(initial.video_vcount_match, machine.video_vcount_match());
-        assert_eq!(initial.video_cycles_until_hblank, machine.video_cycles_until_hblank());
-        assert_eq!(initial.video_cycles_until_vblank, machine.video_cycles_until_vblank());
+        assert_eq!(
+            initial.video_cycles_until_hblank,
+            machine.video_cycles_until_hblank()
+        );
+        assert_eq!(
+            initial.video_cycles_until_vblank,
+            machine.video_cycles_until_vblank()
+        );
         assert_eq!(initial.video_cycles_until_hblank, 960);
         assert_eq!(initial.video_cycles_until_vblank, 160 * 1232);
         assert_eq!(machine.cycles_elapsed(), initial.cycles_elapsed);
