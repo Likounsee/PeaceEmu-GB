@@ -1916,10 +1916,7 @@ mod tests {
     #[test]
     fn bitmap_alpha_blend_clamps_coefficients_and_blends_5bit_channels() {
         assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 8, 8), 0xFF7B_0000);
-        assert_eq!(
-            blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31),
-            0xFFFF_FFFF
-        );
+        assert_eq!(blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31), 0xFFFF_FFFF);
         assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 0, 16), 0xFF00_0000);
     }
 }
