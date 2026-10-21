@@ -284,6 +284,53 @@ impl MemoryBus {
         (left, right)
     }
 
+    /// Returns the current live counter value for a timer (TM0..TM3).
+    ///
+    /// The counter is updated by advance_cycles, not merely by reading the MMIO
+    /// register. Returns None for an invalid index.
+    pub fn timer_counter(&self, timer: usize) -> Option<u16> {
+        self.timer_counter.get(timer).copied()
+    }
+
+    /// Returns the configured reload value for a timer (TM0..TM3).
+    ///
+    /// A reload value is copied into the live counter on enable and overflow.
+    /// Returns None for an invalid index.
+    pub fn timer_reload_value(&self, timer: usize) -> Option<u16> {
+        self.timer_reload.get(timer).copied()
+    }
+
+    /// Returns whether a timer (TM0..TM3) is enabled.
+    ///
+    /// Returns None for an invalid index.
+    pub fn timer_enabled(&self, timer: usize) -> Option<bool> {
+        self.timer_control
+            .get(timer)
+            .map(|control| control & 0x0080 != 0)
+    }
+
+    /// Estimates CPU cycles until the next overflow for a prescaled timer.
+    ///
+    /// Returns None for an invalid index, a disabled timer, or a timer using
+    /// cascade mode because its clock depends on another timer's overflow.
+    /// The estimate includes the current prescaler phase and assumes the timer
+    /// configuration remains unchanged.
+    pub fn timer_cycles_until_overflow(&self, timer: usize) -> Option<u64> {
+        let control = *self.timer_control.get(timer)?;
+        if control & 0x0080 == 0 || (timer != 0 && control & 0x0004 != 0) {
+            return None;
+        }
+        let divisor = match control & 3 {
+            0 => 1_u64,
+            1 => 64,
+            2 => 256,
+            _ => 1024,
+        };
+        let counter = u64::from(*self.timer_counter.get(timer)?);
+        let phase = u64::from(*self.timer_prescaler_phase.get(timer)?);
+        Some((u64::from(u16::MAX) + 1 - counter) * divisor - phase)
+    }
+
     /// Returns the currently enabled interrupt sources (IE), with reserved bits removed.
     pub fn interrupt_enable_mask(&self) -> u16 {
         self.interrupt_enable & 0x3FFF
@@ -1873,6 +1920,31 @@ mod tests {
         bus.write8(0x0400_0102, 0);
         bus.write8(0x0400_0102, 0x80);
         assert_eq!(bus.read16(0x0400_0100), 0xFF10);
+    }
+
+    #[test]
+    fn timer_inspection_reports_live_reload_and_overflow_distance() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.timer_counter(0), Some(0));
+        assert_eq!(bus.timer_reload_value(0), Some(0));
+        assert_eq!(bus.timer_enabled(0), Some(false));
+        assert_eq!(bus.timer_cycles_until_overflow(0), None);
+        assert_eq!(bus.timer_counter(4), None);
+
+        bus.write16(0x0400_0100, 0xFFFE);
+        bus.write16(0x0400_0102, 0x0081);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFE));
+        assert_eq!(bus.timer_reload_value(0), Some(0xFFFE));
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
+
+        bus.advance_cycles(17);
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(111));
+        bus.advance_cycles(111);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFE));
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
+
+        bus.write16(0x0400_0106, 0x0084);
+        assert_eq!(bus.timer_cycles_until_overflow(1), None);
     }
 
     #[test]
