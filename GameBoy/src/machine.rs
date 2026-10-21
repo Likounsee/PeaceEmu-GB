@@ -2550,4 +2550,45 @@ mod tests {
             before.video_cycles_into_scanline
         );
     }
+
+    #[test]
+    fn machine_timer_diagnostics_reject_out_of_range_indices() {
+        let machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.timer_counter(4), None);
+        assert_eq!(machine.timer_reload_value(4), None);
+        assert_eq!(machine.timer_enabled(4), None);
+        assert_eq!(machine.timer_control(4), None);
+        assert_eq!(machine.timer_prescaler_divisor(4), None);
+        assert_eq!(machine.timer_prescaler_phase(4), None);
+        assert_eq!(machine.timer_irq_enabled(4), None);
+        assert_eq!(machine.timer_cascade_enabled(4), None);
+        assert_eq!(machine.timer_cycles_until_overflow(4), None);
+    }
+
+    #[test]
+    fn invalid_timer_overflow_wait_does_not_execute_instructions() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+        assert_eq!(machine.run_until_timer_overflow(4, 32).unwrap(), None);
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+    }
+
+    #[test]
+    fn keypad_irq_waiter_respects_step_budget_without_matching_keys() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
+        machine.bus_mut().write16(0x0400_0200, 1 << 12);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        assert_eq!(machine.run_until_keypad_interrupt(3).unwrap(), 3);
+        assert!(!machine.keypad_irq_requested());
+        assert!(!machine.interrupt_pending());
+        assert_eq!(machine.instructions_executed(), 3);
+    }
 }
