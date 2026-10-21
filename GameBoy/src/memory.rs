@@ -641,15 +641,26 @@ impl MemoryBus {
         }
         let stride = u32::from(width_bytes);
         let mut total = 0_u64;
+        let mut previous_region = None;
         for index in 0..access_count {
             let offset = u32::try_from(index).ok()?.checked_mul(stride)?;
             let current = address.checked_add(offset)?;
+            let region = current >> 25;
+            // Sequential ROM timing cannot carry across a ROM-bank boundary.
+            // Start a new non-sequential access when a burst enters another
+            // WAITCNT region; SRAM ignores the sequential flag in its decoder.
+            let sequential = if index == 0 {
+                first_sequential
+            } else {
+                previous_region == Some(region)
+            };
             let cycles = self.gamepak_access_cycles_for_width(
                 current,
-                if index == 0 { first_sequential } else { true },
+                sequential,
                 width_bytes,
             )?;
             total = total.checked_add(u64::from(cycles))?;
+            previous_region = Some(region);
         }
         Some(total)
     }
@@ -3019,6 +3030,13 @@ mod tests {
         assert_eq!(
             bus.gamepak_sequence_cycles(0x0800_0003, false, 4, 2),
             Some(10)
+        );
+        // Crossing from ROM0 to ROM1 starts a fresh non-sequential access;
+        // ROM1 is configured faster here so incorrectly carrying S timing is visible.
+        bus.write16(0x0400_0204, 2 << 5);
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 2, 2),
+            Some(6)
         );
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4),
