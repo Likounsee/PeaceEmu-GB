@@ -2537,7 +2537,10 @@ mod tests {
         let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
 
         assert_eq!(machine.cartridge_save_type(), Some(crate::SaveType::Sram));
-        assert_eq!(machine.save_data_size_bytes(), Some(crate::memory::SRAM_SIZE));
+        assert_eq!(
+            machine.save_data_size_bytes(),
+            Some(crate::memory::SRAM_SIZE)
+        );
         assert_eq!(machine.save_data().unwrap().len(), crate::memory::SRAM_SIZE);
         assert!(machine
             .load_save_data(&vec![0x5A; crate::memory::SRAM_SIZE])
