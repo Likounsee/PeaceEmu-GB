@@ -3285,6 +3285,43 @@ mod tests {
     }
 
     #[test]
+    fn gamepak_waitcnt_fields_select_each_rom_wait_state() {
+        let mut bus = MemoryBus::new(cartridge());
+        let non_sequential = [4, 3, 2, 8];
+
+        for setting in 0_u16..4 {
+            bus.write16(0x0400_0204, setting << 2);
+            assert_eq!(
+                bus.gamepak_access_cycles(0x0800_0000, false),
+                Some(non_sequential[setting as usize]),
+                "WS0 non-sequential setting {setting}"
+            );
+            bus.write16(0x0400_0204, setting << 5);
+            assert_eq!(
+                bus.gamepak_access_cycles(0x0A00_0000, false),
+                Some(non_sequential[setting as usize]),
+                "WS1 non-sequential setting {setting}"
+            );
+            bus.write16(0x0400_0204, setting << 8);
+            assert_eq!(
+                bus.gamepak_access_cycles(0x0C00_0000, false),
+                Some(non_sequential[setting as usize]),
+                "WS2 non-sequential setting {setting}"
+            );
+        }
+
+        bus.write16(0x0400_0204, 0);
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(2));
+        assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, true), Some(4));
+        assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(8));
+
+        bus.write16(0x0400_0204, (1 << 4) | (1 << 7) | (1 << 10));
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(1));
+        assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, true), Some(1));
+        assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(1));
+    }
+
+    #[test]
     fn gamepak_sequence_timing_handles_empty_sequences_and_region_boundaries() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0204, 0);
