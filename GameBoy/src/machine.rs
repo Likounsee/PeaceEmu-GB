@@ -735,7 +735,10 @@ mod tests {
         machine.set_button_pressed(GbaButton::A, false);
         assert!(!machine.is_button_pressed(GbaButton::A));
         assert!(machine.is_button_pressed(GbaButton::Left));
-        assert_eq!(machine.bus().read16(0x0400_0130) & 0x03FF, (!(GbaButton::Left.mask())) & 0x03FF);
+        assert_eq!(
+            machine.bus().read16(0x0400_0130) & 0x03FF,
+            (!(GbaButton::Left.mask())) & 0x03FF
+        );
     }
 
     #[test]
