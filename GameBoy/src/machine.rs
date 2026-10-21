@@ -1130,6 +1130,9 @@ mod tests {
         assert_eq!(machine.gamepak_access_cycles(0x0800_0000, false), Some(4));
         assert_eq!(machine.gamepak_access_cycles(0x0800_0000, true), Some(2));
         assert_eq!(machine.gamepak_access_cycles(0x0200_0000, false), None);
+        machine.bus_mut().write16(0x0400_0204, 1 << 2);
+        assert_eq!(machine.gamepak_wait_control(), 1 << 2);
+        assert_eq!(machine.gamepak_access_cycles(0x0800_0000, false), Some(3));
 
         let snapshot = machine.cpu_snapshot();
         assert_eq!(snapshot.pc, CARTRIDGE_ENTRY_POINT);
