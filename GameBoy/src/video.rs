@@ -151,14 +151,20 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &oam_snapshot,
                 &allowed_lines,
                 None,
-                None,
+                bitmap_brightness_effect(bus, display_control, 4),
                 &mut frame,
             );
         }
         return Some(frame);
     }
 
-    let bitmap_effect = if mode >= 3 {\n        bitmap_brightness_effect(bus, display_control, 2)\n    } else {\n        None\n    };\n\n    match mode {
+    let bitmap_effect = if mode >= 3 {
+        bitmap_brightness_effect(bus, display_control, 2)
+    } else {
+        None
+    };
+
+    match mode {
         0..=2 => render_text_backgrounds(
             bus,
             display_control,
@@ -339,6 +345,7 @@ fn render_text_backgrounds(
             obj_tile_cache,
             oam_snapshot,
             allowed_lines,
+            None,
             None,
             frame,
         );
@@ -664,10 +671,11 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
 
 /// Returns BG2 brightness/darkness settings for bitmap modes when BG2 is a first target.
 /// Alpha blending is handled separately because it needs the second compositing target.
-fn bitmap_brightness_effect(\n    bus: &MemoryBus,\n    display_control: u16,\n    target_bit: u16,\n) -> Option<(bool, u16)> {
-    if display_control & (1 << 10) == 0 {
-        return None;
-    }
+fn bitmap_brightness_effect(
+    bus: &MemoryBus,
+    display_control: u16,
+    target_bit: u16,
+) -> Option<(bool, u16)> {
     let control = bus.read16(0x0400_0050);
     if control & (1 << target_bit) == 0 {
         return None;
@@ -2091,7 +2099,7 @@ mod tests {
         bus.write16(0x0400_0054, 16);
         assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), Some((true, 16)));
         bus.write16(0x0400_0050, (1 << 6) | (1 << 2));
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), None);
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), None);
         bus.write16(0x0400_0050, 2 << 6);
         assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), None);
     }
