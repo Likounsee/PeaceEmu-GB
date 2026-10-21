@@ -1828,8 +1828,14 @@ mod tests {
             machine.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
             Some(4)
         );
-        assert_eq!(machine.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
-        assert_eq!(machine.gamepak_access_cycles_for_width(0x0200_0000, false, 4), None);
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0800_0000, false, 3),
+            None
+        );
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0200_0000, false, 4),
+            None
+        );
     }
 
     #[test]
