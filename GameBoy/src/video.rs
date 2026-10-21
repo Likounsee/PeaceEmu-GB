@@ -111,6 +111,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     let display_control = bus.read16(0x0400_0000);
     let mode = display_control & 7;
     let forced_blank = display_control & (1 << 7) != 0;
+    let windows = WindowConfig::from_bus(bus);
     if !forced_blank && mode > 5 {
         return None;
     }
@@ -155,6 +156,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &allowed_lines,
                 None,
                 bitmap_brightness_effect(bus, display_control, 4),
+                &windows,
                 &mut frame,
             );
         }
@@ -174,6 +176,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             &mut obj_tile_cache,
             &oam_snapshot,
             &allowed_lines,
+            &windows,
             &mut frame,
         ),
         3 => {
@@ -201,7 +204,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         continue;
                     };
                     let address = VRAM_BASE + ((source_y * SCREEN_WIDTH + source_x) * 2) as u32;
-                    if window_allows_layer(bus, x, y, 2) {
+                    if windows.allows(x, y, 2) {
                         frame.pixels[y * SCREEN_WIDTH + x] =
                             apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
                     }
@@ -289,7 +292,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
                     let screen_x = x + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
                     let screen_y = y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2;
-                    if window_allows_layer(bus, screen_x, screen_y, 2) {
+                    if windows.allows(screen_x, screen_y, 2) {
                         frame.pixels[target] =
                             apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
                     }
@@ -317,6 +320,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &allowed_lines,
                 bitmap_alpha_blend(bus, display_control),
                 bitmap_brightness_effect(bus, display_control, 4),
+                &windows,
                 &mut frame,
             );
         }
@@ -333,6 +337,7 @@ fn render_text_backgrounds(
     obj_tile_cache: &mut [Option<[u8; 64]>],
     oam_snapshot: &[u8; 1024],
     allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
+    windows: &WindowConfig,
     frame: &mut VideoFrame,
 ) {
     let palette = palette_snapshot(bus);
@@ -363,6 +368,7 @@ fn render_text_backgrounds(
                     control,
                     &palette,
                     bitmap_brightness_effect(bus, display_control, bg as u16),
+                    windows,
                     frame,
                 );
             } else if bg >= 2 && (mode == 2 || bg == 2) {
@@ -372,6 +378,7 @@ fn render_text_backgrounds(
                     control,
                     &palette,
                     bitmap_brightness_effect(bus, display_control, bg as u16),
+                    windows,
                     frame,
                 );
             }
@@ -387,6 +394,7 @@ fn render_text_backgrounds(
             allowed_lines,
             None,
             bitmap_brightness_effect(bus, display_control, 4),
+            windows,
             frame,
         );
     }
@@ -402,6 +410,7 @@ fn render_affine_background(
     control: u16,
     palette: &[u32; 256],
     brightness_effect: Option<(bool, u16)>,
+    windows: &WindowConfig,
     frame: &mut VideoFrame,
 ) {
     let register_base = 0x0400_0020 + (bg - 2) * 0x10;
@@ -630,40 +639,70 @@ fn render_text_background(
 /// Returns whether a layer is visible at a screen pixel under WIN0/WIN1.
 /// Window coordinates use the GBA's half-open ranges and wrap when start exceeds end.
 /// Layer bits are BG0..BG3=0..3 and OBJ=4; window bit 5 controls color effects.
-fn window_allows_layer(bus: &MemoryBus, x: usize, y: usize, layer: u16) -> bool {
-    let display_control = bus.read16(0x0400_0000);
-    let win0_enabled = display_control & (1 << 13) != 0;
-    let win1_enabled = display_control & (1 << 14) != 0;
-    if !win0_enabled && !win1_enabled {
-        return true;
+#[derive(Clone, Copy, Debug)]
+struct WindowConfig {
+    enabled: bool,
+    win0_enabled: bool,
+    win1_enabled: bool,
+    win0_x: (usize, usize),
+    win0_y: (usize, usize),
+    win1_x: (usize, usize),
+    win1_y: (usize, usize),
+    win0_control: u16,
+    win1_control: u16,
+    outside_control: u16,
+}
+
+impl WindowConfig {
+    fn from_bus(bus: &MemoryBus) -> Self {
+        let display_control = bus.read16(0x0400_0000);
+        let win0_enabled = display_control & (1 << 13) != 0;
+        let win1_enabled = display_control & (1 << 14) != 0;
+        let win0h = bus.read16(0x0400_0040);
+        let win1h = bus.read16(0x0400_0042);
+        let win0v = bus.read16(0x0400_0044);
+        let win1v = bus.read16(0x0400_0046);
+        Self {
+            enabled: win0_enabled || win1_enabled,
+            win0_enabled,
+            win1_enabled,
+            win0_x: (usize::from(win0h & 0xFF), usize::from(win0h >> 8)),
+            win0_y: (usize::from(win0v & 0xFF), usize::from(win0v >> 8)),
+            win1_x: (usize::from(win1h & 0xFF), usize::from(win1h >> 8)),
+            win1_y: (usize::from(win1v & 0xFF), usize::from(win1v >> 8)),
+            win0_control: bus.read16(0x0400_0048) & 0x003F,
+            win1_control: bus.read16(0x0400_0048) >> 8 & 0x003F,
+            outside_control: bus.read16(0x0400_004A) & 0x003F,
+        }
     }
 
-    let inside = |coordinate: usize, start: usize, end: usize| {
+    fn inside(coordinate: usize, (start, end): (usize, usize)) -> bool {
         if start <= end {
             coordinate >= start && coordinate < end
         } else {
             coordinate >= start || coordinate < end
         }
-    };
-    let win0h = bus.read16(0x0400_0040);
-    let win0v = bus.read16(0x0400_0044);
-    let win1h = bus.read16(0x0400_0042);
-    let win1v = bus.read16(0x0400_0046);
-    let in_win0 = win0_enabled
-        && inside(x, usize::from(win0h & 0xFF), usize::from(win0h >> 8))
-        && inside(y, usize::from(win0v & 0xFF), usize::from(win0v >> 8));
-    let in_win1 = win1_enabled
-        && inside(x, usize::from(win1h & 0xFF), usize::from(win1h >> 8))
-        && inside(y, usize::from(win1v & 0xFF), usize::from(win1v >> 8));
+    }
 
-    let window_control = if in_win0 {
-        bus.read16(0x0400_0048) & 0x003F
-    } else if in_win1 {
-        (bus.read16(0x0400_0048) >> 8) & 0x003F
-    } else {
-        bus.read16(0x0400_004A) & 0x003F
-    };
-    window_control & (1 << layer) != 0
+    fn allows(self, x: usize, y: usize, layer: u16) -> bool {
+        if !self.enabled {
+            return true;
+        }
+        let control = if self.win0_enabled
+            && Self::inside(x, self.win0_x)
+            && Self::inside(y, self.win0_y)
+        {
+            self.win0_control
+        } else if self.win1_enabled
+            && Self::inside(x, self.win1_x)
+            && Self::inside(y, self.win1_y)
+        {
+            self.win1_control
+        } else {
+            self.outside_control
+        };
+        control & (1 << layer) != 0
+    }
 }
 
 /// Reads a little-endian halfword from the snapshotted OAM address window.
@@ -814,6 +853,7 @@ fn render_regular_objects(
     allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
     bitmap_blend: Option<(u16, u16)>,
     bitmap_obj_effect: Option<(bool, u16)>,
+    windows: &WindowConfig,
     frame: &mut VideoFrame,
 ) {
     if display_control & (1 << 12) == 0 {
@@ -1014,7 +1054,7 @@ fn render_regular_objects(
                 // the decoded palette rather than performing a bus read and
                 // RGB555 conversion for every visible sprite pixel.
                 let destination = screen_y as usize * SCREEN_WIDTH + screen_x as usize;
-                if !window_allows_layer(bus, screen_x as usize, screen_y as usize, 4) {
+                if !windows.allows(screen_x as usize, screen_y as usize, 4) {
                     continue;
                 }
                 let source_color = palette[palette_index as usize];
