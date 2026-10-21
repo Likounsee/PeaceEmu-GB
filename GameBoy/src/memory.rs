@@ -2087,10 +2087,9 @@ mod tests {
         bus.write16(0x0400_00B8, 1);
         bus.write16(0x0400_00BA, 0xB640); // Enable, repeat, word, FIFO timing.
 
-        bus.advance_cycles(1);
-        // A fresh FIFO request occurs on the next selected timer overflow.
-        bus.write16(0x0400_0102, 0xFFFF);
-        bus.write16(0x0400_0104, 0x0080); // Enable timer 0.
+        // Overflow timer 0 immediately to issue a Direct Sound FIFO request.
+        bus.write16(0x0400_0100, 0xFFFF); // Timer 0 reload.
+        bus.write16(0x0400_0102, 0x0080); // Enable timer 0.
         bus.advance_cycles(1);
 
         assert_eq!(bus.audio_fifo_len(0), Some(16));
