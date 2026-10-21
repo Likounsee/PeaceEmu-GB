@@ -1570,6 +1570,25 @@ mod tests {
     }
 
     #[test]
+    fn next_video_position_runner_requires_a_fresh_occurrence() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_next_video_position(228, 0, 10).unwrap(), None);
+        assert_eq!(machine.run_until_next_video_position(0, 1232, 10).unwrap(), None);
+        assert_eq!(machine.run_until_next_video_position(0, 0, 0).unwrap(), None);
+
+        // At the exact target, the next occurrence is on the next frame.
+        assert_eq!(machine.run_until_next_video_position(0, 0, 4).unwrap(), None);
+
+        // If the target phase is still ahead on the current scanline, it can
+        // be reached without waiting for a full frame.
+        machine.bus_mut().advance_cycles(900);
+        let steps = machine.run_until_next_video_position(0, 960, 16).unwrap();
+        assert!(steps.is_some_and(|count| count > 0 && count <= 16));
+        assert_eq!(machine.video_scanline(), 0);
+        assert!(machine.video_cycles_into_scanline() >= 960);
+    }
+
+    #[test]
     fn scanline_runner_handles_current_invalid_and_bounded_targets() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_until_scanline(0, 10).unwrap(), Some(0));
