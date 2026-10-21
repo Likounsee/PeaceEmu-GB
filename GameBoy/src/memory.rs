@@ -2559,7 +2559,9 @@ mod tests {
         assert_eq!(bus.read16(0x0300_0000), 0);
         bus.advance_cycles(1232);
         assert_eq!(bus.read16(0x0300_0000), 0xCAFE);
+        assert_eq!(bus.read32(0x0400_00B0), 0x0200_0002);
         assert_eq!(bus.read32(0x0400_00B4), 0x0300_0000);
+        assert_eq!(bus.read16(0x0400_00B8), 1);
         assert_eq!(bus.read16(0x0400_00BA) & 0x8000, 0x8000);
         assert_eq!(bus.read16(0x0400_0202) & (1 << 8), 0);
 
@@ -2568,7 +2570,9 @@ mod tests {
         bus.advance_cycles(1232 * 228);
         assert_eq!(bus.read16(0x0300_0000), 0xFACE);
         assert_eq!(bus.read16(0x0300_0002), 0);
+        assert_eq!(bus.read32(0x0400_00B0), 0x0200_0004);
         assert_eq!(bus.read32(0x0400_00B4), 0x0300_0000);
+        assert_eq!(bus.read16(0x0400_00B8), 1);
         assert_eq!(bus.read16(0x0400_00BA) & 0x8000, 0x8000);
     }
 
