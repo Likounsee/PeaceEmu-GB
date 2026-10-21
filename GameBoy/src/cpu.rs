@@ -533,7 +533,8 @@ impl Cpu {
                 0 => (left & right, None, None), // AND
                 1 => (left ^ right, None, None), // EOR
                 2..=4 => {
-                    let (value, carry) = Self::shift_register(left, u32::from(operation - 2), right & 0xFF);
+                    let (value, carry) =
+                        Self::shift_register(left, u32::from(operation - 2), right & 0xFF);
                     (value, carry, None)
                 }
                 5 => {
