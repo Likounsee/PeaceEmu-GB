@@ -115,12 +115,33 @@ impl GbaMachine {
     /// [`interrupt_pending`](Self::interrupt_pending). If an unsupported
     /// instruction is encountered, the error is returned and prior progress remains.
     pub fn run_until_interrupt(&mut self, max_steps: usize) -> Result<usize, CpuError> {
-        if self.bus.interrupt_pending() {
+        self.run_until_interrupt_mask(u16::MAX, max_steps)
+    }
+
+    /// Executes up to `max_steps` instructions until a selected enabled IRQ is pending.
+    ///
+    /// `interrupt_mask` uses the GBA IF bit layout (VBlank bit 0, HBlank bit 1,
+    /// VCOUNT bit 2, timers bits 3–6, serial bit 7, DMA bits 8–11, keypad bit 12,
+    /// and Game Pak bit 13). A zero mask never matches. Other pending IRQ sources
+    /// do not stop this runner unless at least one selected source is also pending.
+    /// Returns the number of executed instructions; reaching the limit does not
+    /// imply a match. IRQ exception entry is not implemented.
+    pub fn run_until_interrupt_mask(
+        &mut self,
+        interrupt_mask: u16,
+        max_steps: usize,
+    ) -> Result<usize, CpuError> {
+        let selected_pending = |machine: &Self| {
+            interrupt_mask != 0
+                && machine.bus.interrupt_pending()
+                && machine.bus.pending_interrupts() & interrupt_mask != 0
+        };
+        if selected_pending(self) {
             return Ok(0);
         }
         for executed in 0..max_steps {
             self.step()?;
-            if self.bus.interrupt_pending() {
+            if selected_pending(self) {
                 return Ok(executed + 1);
             }
         }
@@ -177,10 +198,29 @@ impl GbaMachine {
     /// clear before accepting a later assertion. It does not enter an IRQ
     /// exception; it only observes the IE/IF/IME status exposed by the machine.
     pub fn run_until_next_interrupt(&mut self, max_steps: usize) -> Result<usize, CpuError> {
-        let mut saw_clear = !self.interrupt_pending();
+        self.run_until_next_interrupt_mask(u16::MAX, max_steps)
+    }
+
+    /// Waits for a fresh assertion of one of the selected enabled IRQ sources.
+    ///
+    /// If a selected IRQ is already pending, the runner waits for all selected
+    /// sources to clear before accepting a later assertion. Unselected IRQs do
+    /// not affect this state machine. Returns `max_steps` if no fresh assertion
+    /// occurs within the instruction budget. IRQ exception entry is not modeled.
+    pub fn run_until_next_interrupt_mask(
+        &mut self,
+        interrupt_mask: u16,
+        max_steps: usize,
+    ) -> Result<usize, CpuError> {
+        let selected_pending = |machine: &Self| {
+            interrupt_mask != 0
+                && machine.bus.interrupt_pending()
+                && machine.bus.pending_interrupts() & interrupt_mask != 0
+        };
+        let mut saw_clear = !selected_pending(self);
         for executed in 0..max_steps {
             self.step()?;
-            let pending = self.interrupt_pending();
+            let pending = selected_pending(self);
             if !pending {
                 saw_clear = true;
             } else if saw_clear {
