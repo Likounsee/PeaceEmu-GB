@@ -485,6 +485,14 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Returns how many additional sample bytes a FIFO can queue before
+    /// reaching its Direct Sound refill threshold.
+    ///
+    /// Returns zero if refill is already due and None for an invalid FIFO index.
+    pub fn audio_fifo_bytes_until_refill(&self, fifo: usize) -> Option<usize> {
+        self.bus.audio_fifo_bytes_until_refill(fifo)
+    }
+
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
     /// The mix reflects SOUNDCNT_H volume and left/right routing. It is a sample
@@ -952,6 +960,18 @@ mod tests {
             machine.bus().read16(0x0400_0130) & 0x03FF,
             (!(GbaButton::Left.mask())) & 0x03FF
         );
+    }
+
+    #[test]
+    fn machine_exposes_audio_fifo_refill_distance() {
+        let mut machine = machine_with_nops();
+        assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(0));
+        assert_eq!(machine.audio_fifo_bytes_until_refill(2), None);
+        machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
+        for _ in 0..7 {
+            machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
+        }
+        assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(16));
     }
 
     #[test]
