@@ -2012,6 +2012,22 @@ mod tests {
     }
 
     #[test]
+    fn direct_sound_stereo_mix_obeys_master_volume_and_routing() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.audio_last_samples = [64, -32];
+
+        // Disabled master sound must mute the external mixer output.
+        bus.write16(0x0400_0082, (1 << 2) | (1 << 8) | (1 << 9));
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 0));
+
+        bus.write16(0x0400_0084, 0x0080);
+        // FIFO A: full volume, routed left and right. FIFO B: half volume,
+        // routed left only. Expected left = 128 - 32, right = 128.
+        bus.write16(0x0400_0082, (1 << 2) | (1 << 8) | (1 << 9) | (1 << 13));
+        assert_eq!(bus.direct_sound_stereo_sample(), (96, 128));
+    }
+
+    #[test]
     fn sound_fifo_waits_for_master_enable_and_selected_timer() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write32(0x0400_00A0, 0x4433_2211);
