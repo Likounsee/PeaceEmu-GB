@@ -155,6 +155,21 @@ impl GbaMachine {
         self.bus.pending_interrupts()
     }
 
+    /// Returns the interrupt-enable (IE) bitmask, with reserved bits removed.
+    pub fn interrupt_enable_mask(&self) -> u16 {
+        self.bus.interrupt_enable_mask()
+    }
+
+    /// Returns the latched interrupt-request (IF) flags, with reserved bits removed.
+    pub fn interrupt_request_flags(&self) -> u16 {
+        self.bus.interrupt_request_flags()
+    }
+
+    /// Returns whether the interrupt master-enable (IME) bit is set.
+    pub fn interrupt_master_enabled(&self) -> bool {
+        self.bus.interrupt_master_enabled()
+    }
+
     /// Returns whether an enabled interrupt is ready for CPU service (IME, IE, and IF).
     ///
     /// This is a status query only; IRQ exception entry is not implemented yet.
@@ -493,6 +508,27 @@ impl GbaMachine {
     }
 
     /// Returns the number of cycles elapsed in the current scanline.
+    /// Returns the current scanline counter (0 through 227).
+    pub fn video_scanline(&self) -> u16 {
+        self.bus.video_scanline()
+    }
+
+    /// Returns whether the PPU is currently in VBlank.
+    pub fn video_in_vblank(&self) -> bool {
+        self.bus.video_in_vblank()
+    }
+
+    /// Returns whether the PPU is currently in HBlank.
+    pub fn video_in_hblank(&self) -> bool {
+        self.bus.video_in_hblank()
+    }
+
+    /// Returns whether DISPSTAT's VCOUNT comparison currently matches.
+    pub fn video_vcount_match(&self) -> bool {
+        self.bus.video_vcount_match()
+    }
+
+    /// Returns the number of cycles elapsed in the current scanline.
     pub fn video_cycles_into_scanline(&self) -> u16 {
         self.bus.video_cycles_into_scanline()
     }
@@ -511,6 +547,13 @@ impl GbaMachine {
     ///
     /// This inspection helper does not advance emulation. The first access uses
     /// first_sequential; later accesses are modeled as sequential.
+    /// Returns the configured duration for one Game Pak access, if the address is mapped.
+    ///
+    /// This is a timing query only and does not advance CPU or peripheral state.
+    pub fn gamepak_access_cycles(&self, address: u32, sequential: bool) -> Option<u32> {
+        self.bus.gamepak_access_cycles(address, sequential)
+    }
+
     pub fn gamepak_sequence_cycles(
         &self,
         address: u32,
@@ -538,6 +581,16 @@ impl GbaMachine {
     /// Returns frontend-relevant state for Direct Sound FIFO A (0) or B (1).
     pub fn audio_fifo_status(&self, fifo: usize) -> Option<crate::AudioFifoStatus> {
         self.bus.audio_fifo_status(fifo)
+    }
+
+    /// Returns the number of queued bytes in Direct Sound FIFO A (0) or B (1).
+    pub fn audio_fifo_len(&self, fifo: usize) -> Option<usize> {
+        self.bus.audio_fifo_len(fifo)
+    }
+
+    /// Returns the most recently latched signed PCM sample for FIFO A (0) or B (1).
+    pub fn audio_fifo_last_sample(&self, fifo: usize) -> Option<i8> {
+        self.bus.audio_fifo_last_sample(fifo)
     }
 
     /// Executes until a Direct Sound FIFO reaches its refill threshold or the
