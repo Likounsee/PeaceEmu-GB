@@ -580,7 +580,7 @@ impl Cpu {
             if let Some(overflow) = overflow {
                 self.flags.overflow = overflow;
             }
-        if raw & 0xF800 == 0xF000 {
+        } else if raw & 0xF800 == 0xF000 {
             // First half of Thumb BL: form the signed high displacement in LR.
             let high_displacement = ((u32::from(raw & 0x07FF) << 21) as i32 >> 9) as u32;
             self.registers[14] = address.wrapping_add(4).wrapping_add(high_displacement);
