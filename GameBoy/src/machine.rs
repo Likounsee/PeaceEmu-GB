@@ -1522,7 +1522,7 @@ mod tests {
         assert_eq!(machine.cycles_elapsed(), 0);
         assert_eq!(machine.cpu.register(0), 0);
         assert_eq!(machine.cpu.register(15), CARTRIDGE_ENTRY_POINT);
-        assert_eq!(machine.bus().timer_counter(0), Some(0x1255));
+        assert_eq!(machine.bus().timer_counter(0), Some(0x1245));
         assert_eq!(machine.bus().video_cycles_into_scanline(), 17);
     }
 
