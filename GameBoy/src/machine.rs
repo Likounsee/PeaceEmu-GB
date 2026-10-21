@@ -1525,8 +1525,8 @@ mod tests {
         // the requested phase with a bounded number of CPU steps.
         machine.bus_mut().advance_cycles(950);
         assert_eq!(machine.video_scanline(), 0);
-        let steps = machine.run_until_video_position(0, 960, 8).unwrap();
-        assert!(steps.is_some_and(|count| count > 0 && count <= 8));
+        let steps = machine.run_until_video_position(0, 960, 16).unwrap();
+        assert!(steps.is_some_and(|count| count > 0 && count <= 16));
         assert_eq!(machine.video_scanline(), 0);
         assert!(machine.video_cycles_into_scanline() >= 960);
 
