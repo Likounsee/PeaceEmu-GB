@@ -46,8 +46,24 @@ pub struct MachineSnapshot {
     pub timer_enabled: [Option<bool>; 4],
     /// Whether timers 0 through 3 request an IRQ on overflow.
     pub timer_irq_enabled: [Option<bool>; 4],
+    /// Configured reload values for timers 0 through 3.
+    pub timer_reload_values: [Option<u16>; 4],
+    /// Current prescaler phase for timers 0 through 3.
+    pub timer_prescaler_phases: [Option<u16>; 4],
+    /// Selected prescaler divisors for timers 0 through 3.
+    pub timer_prescaler_divisors: [Option<u16>; 4],
+    /// Cascade-mode state for timers 0 through 3.
+    pub timer_cascade_enabled: [Option<bool>; 4],
     /// Enabled state of DMA channels 0 through 3.
     pub dma_enabled: [Option<bool>; 4],
+    /// Start timing selectors for DMA channels 0 through 3.
+    pub dma_start_timing: [Option<u8>; 4],
+    /// Repeat configuration for DMA channels 0 through 3.
+    pub dma_repeat: [Option<bool>; 4],
+    /// Word-transfer configuration for DMA channels 0 through 3.
+    pub dma_word_transfer: [Option<bool>; 4],
+    /// Completion-IRQ configuration for DMA channels 0 through 3.
+    pub dma_irq_enabled: [Option<bool>; 4],
     /// Queued byte counts for Direct Sound FIFOs A and B.
     pub audio_fifo_lengths: [Option<usize>; 2],
     /// Last signed sample values for Direct Sound FIFOs A and B.
@@ -966,11 +982,59 @@ impl GbaMachine {
                 self.bus.timer_irq_enabled(2),
                 self.bus.timer_irq_enabled(3),
             ],
+            timer_reload_values: [
+                self.bus.timer_reload_value(0),
+                self.bus.timer_reload_value(1),
+                self.bus.timer_reload_value(2),
+                self.bus.timer_reload_value(3),
+            ],
+            timer_prescaler_phases: [
+                self.bus.timer_prescaler_phase(0),
+                self.bus.timer_prescaler_phase(1),
+                self.bus.timer_prescaler_phase(2),
+                self.bus.timer_prescaler_phase(3),
+            ],
+            timer_prescaler_divisors: [
+                self.bus.timer_prescaler_divisor(0),
+                self.bus.timer_prescaler_divisor(1),
+                self.bus.timer_prescaler_divisor(2),
+                self.bus.timer_prescaler_divisor(3),
+            ],
+            timer_cascade_enabled: [
+                self.bus.timer_cascade_enabled(0),
+                self.bus.timer_cascade_enabled(1),
+                self.bus.timer_cascade_enabled(2),
+                self.bus.timer_cascade_enabled(3),
+            ],
             dma_enabled: [
                 self.bus.dma_enabled(0),
                 self.bus.dma_enabled(1),
                 self.bus.dma_enabled(2),
                 self.bus.dma_enabled(3),
+            ],
+            dma_start_timing: [
+                self.bus.dma_start_timing(0),
+                self.bus.dma_start_timing(1),
+                self.bus.dma_start_timing(2),
+                self.bus.dma_start_timing(3),
+            ],
+            dma_repeat: [
+                self.bus.dma_repeat(0),
+                self.bus.dma_repeat(1),
+                self.bus.dma_repeat(2),
+                self.bus.dma_repeat(3),
+            ],
+            dma_word_transfer: [
+                self.bus.dma_word_transfer(0),
+                self.bus.dma_word_transfer(1),
+                self.bus.dma_word_transfer(2),
+                self.bus.dma_word_transfer(3),
+            ],
+            dma_irq_enabled: [
+                self.bus.dma_irq_enabled(0),
+                self.bus.dma_irq_enabled(1),
+                self.bus.dma_irq_enabled(2),
+                self.bus.dma_irq_enabled(3),
             ],
             audio_fifo_lengths: [self.bus.audio_fifo_len(0), self.bus.audio_fifo_len(1)],
             audio_fifo_last_samples: [
@@ -1564,6 +1628,10 @@ mod tests {
         assert_eq!(initial.timer_counters, [Some(0); 4]);
         assert_eq!(initial.timer_enabled, [Some(false); 4]);
         assert_eq!(initial.timer_irq_enabled, [Some(false); 4]);
+        assert_eq!(initial.timer_reload_values, [Some(0); 4]);
+        assert_eq!(initial.timer_prescaler_phases, [Some(0); 4]);
+        assert_eq!(initial.timer_prescaler_divisors, [Some(1); 4]);
+        assert_eq!(initial.timer_cascade_enabled, [Some(false); 4]);
 
         machine.bus_mut().write16(0x0400_0100, 0xFFFE);
         machine.bus_mut().write16(0x0400_0102, 0x00C0);
@@ -1573,6 +1641,10 @@ mod tests {
         assert_eq!(timer.timer_irq_enabled[0], Some(true));
         assert_eq!(timer.timer_cycles_until_overflow[0], Some(2));
         assert_eq!(initial.dma_enabled, [Some(false); 4]);
+        assert_eq!(initial.dma_start_timing, [Some(0); 4]);
+        assert_eq!(initial.dma_repeat, [Some(false); 4]);
+        assert_eq!(initial.dma_word_transfer, [Some(false); 4]);
+        assert_eq!(initial.dma_irq_enabled, [Some(false); 4]);
         assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
         assert_eq!(initial.audio_fifo_last_samples, [Some(0); 2]);
         assert_eq!(initial.keypad_pressed, 0);
