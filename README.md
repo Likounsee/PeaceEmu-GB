@@ -94,7 +94,7 @@ event or limit; IRQ exception entry is not implemented yet. The initial program 
 development API, not a promise of complete commercial-game compatibility or accurate
 frame pacing.
 
-Timer inspection is available through `timer_counter(index)`, `timer_reload_value(index)`, and `timer_enabled(index)`. `timer_cycles_until_overflow(index)` estimates the remaining CPU cycles for enabled non-cascade timers and accounts for the active prescaler phase; it returns `None` when the timer is disabled or uses cascade mode. Direct Sound FIFO users can call `audio_fifo_bytes_until_refill(fifo)` on either `MemoryBus` or `GbaMachine` to check how many bytes remain before the 16-byte refill threshold.
+`GbaMachine::run_until_timer_overflow(timer, max_steps)` can synchronize a bounded run to an enabled non-cascade timer's estimated overflow. It returns `None` for unsupported timer modes or when the instruction limit expires, and may overshoot by the last instruction. Timer inspection is available through `timer_counter(index)`, `timer_reload_value(index)`, and `timer_enabled(index)`. `timer_cycles_until_overflow(index)` estimates the remaining CPU cycles for enabled non-cascade timers and accounts for the active prescaler phase; it returns `None` when the timer is disabled or uses cascade mode. Direct Sound FIFO users can call `audio_fifo_bytes_until_refill(fifo)` on either `MemoryBus` or `GbaMachine` to check how many bytes remain before the 16-byte refill threshold.
 
 ## Project status
 
