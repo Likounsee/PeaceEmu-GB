@@ -2315,6 +2315,23 @@ mod tests {
     }
 
     #[test]
+    fn win0_horizontal_range_wraps_across_screen_edges() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 13)); // BG2 and WIN0.
+        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+        bus.write16(VRAM_BASE, 0x001F); // Red bitmap.
+        bus.write16(0x0400_0040, (4 << 8) | 236); // X1=236, X2=4.
+        bus.write16(0x0400_0044, 1 << 8); // Y1=0, Y2=1.
+        bus.write16(0x0400_0048, 0); // WIN0 hides BG2.
+        bus.write16(0x0400_004A, 1 << 2); // Outside shows BG2.
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
+        assert_eq!(frame.pixel(5, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(239, 0), Some(0xFF00_FF00));
+    }
+
+    #[test]
     fn win1_masks_bitmap_background_inside_its_horizontal_range() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 14)); // BG2 and WIN1.
