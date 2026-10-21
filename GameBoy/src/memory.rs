@@ -623,9 +623,11 @@ impl MemoryBus {
 
     /// Returns the total Game Pak bus cycles for a sequence of same-width accesses.
     ///
-    /// The first transfer uses the requested sequential/non-sequential setting;
-    /// subsequent transfers are treated as sequential. This estimates timing only
-    /// and does not advance the bus. A zero-length sequence costs zero cycles.
+    /// The first transfer uses the requested sequential/non-sequential setting.
+    /// Later transfers are sequential only while they remain in the same WAITCNT
+    /// region; crossing ROM0/ROM1/ROM2 starts a non-sequential access. This
+    /// estimates timing only and does not advance the bus. A zero-length sequence
+    /// costs zero cycles.
     pub fn gamepak_sequence_cycles(
         &self,
         address: u32,
