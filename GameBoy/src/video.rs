@@ -232,7 +232,8 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let address =
                         VRAM_BASE + page_offset + (source_y * SCREEN_WIDTH + source_x) as u32;
                     let index = usize::from(bus.read8(address));
-                    frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(palette[index], bitmap_effect);
+                    frame.pixels[y * SCREEN_WIDTH + x] =
+                        apply_brightness_effect(palette[index], bitmap_effect);
                 }
             }
         }
@@ -2099,9 +2100,15 @@ mod tests {
         bus.write16(0x0400_0000, 1 << 10);
         bus.write16(0x0400_0050, (1 << 2) | (2 << 6));
         bus.write16(0x0400_0054, 16);
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), Some((true, 16)));
+        assert_eq!(
+            bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2),
+            Some((true, 16))
+        );
         bus.write16(0x0400_0050, (1 << 6) | (1 << 2));
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), None);
+        assert_eq!(
+            bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2),
+            None
+        );
         bus.write16(0x0400_0050, 2 << 6);
         assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), None);
     }
@@ -2112,9 +2119,15 @@ mod tests {
         bus.write16(0x0400_0000, 1 << 12);
         bus.write16(0x0400_0050, (1 << 4) | (2 << 6));
         bus.write16(0x0400_0054, 8);
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 4), Some((true, 8)));
+        assert_eq!(
+            bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 4),
+            Some((true, 8))
+        );
         bus.write16(0x0400_0050, (1 << 2) | (2 << 6));
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 4), None);
+        assert_eq!(
+            bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 4),
+            None
+        );
     }
 
     #[test]
