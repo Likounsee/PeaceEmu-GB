@@ -254,6 +254,33 @@ impl Cpu {
             && instruction & 0xF000 == 0xD000
             && ((instruction >> 8) & 0xF) < 0xE
             && self.condition_passed((instruction >> 8) & 0xF);
+        // A taken control-flow instruction breaks the bus's sequential fetch
+        // stream even when its destination happens to equal address + width.
+        let redirects_pc = if was_thumb {
+            let raw = instruction as u16;
+            (raw & 0xF000 == 0xD000 && ((raw >> 8) & 0xF) < 0xE && thumb_branch_taken)
+                || raw & 0xF800 == 0xE000
+                || raw & 0xF800 == 0xF800
+                || (raw & 0xFC00 == 0x4400
+                    && (((raw >> 8) & 3) == 3
+                        || (((raw >> 8) & 3) != 1
+                            && ((raw & 7) | ((raw >> 4) & 8)) == 15)))
+                || (raw & 0xFE00 == 0xBC00 && raw & (1 << 8) != 0)
+        } else {
+            let condition_passed = (instruction >> 28) != 0xF
+                && self.condition_passed(instruction >> 28);
+            condition_passed
+                && ((instruction & 0x0E00_0000 == 0x0A00_0000)
+                    || instruction & 0x0FFF_FFF0 == 0x012F_FF10
+                    || (instruction & 0x0C00_0000 == 0
+                        && (instruction >> 12) & 0xF == 15)
+                    || (instruction & 0x0C00_0000 == 0x0400_0000
+                        && instruction & (1 << 20) != 0
+                        && (instruction >> 12) & 0xF == 15)
+                    || (instruction & 0x0E00_0000 == 0x0800_0000
+                        && instruction & (1 << 20) != 0
+                        && instruction & (1 << 15) != 0))
+        };
         let outcome = self.step(bus)?;
         // A condition-failed ARM instruction is skipped without a branch or
         // data access, so it consumes only the sequential instruction cycle.
@@ -276,7 +303,8 @@ impl Cpu {
         let base_fetch_cycles = u32::from(fetch_width / 2);
         let wait_penalty = fetch_cycles.saturating_sub(base_fetch_cycles);
         let total_cycles = cycles.saturating_add(wait_penalty);
-        self.last_fetch_next = if self.thumb == was_thumb
+        self.last_fetch_next = if !redirects_pc
+            && self.thumb == was_thumb
             && self.registers[15] == address.wrapping_add(u32::from(fetch_width))
         {
             Some((address.wrapping_add(u32::from(fetch_width)), was_thumb))
@@ -3950,6 +3978,31 @@ mod tests {
             ram_cycles, 1,
             "IWRAM fetch must not receive Game Pak wait states"
         );
+    }
+
+    #[test]
+    fn taken_thumb_branch_breaks_sequential_fetch_even_when_target_is_next_halfword() {
+        // BNE with displacement -2 targets address+2, numerically the next
+        // sequential PC, but hardware must restart the fetch sequence.
+        let mut bus = bus_with_program(&[0x2001_D1FF, 0x2002_2003]);
+        let mut cpu = Cpu::new();
+        cpu.set_execution_state(true);
+        cpu.set_register(15, 0x0800_00C0);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: false,
+            zero: false,
+            carry: false,
+            overflow: false,
+        });
+        bus.write16(0x0400_0204, 1 << 4);
+
+        cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(cpu.register(15), Some(0x0800_00C2));
+        let (_, branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        let (_, after_branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+
+        assert!(branch_cycles >= 3);
+        assert!(after_branch_cycles > 1);
     }
 
     #[test]
