@@ -66,6 +66,14 @@ pub struct MachineSnapshot {
     pub dma_word_transfer: [Option<bool>; 4],
     /// Completion-IRQ configuration for DMA channels 0 through 3.
     pub dma_irq_enabled: [Option<bool>; 4],
+    /// Programmed source addresses for DMA channels 0 through 3.
+    pub dma_source_addresses: [Option<u32>; 4],
+    /// Programmed destination addresses for DMA channels 0 through 3.
+    pub dma_destination_addresses: [Option<u32>; 4],
+    /// Raw programmed transfer counts for DMA channels 0 through 3.
+    pub dma_count_registers: [Option<u16>; 4],
+    /// Effective transfer element counts, including channel-specific zero-count semantics.
+    pub dma_transfer_counts: [Option<u32>; 4],
     /// Queued byte counts for Direct Sound FIFOs A and B.
     pub audio_fifo_lengths: [Option<usize>; 2],
     /// Last signed sample values for Direct Sound FIFOs A and B.
@@ -1039,6 +1047,30 @@ impl GbaMachine {
                 self.bus.dma_irq_enabled(2),
                 self.bus.dma_irq_enabled(3),
             ],
+            dma_source_addresses: [
+                self.bus.dma_source_address(0),
+                self.bus.dma_source_address(1),
+                self.bus.dma_source_address(2),
+                self.bus.dma_source_address(3),
+            ],
+            dma_destination_addresses: [
+                self.bus.dma_destination_address(0),
+                self.bus.dma_destination_address(1),
+                self.bus.dma_destination_address(2),
+                self.bus.dma_destination_address(3),
+            ],
+            dma_count_registers: [
+                self.bus.dma_count_register(0),
+                self.bus.dma_count_register(1),
+                self.bus.dma_count_register(2),
+                self.bus.dma_count_register(3),
+            ],
+            dma_transfer_counts: [
+                self.bus.dma_transfer_count(0),
+                self.bus.dma_transfer_count(1),
+                self.bus.dma_transfer_count(2),
+                self.bus.dma_transfer_count(3),
+            ],
             audio_fifo_lengths: [self.bus.audio_fifo_len(0), self.bus.audio_fifo_len(1)],
             audio_fifo_last_samples: [
                 self.bus.audio_fifo_last_sample(0),
@@ -1667,6 +1699,10 @@ mod tests {
         assert_eq!(initial.dma_repeat, [Some(false); 4]);
         assert_eq!(initial.dma_word_transfer, [Some(false); 4]);
         assert_eq!(initial.dma_irq_enabled, [Some(false); 4]);
+        assert_eq!(initial.dma_source_addresses, [Some(0); 4]);
+        assert_eq!(initial.dma_destination_addresses, [Some(0); 4]);
+        assert_eq!(initial.dma_count_registers, [Some(0); 4]);
+        assert_eq!(initial.dma_transfer_counts, [Some(0x4000), Some(0x4000), Some(0x10000), Some(0x10000)]);
         assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
         assert_eq!(initial.audio_fifo_last_samples, [Some(0); 2]);
         assert_eq!(initial.keypad_pressed, 0);
@@ -1682,6 +1718,14 @@ mod tests {
         assert_eq!(pending.pending_interrupt_source, Some(2));
         assert!(pending.interrupt_pending);
         assert_eq!(pending.cpu.pc, machine.cpu().register(15).unwrap());
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_1234);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_5678);
+        machine.bus_mut().write16(0x0400_00B8, 7);
+        let dma = machine.diagnostic_snapshot();
+        assert_eq!(dma.dma_source_addresses[0], Some(0x0200_1234));
+        assert_eq!(dma.dma_destination_addresses[0], Some(0x0300_5678));
+        assert_eq!(dma.dma_count_registers[0], Some(7));
+        assert_eq!(dma.dma_transfer_counts[0], Some(7));
 
         machine
             .bus_mut()
