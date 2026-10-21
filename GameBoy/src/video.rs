@@ -663,7 +663,6 @@ fn render_regular_objects(
     let object_mosaic_width = u32::from(((mosaic >> 8) & 0xF) + 1);
     let object_mosaic_height = u32::from(((mosaic >> 12) & 0xF) + 1);
 
-
     for index in (0..128_u32).rev() {
         let base = OAM_BASE + index * 8;
         let attr0 = read_oam16(oam_snapshot, base);
