@@ -230,9 +230,9 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             // once rather than issuing another bus read for every framebuffer pixel.
             let palette = palette_snapshot(bus);
             frame.pixels.fill(apply_brightness_effect(
-        palette[0],
-        bitmap_brightness_effect(bus, display_control, 5),
-    ));
+                palette[0],
+                bitmap_brightness_effect(bus, display_control, 5),
+            ));
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
                     let Some((source_x, source_y)) = transform.source_coordinates(x, y) else {
@@ -2125,7 +2125,10 @@ mod tests {
             None
         );
         bus.write16(0x0400_0050, 2 << 6);
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), None);
+        assert_eq!(
+            bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2),
+            None
+        );
     }
 
     #[test]
