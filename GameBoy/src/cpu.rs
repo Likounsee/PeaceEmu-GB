@@ -175,9 +175,29 @@ impl Cpu {
         self.thumb
     }
 
+    /// Sets the execution state for an external loader or debugger.
+    ///
+    /// Switching state aligns the stored PC to a halfword in Thumb state or
+    /// a word in ARM state. Normal guest software should use BX to switch state.
+    pub fn set_execution_state(&mut self, thumb: bool) {
+        self.thumb = thumb;
+        self.registers[15] = if thumb {
+            self.registers[15] & !1
+        } else {
+            self.registers[15] & !3
+        };
+    }
+
     /// Returns the modeled CPSR condition flags.
     pub fn flags(&self) -> ConditionFlags {
         self.flags
+    }
+
+    /// Replaces the modeled condition flags for a debugger or test harness.
+    ///
+    /// This changes N, Z, C, and V only; it does not change execution state or PC.
+    pub fn set_condition_flags(&mut self, flags: ConditionFlags) {
+        self.flags = flags;
     }
 
     /// Captures the current modeled state for debugging or save-state tooling.
@@ -1939,6 +1959,30 @@ mod tests {
         assert!(cpu.condition_passed_for(0xE));
         assert!(!cpu.condition_passed_for(0xF));
         assert!(!cpu.condition_passed_for(0x10));
+    }
+
+    #[test]
+    fn external_state_setup_updates_flags_and_aligns_pc_by_instruction_state() {
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0003);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: true,
+            zero: false,
+            carry: true,
+            overflow: true,
+        });
+        cpu.set_execution_state(true);
+        assert!(cpu.is_thumb());
+        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert!(cpu.flags().negative);
+        assert!(cpu.flags().carry);
+        assert!(cpu.flags().overflow);
+        assert!(!cpu.flags().zero);
+
+        cpu.set_execution_state(false);
+        assert!(!cpu.is_thumb());
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert!(cpu.flags().negative);
     }
 
     use super::*;
