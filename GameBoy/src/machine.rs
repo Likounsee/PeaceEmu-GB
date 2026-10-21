@@ -1241,7 +1241,10 @@ mod tests {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0204, 0x4017);
         assert_eq!(machine.gamepak_wait_control(), 0x4017);
-        assert_eq!(machine.gamepak_wait_control(), machine.bus().gamepak_wait_control());
+        assert_eq!(
+            machine.gamepak_wait_control(),
+            machine.bus().gamepak_wait_control()
+        );
 
         machine.bus_mut().write16(0x0400_0102, 0x00C5);
         assert_eq!(machine.timer_control(0), Some(0x00C5));
