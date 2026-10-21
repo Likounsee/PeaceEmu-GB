@@ -1540,6 +1540,15 @@ mod tests {
         assert_eq!(initial.video_vcount_match, machine.video_vcount_match());
         assert_eq!(initial.video_cycles_until_hblank, machine.video_cycles_until_hblank());
         assert_eq!(initial.video_cycles_until_vblank, machine.video_cycles_until_vblank());
+        assert_eq!(initial.video_cycles_until_hblank, 960);
+        assert_eq!(initial.video_cycles_until_vblank, 160 * 1232);
+        assert_eq!(machine.cycles_elapsed(), initial.cycles_elapsed);
+
+        machine.bus_mut().advance_cycles(960);
+        let hblank = machine.diagnostic_snapshot();
+        assert!(hblank.video_in_hblank);
+        assert_eq!(hblank.video_cycles_until_hblank, 1232);
+        assert_eq!(hblank.cycles_elapsed, initial.cycles_elapsed);
         assert_eq!(initial.interrupt_enable, 0);
         assert_eq!(initial.interrupt_requests, 0);
         assert_eq!(initial.pending_interrupts, 0);
@@ -1549,6 +1558,14 @@ mod tests {
         assert_eq!(initial.timer_counters, [Some(0); 4]);
         assert_eq!(initial.timer_enabled, [Some(false); 4]);
         assert_eq!(initial.timer_irq_enabled, [Some(false); 4]);
+
+        machine.bus_mut().write16(0x0400_0100, 0xFFFE);
+        machine.bus_mut().write16(0x0400_0102, 0x00C0);
+        let timer = machine.diagnostic_snapshot();
+        assert_eq!(timer.timer_counters[0], Some(0xFFFE));
+        assert_eq!(timer.timer_enabled[0], Some(true));
+        assert_eq!(timer.timer_irq_enabled[0], Some(true));
+        assert_eq!(timer.timer_cycles_until_overflow[0], Some(2));
         assert_eq!(initial.dma_enabled, [Some(false); 4]);
         assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
         assert_eq!(initial.audio_fifo_last_samples, [Some(0); 2]);
