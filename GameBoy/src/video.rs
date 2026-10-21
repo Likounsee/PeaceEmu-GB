@@ -150,6 +150,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut obj_tile_cache,
                 &oam_snapshot,
                 &allowed_lines,
+                None,
                 &mut frame,
             );
         }
@@ -284,6 +285,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut obj_tile_cache,
                 &oam_snapshot,
                 &allowed_lines,
+                bitmap_alpha_blend(bus, display_control),
                 &mut frame,
             );
         }
@@ -335,6 +337,7 @@ fn render_text_backgrounds(
             obj_tile_cache,
             oam_snapshot,
             allowed_lines,
+            None,
             frame,
         );
     }
@@ -636,6 +639,33 @@ fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 12
     allowed_lines
 }
 
+/// Returns EVA/EVB for bitmap BG2 when it is enabled as a second blend target.
+fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16)> {
+    if display_control & (1 << 10) == 0 {
+        return None;
+    }
+    let blend_control = bus.read16(0x0400_0050);
+    // Semi-transparent OBJ pixels force alpha blending; BG2 must be selected
+    // as a second target for the bitmap underneath to participate.
+    if blend_control & (1 << 8) == 0 {
+        return None;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    Some(((coefficients & 0x1F).min(16), ((coefficients >> 8) & 0x1F).min(16)))
+}
+
+fn blend_argb555(source: u32, target: u32, eva: u16, evb: u16) -> u32 {
+    let blend_channel = |shift: u32| {
+        let source = (source >> shift) & 0xFF;
+        let target = (target >> shift) & 0xFF;
+        let source5 = source >> 3;
+        let target5 = target >> 3;
+        let value = ((source5 * u32::from(eva) + target5 * u32::from(evb)) >> 4).min(31);
+        (value << 3) | (value >> 2)
+    };
+    0xFF00_0000 | (blend_channel(16) << 16) | (blend_channel(8) << 8) | blend_channel(0)
+}
+
 /// Draws regular (non-affine) OBJ sprites for the requested priority.
 /// OBJ is composited after backgrounds of the same priority; lower OAM indices
 /// win ties, so entries are visited from 127 down to 0.
@@ -647,6 +677,7 @@ fn render_regular_objects(
     tile_cache: &mut [Option<[u8; 64]>],
     oam_snapshot: &[u8; 1024],
     allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
+    bitmap_blend: Option<(u16, u16)>,
     frame: &mut VideoFrame,
 ) {
     if display_control & (1 << 12) == 0 {
@@ -846,8 +877,17 @@ fn render_regular_objects(
                 // OBJ palette RAM is stable for this snapshot render. Reuse
                 // the decoded palette rather than performing a bus read and
                 // RGB555 conversion for every visible sprite pixel.
-                frame.pixels[screen_y as usize * SCREEN_WIDTH + screen_x as usize] =
-                    palette[palette_index as usize];
+                let destination = screen_y as usize * SCREEN_WIDTH + screen_x as usize;
+                let source_color = palette[palette_index as usize];
+                frame.pixels[destination] = if object_mode == 1 && mode >= 3 {
+                    if let Some((eva, evb)) = bitmap_blend {
+                        blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                    } else {
+                        source_color
+                    }
+                } else {
+                    source_color
+                };
             }
         }
     }
@@ -1853,4 +1893,11 @@ mod tests {
         let frame = render_bitmap_frame(&bus).expect("forced blank is valid in any mode");
         assert!(frame.pixels.iter().all(|pixel| *pixel == 0xFFFF_FFFF));
     }
+    #[test]
+    fn bitmap_alpha_blend_clamps_coefficients_and_blends_5bit_channels() {
+        assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 8, 8), 0xFF7B_0000);
+        assert_eq!(blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31), 0xFFFF_FFFF);
+        assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 0, 16), 0xFF00_0000);
+    }
+
 }
