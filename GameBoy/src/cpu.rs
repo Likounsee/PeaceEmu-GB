@@ -3817,7 +3817,12 @@ mod tests {
         cpu.set_register(0, 0xDEAD_BEEF);
         cpu.set_register(1, 0x0200_0100);
         bus.write32(0x0200_0100, 0x1234_5678);
-        cpu.set_register(16, 1 << 30); // CPSR Z flag.
+        cpu.set_condition_flags(ConditionFlags {
+            negative: false,
+            zero: true,
+            carry: false,
+            overflow: false,
+        });
 
         cpu.step(&mut bus).unwrap();
 
