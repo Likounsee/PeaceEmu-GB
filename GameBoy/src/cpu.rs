@@ -457,10 +457,20 @@ impl Cpu {
                 let amount = (instruction >> 7) & 0x1F;
                 match (instruction >> 5) & 3 {
                     0 => rm.wrapping_shl(amount),
-                    1 => if amount == 0 { 0 } else { rm >> amount },
+                    1 => {
+                        if amount == 0 {
+                            0
+                        } else {
+                            rm >> amount
+                        }
+                    },
                     2 => {
                         if amount == 0 {
-                            if rm & 0x8000_0000 != 0 { u32::MAX } else { 0 }
+                            if rm & 0x8000_0000 != 0 {
+                                u32::MAX
+                            } else {
+                                0
+                            }
                         } else {
                             ((rm as i32) >> amount) as u32
                         }
