@@ -205,11 +205,14 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     };
                     let address = VRAM_BASE + ((source_y * SCREEN_WIDTH + source_x) * 2) as u32;
                     if windows.allows(x, y, 2) {
-                        frame.pixels[y * SCREEN_WIDTH + x] =
-                            apply_brightness_effect(
-                                rgb555(bus.read16(address)),
-                                if windows.effects_allowed(x, y) { bitmap_effect } else { None },
-                            );
+                        frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                            rgb555(bus.read16(address)),
+                            if windows.effects_allowed(x, y) {
+                                bitmap_effect
+                            } else {
+                                None
+                            },
+                        );
                     }
                 }
             }
@@ -253,7 +256,11 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         frame.pixels[y * SCREEN_WIDTH + x] =
                             apply_brightness_effect(
                                 palette[index],
-                                if windows.effects_allowed(x, y) { bitmap_effect } else { None },
+                                if windows.effects_allowed(x, y) {
+                                    bitmap_effect
+                                } else {
+                                    None
+                                },
                             );
                     }
                 }
@@ -500,11 +507,14 @@ fn render_affine_background(
             let pixel_offset = ((source_y & 7) * 8 + (source_x & 7)) as usize;
             let palette_index = u32::from(pixels[pixel_offset]);
             if palette_index != 0 && windows.allows(x, y, bg as u16) {
-                frame.pixels[y * SCREEN_WIDTH + x] =
-                    apply_brightness_effect(
-                        palette[palette_index as usize],
-                        if windows.effects_allowed(x, y) { brightness_effect } else { None },
-                    );
+                frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                    palette[palette_index as usize],
+                    if windows.effects_allowed(x, y) {
+                        brightness_effect
+                    } else {
+                        None
+                    },
+                );
             }
         }
     }
@@ -642,10 +652,13 @@ fn render_text_background(
             // Color index zero is transparent even when a 4bpp palette bank
             // makes its absolute palette index nonzero.
             if !transparent && windows.allows(x, y, bg as u16) {
-                frame.pixels[y * SCREEN_WIDTH + x] =
-                    apply_brightness_effect(
+                frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
                     palette[palette_index as usize],
-                    if windows.effects_allowed(x, y) { brightness_effect } else { None },
+                    if windows.effects_allowed(x, y) {
+                        brightness_effect
+                    } else {
+                        None
+                    },
                 );
             }
         }
