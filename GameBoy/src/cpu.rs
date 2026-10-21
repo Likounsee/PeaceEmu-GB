@@ -3807,7 +3807,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn failed_arm_condition_skips_memory_side_effects() {
         // STRNE r0, [r1] is skipped while Z=1.
@@ -3830,5 +3829,4 @@ mod tests {
         assert_eq!(cpu.register(1), Some(0x0200_0100));
         assert_eq!(cpu.register(15), Some(0x0200_0004));
     }
-
 }
