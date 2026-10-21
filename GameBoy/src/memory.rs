@@ -2589,16 +2589,29 @@ mod tests {
     #[test]
     fn gamepak_sequence_cycles_accumulates_sequential_accesses_safely() {
         let mut bus = MemoryBus::new(cartridge());
-        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0), Some(0));
-        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 1), Some(4));
-        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), Some(8));
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0),
+            Some(0)
+        );
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 1),
+            Some(4)
+        );
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
+            Some(8)
+        );
         assert_eq!(bus.gamepak_sequence_cycles(0x0200_0000, false, 2, 1), None);
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 2), None);
         assert_eq!(bus.gamepak_sequence_cycles(0xFFFF_FFFE, false, 4, 2), None);
         bus.write16(0x0400_0204, 1 << 4);
-        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), Some(6));
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
+            Some(6)
+        );
     }
 
+    #[test]
     #[test]
     fn gamepak_width_timing_models_rom_halfwords_and_sram_bytes() {
         let mut bus = MemoryBus::new(cartridge());
