@@ -3927,16 +3927,14 @@ mod tests {
     }
     #[test]
     fn gamepak_instruction_fetch_wait_states_affect_cycles_but_ram_does_not() {
-        let mut bus = MemoryBus::new(cartridge());
+        let mut bus = bus_with_program(&[0xE1A0_0000, 0xE1A0_0000]);
         let mut cpu = Cpu::new();
-        cpu.set_register(15, 0x0800_0000);
-        // The test cartridge is filled with a supported ARM NOP/data-processing
-        // instruction pattern; timing is checked independently of its result.
+        cpu.set_register(15, 0x0800_00C0);
         bus.write16(0x0400_0204, 0);
         let (_, rom_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(rom_cycles >= 4, "ROM fetch should include WAITCNT latency");
 
-        let mut ram_bus = MemoryBus::new(cartridge());
+        let mut ram_bus = bus_with_program(&[0xE1A0_0000]);
         let mut ram_cpu = Cpu::new();
         ram_cpu.set_register(15, 0x0300_0000);
         ram_bus.write32(0x0300_0000, 0xE1A0_0000);
@@ -3946,9 +3944,9 @@ mod tests {
 
     #[test]
     fn gamepak_sequential_fetch_uses_waitcnt_sequential_duration() {
-        let mut bus = MemoryBus::new(cartridge());
+        let mut bus = bus_with_program(&[0xE1A0_0000, 0xE1A0_0000]);
         let mut cpu = Cpu::new();
-        cpu.set_register(15, 0x0800_0000);
+        cpu.set_register(15, 0x0800_00C0);
         bus.write16(0x0400_0204, 1 << 4); // WS0 sequential halfword: one cycle.
         let (_, first_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         let (_, second_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
