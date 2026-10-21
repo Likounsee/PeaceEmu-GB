@@ -4006,7 +4006,7 @@ mod tests {
     fn not_taken_thumb_branch_keeps_sequential_gamepak_fetch_timing() {
         // BNE is not taken while Z is set, so the following halfword remains
         // on the sequential fetch path rather than paying a branch refill.
-        let mut bus = bus_with_program(&[0xD1FF_2001]);
+        let mut bus = bus_with_program(&[0x2001_D1FF]);
         let mut cpu = Cpu::new();
         cpu.set_execution_state(true);
         cpu.set_register(15, 0x0800_00C0);
