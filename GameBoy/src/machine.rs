@@ -2358,4 +2358,75 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
     }
+
+    #[test]
+    fn machine_snapshot_reports_all_dma_channels_independently() {
+        let mut machine = GbaMachine::new(cartridge());
+
+        for channel in 0..4_u32 {
+            let base = 0x0400_00B0 + channel * 12;
+            let source = 0x0200_1000 + channel * 0x100;
+            let destination = 0x0300_2000 + channel * 0x100;
+            let count = (channel + 1) as u16;
+
+            machine.bus_mut().write32(base, source);
+            machine.bus_mut().write32(base + 4, destination);
+            machine.bus_mut().write16(base + 8, count);
+            machine.bus_mut().write16(base + 10, 0xD400);
+        }
+
+        let snapshot = machine.diagnostic_snapshot();
+        for channel in 0..4 {
+            assert_eq!(
+                snapshot.dma_source_addresses[channel],
+                Some(0x0200_1000 + channel as u32 * 0x100)
+            );
+            assert_eq!(
+                snapshot.dma_destination_addresses[channel],
+                Some(0x0300_2000 + channel as u32 * 0x100)
+            );
+            assert_eq!(snapshot.dma_count_registers[channel], Some(channel as u16 + 1));
+            assert_eq!(snapshot.dma_enabled[channel], Some(true));
+            assert_eq!(snapshot.dma_irq_enabled[channel], Some(true));
+            assert_eq!(snapshot.dma_word_transfer[channel], Some(true));
+            assert_eq!(snapshot.dma_start_timing[channel], Some(1));
+        }
+
+        assert_eq!(machine.dma_source_address(4), None);
+        assert_eq!(machine.dma_destination_address(4), None);
+        assert_eq!(machine.dma_count_register(4), None);
+        assert_eq!(machine.dma_enabled(4), None);
+    }
+
+    #[test]
+    fn machine_snapshot_reflects_dma_channel_reconfiguration() {
+        let mut machine = GbaMachine::new(cartridge());
+        let base = 0x0400_00B0;
+
+        machine.bus_mut().write32(base, 0x0200_0100);
+        machine.bus_mut().write32(base + 4, 0x0300_0100);
+        machine.bus_mut().write16(base + 8, 12);
+        machine.bus_mut().write16(base + 10, 0x8400);
+
+        let first = machine.diagnostic_snapshot();
+        assert_eq!(first.dma_enabled[0], Some(true));
+        assert_eq!(first.dma_source_addresses[0], Some(0x0200_0100));
+        assert_eq!(first.dma_destination_addresses[0], Some(0x0300_0100));
+        assert_eq!(first.dma_count_registers[0], Some(12));
+        assert_eq!(first.dma_irq_enabled[0], Some(false));
+
+        machine.bus_mut().write32(base, 0x0200_0300);
+        machine.bus_mut().write32(base + 4, 0x0300_0500);
+        machine.bus_mut().write16(base + 8, 3);
+        machine.bus_mut().write16(base + 10, 0xC000);
+
+        let second = machine.diagnostic_snapshot();
+        assert_eq!(second.dma_enabled[0], Some(true));
+        assert_eq!(second.dma_source_addresses[0], Some(0x0200_0300));
+        assert_eq!(second.dma_destination_addresses[0], Some(0x0300_0500));
+        assert_eq!(second.dma_count_registers[0], Some(3));
+        assert_eq!(second.dma_irq_enabled[0], Some(true));
+        assert_eq!(second.dma_word_transfer[0], Some(false));
+    }
+
 }
