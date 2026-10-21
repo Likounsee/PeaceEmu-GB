@@ -3780,4 +3780,32 @@ mod tests {
         assert_eq!(cpu.register(0), Some(0xAABB_CCDD));
         assert_eq!(cpu.register(1), Some(0x0200_0128));
     }
+
+
+    #[test]
+    fn long_multiply_cycle_estimates_distinguish_signed_and_unsigned_extension() {
+        let cases = [
+            (0x0000_007F, 1, 1),
+            (0xFFFF_FF80, 1, 4),
+            (0x0000_7FFF, 2, 2),
+            (0xFFFF_8000, 2, 4),
+            (0x007F_FFFF, 3, 3),
+            (0xFF80_0000, 3, 4),
+            (0x1234_5678, 4, 4),
+        ];
+
+        for (value, signed_cycles, unsigned_cycles) in cases {
+            assert_eq!(
+                Cpu::multiply_internal_cycles_for_extension(value, true),
+                signed_cycles,
+                "signed multiplier {value:#010X}"
+            );
+            assert_eq!(
+                Cpu::multiply_internal_cycles_for_extension(value, false),
+                unsigned_cycles,
+                "unsigned multiplier {value:#010X}"
+            );
+        }
+    }
+
 }
