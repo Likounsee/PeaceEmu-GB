@@ -2594,7 +2594,6 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 3);
     }
 
-
     #[test]
     fn cycle_budget_and_absolute_runners_respect_zero_and_step_limits() {
         let mut machine = GbaMachine::new(cartridge());
@@ -2604,7 +2603,10 @@ mod tests {
         assert_eq!(machine.run_until_instruction_count(1, 0).unwrap(), None);
         assert_eq!(machine.run_until_cycle_count(1, 0).unwrap(), None);
         let untouched = machine.diagnostic_snapshot();
-        assert_eq!(untouched.instructions_executed, initial.instructions_executed);
+        assert_eq!(
+            untouched.instructions_executed,
+            initial.instructions_executed
+        );
         assert_eq!(untouched.cycles_elapsed, initial.cycles_elapsed);
         assert_eq!(untouched.video_scanline, initial.video_scanline);
         assert_eq!(
@@ -2625,9 +2627,7 @@ mod tests {
         );
         assert_eq!(machine.cycles_elapsed(), before_cycle_wait);
         assert_eq!(
-            machine
-                .run_until_cycle_count(before_cycle_wait, 0)
-                .unwrap(),
+            machine.run_until_cycle_count(before_cycle_wait, 0).unwrap(),
             Some(0)
         );
     }
@@ -2666,13 +2666,10 @@ mod tests {
         machine.request_interrupt(selected);
 
         assert_eq!(
-            machine
-                .run_until_next_interrupt_mask(selected, 2)
-                .unwrap(),
+            machine.run_until_next_interrupt_mask(selected, 2).unwrap(),
             2,
             "an already-pending source is not a fresh assertion"
         );
         assert_eq!(machine.instructions_executed(), 2);
     }
-
 }
