@@ -1253,11 +1253,17 @@ mod tests {
     #[test]
     fn individual_button_updates_preserve_other_keys_and_trigger_keypad_irq() {
         let mut bus = MemoryBus::new(cartridge());
-        bus.write16(0x0400_0132, (1 << 14) | GbaButton::A.mask() | GbaButton::Start.mask());
+        bus.write16(
+            0x0400_0132,
+            (1 << 14) | GbaButton::A.mask() | GbaButton::Start.mask(),
+        );
         bus.set_button_pressed(GbaButton::Start, true);
         assert!(bus.is_button_pressed(GbaButton::Start));
         assert!(!bus.is_button_pressed(GbaButton::A));
-        assert_eq!(bus.read16(0x0400_0130) & 0x03FF, !(GbaButton::Start.mask()) & 0x03FF);
+        assert_eq!(
+            bus.read16(0x0400_0130) & 0x03FF,
+            !(GbaButton::Start.mask()) & 0x03FF
+        );
         assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
 
         bus.set_button_pressed(GbaButton::A, true);
