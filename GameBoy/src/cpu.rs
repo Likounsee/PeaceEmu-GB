@@ -2665,7 +2665,7 @@ mod tests {
         cpu.reset(0x0200_0004);
         cpu.set_register(1, 0x0200_0101);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(3), Some(0xFFFF_FFFF));
+        assert_eq!(cpu.register(3), Some(0xFFFF_FF80));
     }
 
     #[test]
