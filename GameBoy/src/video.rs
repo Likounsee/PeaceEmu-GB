@@ -516,6 +516,7 @@ fn render_text_background(
     control: u16,
     palette: &[u32; 256],
     brightness_effect: Option<(bool, u16)>,
+    windows: &WindowConfig,
     frame: &mut VideoFrame,
 ) {
     let hofs_address = BG0HOFS + bg * 4;
