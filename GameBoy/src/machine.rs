@@ -22,6 +22,12 @@ pub struct MachineSnapshot {
     pub video_in_vblank: bool,
     /// Whether the PPU is currently in HBlank.
     pub video_in_hblank: bool,
+    /// Whether DISPSTAT's VCOUNT comparison currently matches.
+    pub video_vcount_match: bool,
+    /// Estimated cycles until the next HBlank boundary.
+    pub video_cycles_until_hblank: u32,
+    /// Estimated cycles until the next VBlank entry.
+    pub video_cycles_until_vblank: u32,
     /// Interrupt enable (IE) mask.
     pub interrupt_enable: u16,
     /// Latched interrupt request (IF) flags.
@@ -922,6 +928,9 @@ impl GbaMachine {
             video_cycles_into_scanline: self.bus.video_cycles_into_scanline(),
             video_in_vblank: self.bus.video_in_vblank(),
             video_in_hblank: self.bus.video_in_hblank(),
+            video_vcount_match: self.bus.video_vcount_match(),
+            video_cycles_until_hblank: self.bus.video_cycles_until_hblank(),
+            video_cycles_until_vblank: self.bus.video_cycles_until_vblank(),
             interrupt_enable: self.bus.interrupt_enable_mask(),
             interrupt_requests: self.bus.interrupt_request_flags(),
             pending_interrupts: self.bus.pending_interrupts(),
@@ -1504,6 +1513,9 @@ mod tests {
         assert_eq!(initial.instructions_executed, 0);
         assert_eq!(initial.cycles_elapsed, 0);
         assert_eq!(initial.video_scanline, machine.video_scanline());
+        assert_eq!(initial.video_vcount_match, machine.video_vcount_match());
+        assert_eq!(initial.video_cycles_until_hblank, machine.video_cycles_until_hblank());
+        assert_eq!(initial.video_cycles_until_vblank, machine.video_cycles_until_vblank());
         assert_eq!(initial.interrupt_enable, 0);
         assert_eq!(initial.interrupt_requests, 0);
         assert_eq!(initial.pending_interrupts, 0);
