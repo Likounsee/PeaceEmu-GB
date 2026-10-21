@@ -2385,7 +2385,10 @@ mod tests {
                 snapshot.dma_destination_addresses[channel],
                 Some(0x0300_2000 + channel as u32 * 0x100)
             );
-            assert_eq!(snapshot.dma_count_registers[channel], Some(channel as u16 + 1));
+            assert_eq!(
+                snapshot.dma_count_registers[channel],
+                Some(channel as u16 + 1)
+            );
             assert_eq!(snapshot.dma_enabled[channel], Some(true));
             assert_eq!(snapshot.dma_irq_enabled[channel], Some(true));
             assert_eq!(snapshot.dma_word_transfer[channel], Some(true));
@@ -2428,5 +2431,4 @@ mod tests {
         assert_eq!(second.dma_irq_enabled[0], Some(true));
         assert_eq!(second.dma_word_transfer[0], Some(false));
     }
-
 }
