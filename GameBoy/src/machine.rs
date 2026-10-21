@@ -483,6 +483,14 @@ impl GbaMachine {
         self.bus.timer_prescaler_divisor(timer)
     }
 
+    /// Returns the current prescaler phase for a hardware timer (timer 0–3).
+    ///
+    /// The phase is the number of CPU cycles accumulated toward the next
+    /// prescaled tick. It is not used to clock timers configured for cascade mode.
+    pub fn timer_prescaler_phase(&self, timer: usize) -> Option<u16> {
+        self.bus.timer_prescaler_phase(timer)
+    }
+
     /// Returns whether the timer is configured to request an IRQ on overflow.
     pub fn timer_irq_enabled(&self, timer: usize) -> Option<bool> {
         self.bus.timer_irq_enabled(timer)
@@ -1188,6 +1196,8 @@ mod tests {
         assert_eq!(machine.timer_cascade_enabled(0), Some(false));
         assert_eq!(machine.timer_prescaler_divisor(0), Some(1));
         assert_eq!(machine.timer_prescaler_divisor(4), None);
+        assert_eq!(machine.timer_prescaler_phase(0), Some(0));
+        assert_eq!(machine.timer_prescaler_phase(4), None);
         assert_eq!(
             machine.timer_reload_value(0),
             machine.bus().timer_reload_value(0)
@@ -1259,6 +1269,7 @@ mod tests {
         assert_eq!(machine.timer_irq_enabled(0), Some(true));
         assert_eq!(machine.timer_cascade_enabled(0), Some(true));
         assert_eq!(machine.timer_prescaler_divisor(0), Some(64));
+        assert_eq!(machine.timer_prescaler_phase(0), Some(0));
     }
 
     #[test]
