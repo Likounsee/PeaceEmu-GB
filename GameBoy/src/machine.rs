@@ -1312,7 +1312,10 @@ mod tests {
         assert_eq!(machine.cartridge_maker_code(), "01");
         assert_eq!(machine.cartridge_header_fixed_value(), 0);
         assert_eq!(machine.cartridge_software_version(), 0);
-        assert_eq!(machine.cartridge_header_checksum(), machine.bus().cartridge_header_checksum());
+        assert_eq!(
+            machine.cartridge_header_checksum(),
+            machine.bus().cartridge_header_checksum()
+        );
         assert_eq!(machine.bus().cartridge_save_type(), None);
     }
 
