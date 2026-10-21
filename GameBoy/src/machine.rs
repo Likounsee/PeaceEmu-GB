@@ -979,6 +979,7 @@ mod tests {
         assert_eq!(snapshot.cpsr, machine.cpu().cpsr_flags());
     }
 
+    #[test]
     fn machine_exposes_audio_fifo_refill_distance() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(0));
