@@ -1206,9 +1206,7 @@ fn render_regular_objects(
                     // alpha blending. If alpha blending is unavailable or
                     // masked by the current window, they render normally; they
                     // must not fall through to ordinary OBJ brighten/darken.
-                    if mode >= 3
-                        && windows.effects_allowed(screen_x as usize, screen_y as usize)
-                    {
+                    if mode >= 3 && windows.effects_allowed(screen_x as usize, screen_y as usize) {
                         if let Some((eva, evb)) = bitmap_blend {
                             blend_argb555(source_color, frame.pixels[destination], eva, evb)
                         } else {
