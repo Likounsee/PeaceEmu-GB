@@ -426,6 +426,13 @@ impl GbaMachine {
         &self.cpu
     }
 
+    /// Returns a detached snapshot of the modeled CPU state.
+    ///
+    /// Debuggers can retain the snapshot while execution continues.
+    pub fn cpu_snapshot(&self) -> crate::CpuSnapshot {
+        self.cpu.snapshot()
+    }
+
     /// Returns read-only access to the current memory bus.
     pub fn bus(&self) -> &MemoryBus {
         &self.bus
@@ -963,6 +970,15 @@ mod tests {
     }
 
     #[test]
+    fn machine_cpu_snapshot_tracks_execution_state() {
+        let machine = GbaMachine::new(cartridge());
+        let snapshot = machine.cpu_snapshot();
+        assert_eq!(snapshot.pc, CARTRIDGE_ENTRY_POINT);
+        assert_eq!(snapshot.registers[15], CARTRIDGE_ENTRY_POINT);
+        assert!(!snapshot.thumb);
+        assert_eq!(snapshot.cpsr, machine.cpu().cpsr_flags());
+    }
+
     fn machine_exposes_audio_fifo_refill_distance() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(0));
