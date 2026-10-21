@@ -609,10 +609,7 @@ fn render_regular_objects(
         let attr1 = read_oam16(oam_snapshot, base + 2);
         let affine = attr0 & (1 << 8) != 0;
         let object_mode = (attr0 >> 10) & 3;
-        if (!affine && attr0 & (1 << 9) != 0)
-            || object_mode >= 2
-            || (attr0 >> 14) & 3 == 3
-        {
+        if (!affine && attr0 & (1 << 9) != 0) || object_mode >= 2 || (attr0 >> 14) & 3 == 3 {
             continue;
         }
         let shape = (attr0 >> 14) & 3;
