@@ -337,6 +337,15 @@ impl GbaMachine {
         &mut self.bus
     }
 
+    /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
+    ///
+    /// The mix reflects SOUNDCNT_H volume and left/right routing. It is a sample
+    /// snapshot, not a resampled audio stream; callers should sample it at their
+    /// chosen output rate and perform any required filtering or scaling.
+    pub fn direct_sound_stereo_sample(&self) -> (i16, i16) {
+        self.bus.direct_sound_stereo_sample()
+    }
+
     /// Renders a frame from the current video-memory and register snapshot.
     ///
     /// Returns no frame for unsupported display modes unless forced blank is active.
@@ -555,6 +564,19 @@ mod tests {
         assert_eq!(frame.width, crate::SCREEN_WIDTH);
         assert_eq!(frame.height, crate::SCREEN_HEIGHT);
         assert!(frame.is_well_formed());
+    }
+
+    #[test]
+    fn machine_exposes_the_current_direct_sound_stereo_mix() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0084, 0x0080);
+        machine.bus_mut().write16(0x0400_0082, (1 << 8) | (1 << 9));
+        assert_eq!(machine.direct_sound_stereo_sample(), (0, 0));
+        machine.bus_mut().write32(0x0400_00A0, 0x0000_4040);
+        machine.bus_mut().write16(0x0400_0100, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0102, 0x0080);
+        machine.bus_mut().advance_cycles(1);
+        assert_eq!(machine.direct_sound_stereo_sample(), (64, 64));
     }
 
     #[test]
