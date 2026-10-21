@@ -3479,7 +3479,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn dma_effective_zero_counts_follow_channel_specific_limits() {
         let mut bus = MemoryBus::new(cartridge());
@@ -3512,5 +3511,4 @@ mod tests {
         assert_eq!(bus.dma_transfer_count(3), Some(0xFFFF));
         assert_eq!(bus.dma_transfer_count(4), None);
     }
-
 }
