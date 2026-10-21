@@ -78,7 +78,8 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 The machine facade also exposes `run_for_cycles(budget)` for approximate cycle-budget
-execution, `run_until_scanline(line, max_steps)` for bounded scanline synchronization,
+execution, `run_until_audio_fifo_refill(fifo, max_steps)` to run until Direct Sound FIFO A (0)
+or B (1) reaches its 16-byte refill threshold, `run_until_scanline(line, max_steps)` for bounded scanline synchronization,
 `run_until_vblank(max_steps)` for VBlank synchronization, `run_until_hblank(max_steps)`
 for HBlank synchronization, `run_until_vcount_match(max_steps)` for the programmed DISPSTAT compare event,
 and `run_until_interrupt(max_steps)` for observing enabled pending IRQs. The masked variants `run_until_interrupt_mask(mask, max_steps)` and `run_until_next_interrupt_mask(mask, max_steps)` wait for selected IF/IE sources without stopping for unrelated IRQs; a zero mask never matches. Instruction-level
