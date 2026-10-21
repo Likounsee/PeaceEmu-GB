@@ -1255,7 +1255,7 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(
             0x0400_0132,
-            (1 << 14) | GbaButton::A.mask() | GbaButton::Start.mask(),
+            GbaButton::A.mask() | GbaButton::Start.mask(), // OR mode: either selected key requests IRQ
         );
         bus.set_button_pressed(GbaButton::Start, true);
         assert!(bus.is_button_pressed(GbaButton::Start));
