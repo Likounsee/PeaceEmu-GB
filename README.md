@@ -43,7 +43,7 @@ cargo build --manifest-path GameBoy/Cargo.toml
 
 The memory bus exposes `gamepak_access_cycles(address, sequential)` and `gamepak_access_cycles_for_width(address, sequential, width_bytes)` to decode WAITCNT durations for ROM0/ROM1/ROM2 and SRAM. Width-aware estimates account for the ROM's 16-bit bus, SRAM's 8-bit bus, and reject unsupported widths or accesses that cross a timing-region boundary. These are timing queries only; CPU execution does not yet automatically apply Game Pak wait states.
 
-The exported `MachineSnapshot` provides a detached, immutable debugger view of CPU registers, estimated execution counters, video phase and time-to-boundary estimates, VCOUNT comparison state, interrupt state, timer counters/enabled/IRQ state and overflow estimates, DMA enable state, audio FIFO levels/samples, and keypad pressed/KEYCNT condition state. Capturing it does not advance emulation.
+The exported `MachineSnapshot` provides a detached, immutable debugger view of CPU registers, estimated execution counters, video phase and time-to-boundary estimates, VCOUNT comparison state, interrupt state, timer counters, reload values, prescaler/cascade configuration, IRQ state and overflow estimates, DMA enable/start/repeat/width/IRQ configuration, audio FIFO levels/samples, and keypad pressed/KEYCNT condition state. Capturing it does not advance emulation.
 
 The library exposes a high-level machine facade so callers do not have to wire
 the CPU and bus manually:
