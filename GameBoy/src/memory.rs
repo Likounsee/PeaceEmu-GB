@@ -2428,6 +2428,29 @@ mod tests {
 
         assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
         assert_eq!(bus.gamepak_access_cycles_for_width(0x0200_0000, false, 4), None);
+        // A word straddling two independently configured ROM wait-state regions
+        // is intentionally not represented as one homogeneous transfer.
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x09FF_FFFE, false, 4), None);
+
+        // Verify every non-sequential encoding and both sequential choices for each ROM bank.
+        for (bank, nonseq_shift, seq_bit, expected_seq_slow) in [
+            (0x0800_0000, 2, 4, 2),
+            (0x0A00_0000, 5, 7, 4),
+            (0x0C00_0000, 8, 10, 8),
+        ] {
+            for (encoding, expected) in [(0_u16, 4_u32), (1, 3), (2, 2), (3, 8)] {
+                bus.write16(0x0400_0204, encoding << nonseq_shift);
+                assert_eq!(
+                    bus.gamepak_access_cycles(bank, false),
+                    Some(expected),
+                    "bank {bank:08X}, non-sequential encoding {encoding}"
+                );
+            }
+            bus.write16(0x0400_0204, 0);
+            assert_eq!(bus.gamepak_access_cycles(bank, true), Some(expected_seq_slow));
+            bus.write16(0x0400_0204, 1 << seq_bit);
+            assert_eq!(bus.gamepak_access_cycles(bank, true), Some(1));
+        }
     }
 
     #[test]
