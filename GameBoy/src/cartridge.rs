@@ -16,6 +16,7 @@ pub struct GbaCartridge {
     title: String,
     game_code: String,
     maker_code: String,
+    save_type: Option<crate::save::SaveType>,
 }
 
 impl GbaCartridge {
@@ -54,6 +55,7 @@ impl GbaCartridge {
             title: header_string(&bytes[0xA0..0xAC]),
             game_code: header_string(&bytes[0xAC..0xB0]),
             maker_code: header_string(&bytes[0xB0..0xB2]),
+            save_type: crate::save::SaveType::detect(bytes),
         })
     }
 
@@ -93,7 +95,7 @@ impl GbaCartridge {
     /// may preserve stale ones. Unknown signatures return `None` rather than
     /// silently assuming SRAM or another device.
     pub fn save_type(&self) -> Option<crate::save::SaveType> {
-        crate::save::SaveType::detect(&self.rom)
+        self.save_type
     }
 
     pub(crate) fn read_rom_byte(&self, offset: usize) -> u8 {
