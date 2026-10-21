@@ -2583,7 +2583,9 @@ mod tests {
     #[test]
     fn keypad_irq_waiter_respects_step_budget_without_matching_keys() {
         let mut machine = GbaMachine::new(cartridge());
-        machine.bus_mut().write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
+        machine
+            .bus_mut()
+            .write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
         machine.bus_mut().write16(0x0400_0200, 1 << 12);
         machine.bus_mut().write16(0x0400_0208, 1);
         assert_eq!(machine.run_until_keypad_interrupt(3).unwrap(), 3);
