@@ -94,6 +94,8 @@ event or limit; IRQ exception entry is not implemented yet. The initial program 
 development API, not a promise of complete commercial-game compatibility or accurate
 frame pacing.
 
+The machine facade also forwards diagnostic snapshots for interrupt IE/IF/IME state (`interrupt_enable_mask()`, `interrupt_request_flags()`, and `interrupt_master_enabled()`), live video status (`video_scanline()`, `video_in_vblank()`, `video_in_hblank()`, and `video_vcount_match()`), Game Pak access-duration estimates (`gamepak_access_cycles()`), and Direct Sound FIFO queue/sample state (`audio_fifo_len()` and `audio_fifo_last_sample()`). These are inspection APIs and do not add CPU wait-state integration or IRQ exception entry.
+
 `GbaMachine::run_until_timer_overflow(timer, max_steps)` can synchronize a bounded run to an enabled non-cascade timer's estimated overflow. It returns `None` for unsupported timer modes or when the instruction limit expires, and may overshoot by the last instruction. Timer inspection is available through `timer_counter(index)`, `timer_reload_value(index)`, and `timer_enabled(index)`. `timer_cycles_until_overflow(index)` estimates the remaining CPU cycles for enabled non-cascade timers and accounts for the active prescaler phase; it returns `None` when the timer is disabled or uses cascade mode. Direct Sound FIFO users can call `audio_fifo_bytes_until_refill(fifo)` on either `MemoryBus` or `GbaMachine` to check how many bytes remain before the 16-byte refill threshold.
 
 ## Project status
