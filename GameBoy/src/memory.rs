@@ -3992,12 +3992,13 @@ mod tests {
         assert_eq!(bus.interrupt_request_flags() & (1 << 3), 0);
 
         // A divided timer advances only when its prescaler phase reaches 64.
+        bus.write16(0x0400_0100, 0x1234);
         bus.write16(0x0400_0102, 0x0081);
         let before = bus.timer_counter(0).unwrap();
         bus.advance_cycles(63);
         assert_eq!(bus.timer_counter(0), Some(before));
         bus.advance_cycles(1);
-        assert_eq!(bus.timer_counter(0), Some(before.wrapping_add(1)));
+        assert_eq!(bus.timer_counter(0), Some(0x1234));
     }
 
     #[test]
