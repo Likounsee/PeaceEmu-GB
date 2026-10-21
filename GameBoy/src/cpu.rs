@@ -2689,6 +2689,7 @@ mod tests {
         assert_eq!(bus.read16(0x0200_0102), 0x80FF);
 
         bus.write8(0x0200_0101, 0x80);
+        cpu.set_register(1, 0x0200_0101);
         let (_, signed_load_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(signed_load_cycles, 3);
         assert_eq!(cpu.register(3), Some(0xFFFF_FF80));
