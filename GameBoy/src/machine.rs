@@ -160,6 +160,21 @@ impl GbaMachine {
         self.bus.dma_control(channel)
     }
 
+    /// Returns the currently programmed source address for DMA channel 0–3.
+    pub fn dma_source_address(&self, channel: usize) -> Option<u32> {
+        self.bus.dma_source_address(channel)
+    }
+
+    /// Returns the currently programmed destination address for DMA channel 0–3.
+    pub fn dma_destination_address(&self, channel: usize) -> Option<u32> {
+        self.bus.dma_destination_address(channel)
+    }
+
+    /// Returns the masked DMA count register as programmed.
+    pub fn dma_count_register(&self, channel: usize) -> Option<u16> {
+        self.bus.dma_count_register(channel)
+    }
+
     /// Returns whether a DMA channel is enabled.
     pub fn dma_enabled(&self, channel: usize) -> Option<bool> {
         self.bus.dma_enabled(channel)
@@ -208,6 +223,11 @@ impl GbaMachine {
     /// Returns whether the interrupt master-enable (IME) bit is set.
     pub fn interrupt_master_enabled(&self) -> bool {
         self.bus.interrupt_master_enabled()
+    }
+
+    /// Returns enabled interrupt sources with a latched request (IE & IF), regardless of IME.
+    pub fn pending_interrupts(&self) -> u16 {
+        self.bus.pending_interrupts()
     }
 
     /// Returns whether an enabled interrupt is ready for CPU service (IME, IE, and IF).
@@ -933,6 +953,19 @@ mod tests {
     }
 
     #[test]
+    fn pending_interrupt_mask_is_independent_of_master_enable() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0200, (1 << 0) | (1 << 3));
+        machine.bus_mut().request_interrupt((1 << 0) | (1 << 2) | (1 << 3));
+        assert_eq!(machine.pending_interrupts(), (1 << 0) | (1 << 3));
+        assert!(!machine.interrupt_pending());
+        machine.bus_mut().write16(0x0400_0208, 1);
+        assert!(machine.interrupt_pending());
+        machine.bus_mut().acknowledge_interrupts(1 << 0);
+        assert_eq!(machine.pending_interrupts(), 1 << 3);
+    }
+
+    #[test]
     fn machine_forwards_interrupt_register_diagnostics() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.interrupt_enable_mask(), 0);
@@ -1308,6 +1341,20 @@ mod tests {
         assert_eq!(machine.dma_start_timing(0), Some(1));
         assert_eq!(machine.dma_word_transfer(0), Some(true));
         assert_eq!(machine.dma_irq_enabled(0), Some(true));
+    }
+
+    #[test]
+    fn machine_forwards_dma_address_and_count_registers() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_1234);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_5678);
+        machine.bus_mut().write16(0x0400_00B8, 0xFFFF);
+        assert_eq!(machine.dma_source_address(0), Some(0x0200_1234));
+        assert_eq!(machine.dma_destination_address(0), Some(0x0300_5678));
+        assert_eq!(machine.dma_count_register(0), Some(0x3FFF));
+        assert_eq!(machine.dma_source_address(4), None);
+        assert_eq!(machine.dma_destination_address(4), None);
+        assert_eq!(machine.dma_count_register(4), None);
     }
 
     #[test]
