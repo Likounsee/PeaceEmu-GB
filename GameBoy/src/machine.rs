@@ -302,6 +302,16 @@ impl GbaMachine {
         self.run_until_interrupt_mask(u16::MAX, max_steps)
     }
 
+    /// Executes until a configured keypad interrupt is CPU-visible or the step limit expires.
+    ///
+    /// This waits for the keypad IRQ source (IF bit 12) with IE and IME enabled;
+    /// it does not synthesize button presses or enter an IRQ exception. Returns
+    /// zero if the keypad IRQ is already pending, or the number of instructions
+    /// executed before it becomes pending. Returns `max_steps` on timeout.
+    pub fn run_until_keypad_interrupt(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        self.run_until_interrupt_mask(1 << 12, max_steps)
+    }
+
     /// Executes up to `max_steps` instructions until a selected enabled IRQ is pending.
     ///
     /// `interrupt_mask` uses the GBA IF bit layout (VBlank bit 0, HBlank bit 1,
@@ -745,6 +755,14 @@ impl GbaMachine {
     /// Returns whether a physical keypad button is currently pressed.
     pub fn is_button_pressed(&self, button: GbaButton) -> bool {
         self.bus.is_button_pressed(button)
+    }
+
+    /// Returns whether KEYCNT's selected-button condition is currently satisfied.
+    ///
+    /// This reports the keypad condition itself, independently of whether the
+    /// keypad IRQ is enabled in IE/IME or has been acknowledged in IF.
+    pub fn keypad_irq_requested(&self) -> bool {
+        self.bus.keypad_irq_requested()
     }
 
     /// Returns frontend-relevant state for Direct Sound FIFO A (0) or B (1).
@@ -1598,6 +1616,32 @@ mod tests {
         }
         assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(4));
         assert_eq!(machine.run_until_audio_fifo_refill(0, 0).unwrap(), None);
+    }
+
+    #[test]
+    fn keypad_irq_waiter_observes_keycnt_condition_and_interrupt_masks() {
+        let mut machine = GbaMachine::new(cartridge());
+        let keycnt = (1 << 14) | GbaButton::A.mask();
+        machine.bus_mut().write16(0x0400_0132, keycnt);
+        assert!(!machine.keypad_irq_requested());
+        assert_eq!(machine.run_until_keypad_interrupt(0).unwrap(), 0);
+        assert!(!machine.interrupt_pending());
+
+        machine.set_button_pressed(GbaButton::A, true);
+        assert!(machine.keypad_irq_requested());
+        assert_eq!(machine.interrupt_request_flags() & (1 << 12), 1 << 12);
+        // The request is latched, but it is not CPU-visible until IE and IME are set.
+        assert!(!machine.interrupt_pending());
+        machine.bus_mut().write16(0x0400_0200, 1 << 12);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        assert!(machine.interrupt_pending());
+        assert_eq!(machine.run_until_keypad_interrupt(0).unwrap(), 0);
+
+        machine.acknowledge_interrupts(1 << 12);
+        assert!(!machine.interrupt_pending());
+        assert!(machine.keypad_irq_requested());
+        machine.set_button_pressed(GbaButton::A, false);
+        assert!(!machine.keypad_irq_requested());
     }
 
     #[test]
