@@ -3181,6 +3181,9 @@ mod tests {
         bus.write32(0x0400_00A0, 0x0000_0000);
         bus.audio_fifos[0].clear();
         bus.audio_last_samples[0] = 37;
+        // Overflow timer 0 on the next cycle to clock an empty FIFO.
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
 
         bus.advance_cycles(1);
         assert_eq!(bus.audio_fifo_len(0), Some(0));
