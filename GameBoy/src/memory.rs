@@ -2744,7 +2744,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn gamepak_width_timing_models_rom_halfwords_and_sram_bytes() {
         let mut bus = MemoryBus::new(cartridge());
 
