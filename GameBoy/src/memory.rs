@@ -3453,4 +3453,26 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn gamepak_timing_validates_each_window_boundary() {
+        let bus = MemoryBus::new(cartridge());
+        for (start, end) in [
+            (0x0800_0000, 0x09FF_FFFF),
+            (0x0A00_0000, 0x0BFF_FFFF),
+            (0x0C00_0000, 0x0DFF_FFFF),
+            (0x0E00_0000, 0x0FFF_FFFF),
+        ] {
+            assert!(bus.gamepak_access_cycles(start, false).is_some());
+            assert!(bus.gamepak_access_cycles(end, false).is_some());
+            assert_eq!(
+                bus.gamepak_access_cycles_for_width(end, false, 2),
+                None,
+                "halfword must not cross the window end at {end:#010X}"
+            );
+        }
+        assert_eq!(bus.gamepak_access_cycles(0x07FF_FFFF, false), None);
+        assert_eq!(bus.gamepak_access_cycles(0x1000_0000, false), None);
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
+    }
 }
