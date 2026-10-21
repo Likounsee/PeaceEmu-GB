@@ -4102,7 +4102,7 @@ mod tests {
         rom_bus.write16(0x0400_0204, 0);
         let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
 
-        let mut ram_bus = bus_with_program(&[0x6808_2001]);
+        let mut ram_bus = bus_with_program(&[0x2001_6808]);
         let mut ram_cpu = Cpu::new();
         ram_cpu.reset(0x0200_0000);
         ram_cpu.set_execution_state(true);
