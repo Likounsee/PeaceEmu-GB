@@ -216,6 +216,36 @@ impl MemoryBus {
         &self.oam
     }
 
+    /// Returns the title declared in the loaded cartridge header.
+    pub fn cartridge_title(&self) -> &str {
+        self.cartridge.title()
+    }
+
+    /// Returns the four-byte game code declared in the loaded cartridge header.
+    pub fn cartridge_game_code(&self) -> &str {
+        self.cartridge.game_code()
+    }
+
+    /// Returns the two-byte maker code declared in the loaded cartridge header.
+    pub fn cartridge_maker_code(&self) -> &str {
+        self.cartridge.maker_code()
+    }
+
+    /// Returns the fixed byte at cartridge header offset 0xB2.
+    pub fn cartridge_header_fixed_value(&self) -> u8 {
+        self.cartridge.header_fixed_value()
+    }
+
+    /// Returns the software revision byte at cartridge header offset 0xBC.
+    pub fn cartridge_software_version(&self) -> u8 {
+        self.cartridge.software_version()
+    }
+
+    /// Returns the validated complement checksum stored at header offset 0xBD.
+    pub fn cartridge_header_checksum(&self) -> u8 {
+        self.cartridge.header_checksum()
+    }
+
     /// Returns the backup-device type inferred from the loaded cartridge ROM.
     ///
     /// This is signature-based metadata; SRAM and Flash are mapped to their
