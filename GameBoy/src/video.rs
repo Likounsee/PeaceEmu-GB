@@ -1291,6 +1291,21 @@ mod tests {
     }
 
     #[test]
+    fn bitmap_mode5_affine_reference_wraps_when_overflow_is_enabled() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 5 | (1 << 10));
+        bus.write16(0x0400_000C, 1 << 13); // BG2 affine overflow/wrap.
+        bus.write16(0x0400_0028, 0xFFFF);
+        bus.write16(0x0400_002A, 0x0FFF); // source x starts at -1
+        bus.write16(VRAM_BASE + ((MODE_5_WIDTH - 1) * 2) as u32, 0x001F);
+        bus.write16(VRAM_BASE, 0x03E0);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 5 should render");
+        assert_eq!(frame.pixel(40, 16), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(41, 16), Some(0xFF00_FF00));
+    }
+
+    #[test]
     fn bitmap_mode3_affine_reference_wraps_when_overflow_is_enabled() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 3 | (1 << 10));
