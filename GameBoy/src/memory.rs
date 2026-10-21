@@ -394,6 +394,41 @@ impl MemoryBus {
         Some((u64::from(u16::MAX) + 1 - counter) * divisor - phase)
     }
 
+    /// Returns the masked DMA control register for channel 0–3.
+    ///
+    /// The returned value reflects the register's writable bits after hardware
+    /// masking. Returns None for an invalid channel.
+    pub fn dma_control(&self, channel: usize) -> Option<u16> {
+        if channel >= 4 {
+            return None;
+        }
+        Some(self.read16(0x0400_00BA + channel as u32 * 12))
+    }
+
+    /// Returns whether a DMA channel is currently enabled.
+    pub fn dma_enabled(&self, channel: usize) -> Option<bool> {
+        self.dma_control(channel)
+            .map(|control| control & 0x8000 != 0)
+    }
+
+    /// Returns the DMA start timing selector (0 immediate, 1 VBlank, 2 HBlank, 3 special).
+    pub fn dma_start_timing(&self, channel: usize) -> Option<u8> {
+        self.dma_control(channel)
+            .map(|control| ((control >> 12) & 3) as u8)
+    }
+
+    /// Returns whether a DMA channel transfers 32-bit words rather than halfwords.
+    pub fn dma_word_transfer(&self, channel: usize) -> Option<bool> {
+        self.dma_control(channel)
+            .map(|control| control & (1 << 10) != 0)
+    }
+
+    /// Returns whether a DMA channel is configured to request an IRQ on completion.
+    pub fn dma_irq_enabled(&self, channel: usize) -> Option<bool> {
+        self.dma_control(channel)
+            .map(|control| control & (1 << 14) != 0)
+    }
+
     /// Returns the currently enabled interrupt sources (IE), with reserved bits removed.
     pub fn interrupt_enable_mask(&self) -> u16 {
         self.interrupt_enable & 0x3FFF
@@ -2092,6 +2127,27 @@ mod tests {
             assert_eq!(bus.timer_prescaler_phase(0), Some(0));
             assert_eq!(bus.timer_counter(0), Some(1));
         }
+    }
+
+    #[test]
+    fn dma_control_inspection_reports_masked_configuration() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.dma_control(4), None);
+        assert_eq!(bus.dma_enabled(4), None);
+        assert_eq!(bus.dma_start_timing(4), None);
+
+        bus.write16(0x0400_00BA, 0xC400);
+        assert_eq!(bus.dma_control(0), Some(0xC400));
+        assert_eq!(bus.dma_enabled(0), Some(true));
+        assert_eq!(bus.dma_start_timing(0), Some(0));
+        assert_eq!(bus.dma_word_transfer(0), Some(true));
+        assert_eq!(bus.dma_irq_enabled(0), Some(true));
+
+        bus.write16(0x0400_00BA, 0x6000);
+        assert_eq!(bus.dma_enabled(0), Some(false));
+        assert_eq!(bus.dma_start_timing(0), Some(2));
+        assert_eq!(bus.dma_word_transfer(0), Some(false));
+        assert_eq!(bus.dma_irq_enabled(0), Some(true));
     }
 
     #[test]
