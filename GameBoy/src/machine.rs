@@ -16,6 +16,14 @@ pub struct MachineSnapshot {
     pub cycles_elapsed: u64,
     /// Current WAITCNT register value used to estimate Game Pak access durations.
     pub gamepak_wait_control: u16,
+    /// Size of the loaded cartridge ROM image in bytes.
+    pub cartridge_rom_size_bytes: usize,
+    /// Backup-device type inferred from the loaded cartridge ROM, if recognized.
+    pub cartridge_save_type: Option<crate::SaveType>,
+    /// Fixed byte from cartridge header offset 0xB2 (normally 0x96 in retail ROMs).
+    pub cartridge_header_fixed_value: u8,
+    /// Software revision byte from cartridge header offset 0xBC.
+    pub cartridge_software_version: u8,
     /// Current video scanline (0–227).
     pub video_scanline: u16,
     /// Cycles elapsed within the current scanline.
@@ -1153,6 +1161,10 @@ impl GbaMachine {
             instructions_executed: self.instructions_executed,
             cycles_elapsed: self.cycles_elapsed,
             gamepak_wait_control: self.bus.gamepak_wait_control(),
+            cartridge_rom_size_bytes: self.bus.cartridge_rom_size_bytes(),
+            cartridge_save_type: self.bus.cartridge_save_type(),
+            cartridge_header_fixed_value: self.bus.cartridge_header_fixed_value(),
+            cartridge_software_version: self.bus.cartridge_software_version(),
             video_scanline: self.bus.video_scanline(),
             video_cycles_into_scanline: self.bus.video_cycles_into_scanline(),
             video_in_vblank: self.bus.video_in_vblank(),
@@ -1367,6 +1379,11 @@ mod tests {
         assert_eq!(machine.cartridge_maker_code(), "01");
         assert_eq!(machine.cartridge_header_fixed_value(), 0x96);
         assert_eq!(machine.cartridge_software_version(), 7);
+        let snapshot = machine.diagnostic_snapshot();
+        assert_eq!(snapshot.cartridge_rom_size_bytes, GBA_HEADER_SIZE);
+        assert_eq!(snapshot.cartridge_save_type, None);
+        assert_eq!(snapshot.cartridge_header_fixed_value, 0x96);
+        assert_eq!(snapshot.cartridge_software_version, 7);
         assert_eq!(machine.cartridge_header_checksum(), rom[0xBD]);
     }
 
@@ -2537,6 +2554,10 @@ mod tests {
         let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
 
         assert_eq!(machine.cartridge_save_type(), Some(crate::SaveType::Sram));
+        assert_eq!(
+            machine.diagnostic_snapshot().cartridge_save_type,
+            Some(crate::SaveType::Sram)
+        );
         assert_eq!(
             machine.save_data_size_bytes(),
             Some(crate::memory::SRAM_SIZE)
