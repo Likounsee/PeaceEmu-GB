@@ -514,14 +514,26 @@ fn render_affine_background(
         };
         let source_x_base = reference_x + pb * screen_y as i32;
         let source_y_base = reference_y + pd * screen_y as i32;
+        // Walk affine coordinates across the scanline instead of multiplying
+        // the PA/PC coefficients by X for every output pixel. Mosaic pixels
+        // reuse the same source coordinate until the next mosaic block.
+        let mut previous_screen_x = 0_i32;
+        let mut source_x_fixed = source_x_base;
+        let mut source_y_fixed = source_y_base;
         for x in 0..SCREEN_WIDTH {
             let screen_x = if mosaic_enabled {
                 (x as u32 / mosaic_width) * mosaic_width
             } else {
                 x as u32
-            };
-            let source_x = (source_x_base + pa * screen_x as i32) >> 8;
-            let source_y = (source_y_base + pc * screen_x as i32) >> 8;
+            } as i32;
+            if x != 0 && screen_x != previous_screen_x {
+                let delta = screen_x - previous_screen_x;
+                source_x_fixed += pa * delta;
+                source_y_fixed += pc * delta;
+            }
+            previous_screen_x = screen_x;
+            let source_x = source_x_fixed >> 8;
+            let source_y = source_y_fixed >> 8;
             let (source_x, source_y) = if wrap {
                 (
                     source_x.rem_euclid(size as i32) as u32,
