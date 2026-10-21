@@ -1144,6 +1144,7 @@ mod tests {
         assert_eq!(machine.pending_interrupts(), 0);
         assert!(!machine.interrupt_pending());
     }
+
     #[test]
     fn machine_exposes_input_and_renders_a_frame() {
         let mut machine = GbaMachine::new(cartridge());
