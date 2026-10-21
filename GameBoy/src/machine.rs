@@ -1842,18 +1842,29 @@ mod tests {
     fn machine_gamepak_sequence_timing_tracks_waitcnt_updates() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0204, 0);
-        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 4), Some(10));
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 4),
+            Some(10)
+        );
 
         machine.bus_mut().write16(0x0400_0204, (1 << 2) | (1 << 4));
         assert_eq!(machine.gamepak_wait_control(), 0x0014);
         assert_eq!(machine.diagnostic_snapshot().gamepak_wait_control, 0x0014);
         assert_eq!(machine.gamepak_access_cycles(0x0800_0000, false), Some(3));
         assert_eq!(machine.gamepak_access_cycles_for_width(0x0800_0000, true, 4), Some(2));
-        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 4), Some(6));
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 4),
+            Some(6)
+        );
 
-        machine.bus_mut().write16(0x0400_0204, (1 << 2) | (1 << 4) | (2 << 5) | (1 << 7));
+        machine
+            .bus_mut()
+            .write16(0x0400_0204, (1 << 2) | (1 << 4) | (2 << 5) | (1 << 7));
         assert_eq!(machine.gamepak_access_cycles(0x0A00_0000, false), Some(2));
-        assert_eq!(machine.gamepak_sequence_cycles(0x0A00_0000, false, 2, 4), Some(5));
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0A00_0000, false, 2, 4),
+            Some(5)
+        );
     }
 
     #[test]
