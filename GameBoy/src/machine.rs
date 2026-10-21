@@ -1441,6 +1441,19 @@ mod tests {
     }
 
     #[test]
+    fn instruction_batch_runner_stops_cleanly_on_cpu_error() {
+        let mut rom = cartridge().rom().to_vec();
+        rom[..4].copy_from_slice(&0xF000_0000_u32.to_le_bytes());
+        let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+        let before = machine.diagnostic_snapshot();
+
+        assert!(machine.run_for_instructions(4).is_err());
+        assert_eq!(machine.diagnostic_snapshot(), before);
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
+    }
+
+    #[test]
     fn batch_execution_matches_machine_diagnostic_counters() {
         let mut machine = GbaMachine::new(cartridge());
         let cycles = machine.run_steps(8).unwrap();
