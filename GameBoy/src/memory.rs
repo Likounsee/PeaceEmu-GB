@@ -251,6 +251,16 @@ impl MemoryBus {
         })
     }
 
+    /// Returns the number of additional sample bytes before a FIFO reaches
+    /// its 16-byte-or-less refill threshold.
+    ///
+    /// Returns zero if refill is already due, or None for an invalid FIFO index.
+    pub fn audio_fifo_bytes_until_refill(&self, fifo: usize) -> Option<usize> {
+        self.audio_fifos
+            .get(fifo)
+            .map(|queue| queue.len().saturating_sub(16))
+    }
+
     /// Mixes the current Direct Sound FIFO DAC latches into a stereo sample.
     ///
     /// The returned pair is (left, right). SOUNDCNT_H routing and half/full
@@ -1643,6 +1653,22 @@ mod tests {
                 address + 1
             );
         }
+    }
+
+    #[test]
+    fn audio_fifo_refill_distance_tracks_queue_threshold() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.audio_fifo_bytes_until_refill(0), Some(0));
+        assert_eq!(bus.audio_fifo_bytes_until_refill(2), None);
+
+        bus.write32(0x0400_00A0, 0x0102_0304);
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+        assert_eq!(bus.audio_fifo_bytes_until_refill(0), Some(0));
+        for _ in 0..7 {
+            bus.write32(0x0400_00A0, 0x0102_0304);
+        }
+        assert_eq!(bus.audio_fifo_len(0), Some(32));
+        assert_eq!(bus.audio_fifo_bytes_until_refill(0), Some(16));
     }
 
     #[test]
