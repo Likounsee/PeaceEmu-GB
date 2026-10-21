@@ -2982,6 +2982,23 @@ mod tests {
             bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
             Some(6)
         );
+
+        // Every ROM halfword aligns to the physical bus address; the sequence
+        // still advances by the requested access width and charges later reads
+        // as sequential. SRAM remains byte-wide and does not use ROM alignment.
+        bus.write16(0x0400_0204, 0);
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0001, false, 2, 2),
+            Some(6)
+        );
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0003, false, 4, 2),
+            Some(10)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4),
+            bus.gamepak_access_cycles_for_width(0x0E00_0001, false, 4)
+        );
     }
 
     #[test]
