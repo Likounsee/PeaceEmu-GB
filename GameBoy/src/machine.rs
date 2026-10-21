@@ -650,6 +650,20 @@ impl GbaMachine {
         self.bus.gamepak_access_cycles(address, sequential)
     }
 
+    /// Estimates Game Pak bus cycles for one 8-, 16-, or 32-bit access.
+    ///
+    /// This reports bus duration only; it does not advance emulation or apply
+    /// wait states to CPU instruction timing.
+    pub fn gamepak_access_cycles_for_width(
+        &self,
+        address: u32,
+        sequential: bool,
+        width_bytes: u8,
+    ) -> Option<u32> {
+        self.bus
+            .gamepak_access_cycles_for_width(address, sequential, width_bytes)
+    }
+
     /// Estimates total Game Pak bus cycles for a sequence of same-width accesses.
     ///
     /// The first access uses the first_sequential flag; later accesses are modeled as sequential.
@@ -1314,6 +1328,18 @@ mod tests {
         assert_eq!(
             machine.gamepak_access_cycles(0x0800_0000, false),
             machine.bus().gamepak_access_cycles(0x0800_0000, false)
+        );
+        for width in [1, 2, 4, 3] {
+            assert_eq!(
+                machine.gamepak_access_cycles_for_width(0x0800_0000, false, width),
+                machine
+                    .bus()
+                    .gamepak_access_cycles_for_width(0x0800_0000, false, width)
+            );
+        }
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0200_0000, false, 4),
+            None
         );
         assert_eq!(machine.gamepak_access_cycles(0x0200_0000, false), None);
     }
