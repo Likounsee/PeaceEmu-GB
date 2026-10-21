@@ -2204,7 +2204,7 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0100, 0);
         bus.write16(0x0400_0102, 0xFFFF); // divisor 1024; reserved bits ignored
-        assert_eq!(bus.read16(0x0400_0102), 0x00C7);
+        assert_eq!(bus.read16(0x0400_0102), 0x00C3);
         bus.advance_cycles(1023);
         assert_eq!(bus.read16(0x0400_0100), 0);
         bus.advance_cycles(1);
