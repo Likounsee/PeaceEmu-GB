@@ -894,8 +894,9 @@ impl GbaMachine {
 
     /// Returns the configured Game Pak WAITCNT register.
     ///
-    /// This is a configuration snapshot; WAITCNT timing is not yet integrated
-    /// into actual CPU memory-access cycle accounting.
+    /// This is a configuration snapshot. WAITCNT excess latency is partially
+    /// integrated for instruction fetches; data accesses and DMA stalls remain
+    /// outside actual CPU cycle accounting.
     pub fn gamepak_wait_control(&self) -> u16 {
         self.bus.gamepak_wait_control()
     }

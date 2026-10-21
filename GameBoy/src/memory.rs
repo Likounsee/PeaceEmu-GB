@@ -551,7 +551,8 @@ impl MemoryBus {
     /// not an extra-cycle count. Sequential timing is ignored for SRAM, whose
     /// accesses always use its configured wait duration. This helper exposes
     /// register decoding for timing integrations; it does not by itself add
-    /// wait states to CPU execution.
+    /// wait states to CPU execution. CPU instruction fetches use the width-aware
+    /// helper to add modeled excess latency; data accesses and DMA remain partial.
     pub fn gamepak_access_cycles(&self, address: u32, sequential: bool) -> Option<u32> {
         let waitcnt = self.wait_control;
         match address {
@@ -3074,6 +3075,25 @@ mod tests {
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4),
             bus.gamepak_access_cycles_for_width(0x0E00_0001, false, 4)
+        );
+    }
+
+    #[test]
+    fn gamepak_word_sequences_charge_sequential_second_halfwords_and_bank_restarts() {
+        let mut bus = MemoryBus::new(cartridge());
+        // WS0 non-sequential=4, sequential=1; a word is two halfword transfers.
+        bus.write16(0x0400_0204, 1 << 4);
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 4, 2),
+            Some(11)
+        );
+
+        // ROM1 non-sequential=3, sequential=1. A word beginning at the end
+        // of ROM0 cannot carry the ROM0 sequence into the next wait-state bank.
+        bus.write16(0x0400_0204, (1 << 4) | (1 << 5));
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x09FF_FFFC, false, 4, 2),
+            Some(10)
         );
     }
 

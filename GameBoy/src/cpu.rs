@@ -4003,6 +4003,29 @@ mod tests {
     }
 
     #[test]
+    fn not_taken_thumb_branch_keeps_sequential_gamepak_fetch_timing() {
+        // BNE is not taken while Z is set, so the following halfword remains
+        // on the sequential fetch path rather than paying a branch refill.
+        let mut bus = bus_with_program(&[0xD1FF_2001]);
+        let mut cpu = Cpu::new();
+        cpu.set_execution_state(true);
+        cpu.set_register(15, 0x0800_00C0);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: false,
+            zero: true,
+            carry: false,
+            overflow: false,
+        });
+        bus.write16(0x0400_0204, 1 << 4);
+
+        let (_, branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        let (_, sequential_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+
+        assert_eq!(cpu.register(15), Some(0x0800_00C4));
+        assert!(branch_cycles > sequential_cycles);
+    }
+
+    #[test]
     fn thumb_gamepak_fetch_uses_halfword_waitcnt_timing() {
         let mut bus = bus_with_program(&[0x2001_2002]);
         let mut cpu = Cpu::new();
