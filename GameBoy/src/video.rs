@@ -2288,7 +2288,7 @@ mod tests {
         bus.write8(VRAM_BASE + 32, 1);
         bus.write16(PALETTE_BASE + 2, 0x001F); // Red BG0.
         bus.write16(0x0400_0040, 8); // WIN0 horizontal range [0,8).
-        bus.write16(0x0400_0044, 1 << 8); // WIN0 vertical range [0,1).
+        bus.write16(0x0400_0044, 1); // WIN0 vertical range [0,1).
         bus.write16(0x0400_0048, 0); // WIN0 hides all layers.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
 
@@ -2307,13 +2307,13 @@ mod tests {
         bus.write16(0x0700_0000, 0);
         bus.write16(0x0700_0002, 0);
         bus.write16(0x0700_0004, 0);
-        bus.write16(0x0400_0040, 8);
-        bus.write16(0x0400_0044, 1 << 8);
+        bus.write16(0x0400_0040, 4);
+        bus.write16(0x0400_0044, 1);
         bus.write16(0x0400_0048, 1 << 5); // Backdrop visible; OBJ hidden.
 
         let frame = render_bitmap_frame(&bus).unwrap();
         assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
-        assert_eq!(frame.pixel(8, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(4, 0), Some(0xFFFF_0000));
     }
 
 }
