@@ -554,6 +554,10 @@ impl GbaMachine {
         self.bus.gamepak_access_cycles(address, sequential)
     }
 
+    /// Estimates total Game Pak bus cycles for a sequence of same-width accesses.
+    ///
+    /// The first access uses the first_sequential flag; later accesses are modeled as sequential.
+    /// This inspection helper does not advance emulation.
     pub fn gamepak_sequence_cycles(
         &self,
         address: u32,
@@ -1160,7 +1164,10 @@ mod tests {
         assert_eq!(machine.video_scanline(), machine.bus().video_scanline());
         assert_eq!(machine.video_in_vblank(), machine.bus().video_in_vblank());
         assert_eq!(machine.video_in_hblank(), machine.bus().video_in_hblank());
-        assert_eq!(machine.video_vcount_match(), machine.bus().video_vcount_match());
+        assert_eq!(
+            machine.video_vcount_match(),
+            machine.bus().video_vcount_match()
+        );
         assert_eq!(
             machine.video_cycles_into_scanline(),
             machine.bus().video_cycles_into_scanline()
@@ -1187,10 +1194,7 @@ mod tests {
             machine.gamepak_access_cycles(0x0800_0000, false),
             machine.bus().gamepak_access_cycles(0x0800_0000, false)
         );
-        assert_eq!(
-            machine.gamepak_access_cycles(0x0200_0000, false),
-            None
-        );
+        assert_eq!(machine.gamepak_access_cycles(0x0200_0000, false), None);
     }
 
     #[test]
