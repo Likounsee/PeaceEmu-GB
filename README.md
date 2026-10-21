@@ -40,6 +40,8 @@ cargo build --manifest-path GameBoy/Cargo.toml
 
 ## Minimal integration example
 
+The memory bus exposes `gamepak_access_cycles(address, sequential)` to decode the configured WAITCNT access duration for ROM0/ROM1/ROM2 and SRAM. This reports the configured access duration for timing integrations; CPU execution does not yet automatically apply Game Pak wait states.
+
 The library exposes a high-level machine facade so callers do not have to wire
 the CPU and bus manually:
 
