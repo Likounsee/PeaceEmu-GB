@@ -489,7 +489,8 @@ impl GbaMachine {
         width_bytes: u8,
         access_count: usize,
     ) -> Option<u64> {
-        self.bus.gamepak_sequence_cycles(address, first_sequential, width_bytes, access_count)
+        self.bus
+            .gamepak_sequence_cycles(address, first_sequential, width_bytes, access_count)
     }
 
     /// Updates one physical keypad button while preserving the other button states.
@@ -1025,14 +1026,37 @@ mod tests {
         assert_eq!(machine.timer_enabled(4), None);
         assert_eq!(machine.timer_cycles_until_overflow(4), None);
         assert_eq!(machine.timer_counter(0), machine.bus().timer_counter(0));
-        assert_eq!(machine.timer_reload_value(0), machine.bus().timer_reload_value(0));
+        assert_eq!(
+            machine.timer_reload_value(0),
+            machine.bus().timer_reload_value(0)
+        );
         assert_eq!(machine.timer_enabled(0), machine.bus().timer_enabled(0));
-        assert_eq!(machine.timer_cycles_until_overflow(0), machine.bus().timer_cycles_until_overflow(0));
-        assert_eq!(machine.video_cycles_into_scanline(), machine.bus().video_cycles_into_scanline());
-        assert_eq!(machine.video_cycles_until_hblank(), machine.bus().video_cycles_until_hblank());
-        assert_eq!(machine.video_cycles_until_vblank(), machine.bus().video_cycles_until_vblank());
-        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), machine.bus().gamepak_sequence_cycles(0x0800_0000, false, 2, 3));
-        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 3, 2), None);
+        assert_eq!(
+            machine.timer_cycles_until_overflow(0),
+            machine.bus().timer_cycles_until_overflow(0)
+        );
+        assert_eq!(
+            machine.video_cycles_into_scanline(),
+            machine.bus().video_cycles_into_scanline()
+        );
+        assert_eq!(
+            machine.video_cycles_until_hblank(),
+            machine.bus().video_cycles_until_hblank()
+        );
+        assert_eq!(
+            machine.video_cycles_until_vblank(),
+            machine.bus().video_cycles_until_vblank()
+        );
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
+            machine
+                .bus()
+                .gamepak_sequence_cycles(0x0800_0000, false, 2, 3)
+        );
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0800_0000, false, 3, 2),
+            None
+        );
     }
 
     #[test]
