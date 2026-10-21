@@ -59,6 +59,14 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(frame) = machine.render_frame() {
         // frame.pixels contains opaque 0xAARRGGBB pixels.
         println!("rendered {}x{} pixels", frame.width, frame.height);
+
+        // Export for common frontend/GPU upload formats (all row-major).
+        let rgb = frame.to_rgb888().expect("valid framebuffer");
+        let rgba = frame.to_rgba8888().expect("valid framebuffer");
+        let bgra = frame.to_bgra8888().expect("valid framebuffer");
+        let rgb565 = frame.to_rgb565_le().expect("valid framebuffer");
+        println!("RGB bytes: {}, RGBA bytes: {}", rgb.len(), rgba.len());
+        println!("BGRA bytes: {}, RGB565 bytes: {}", bgra.len(), rgb565.len());
     }
     Ok(())
 }
