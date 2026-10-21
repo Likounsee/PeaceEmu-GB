@@ -226,125 +226,7 @@ impl Cpu {
             // The first half of Thumb BL only builds the high displacement
             // in LR; it does not redirect the PC or refill the pipeline.
             // The second half performs the branch and pays the refill cost.
-            if raw & 0xE000 == 0x0000 && raw & 0x1800 != 0x1800 {
-            // Thumb immediate LSL/LSR/ASR (format 1).
-            let kind = u32::from((raw >> 11) & 3);
-            let amount = u32::from((raw >> 6) & 0x1F);
-            let rs = usize::from((raw >> 3) & 7);
-            let rd = usize::from(raw & 7);
-            let (result, carry) =
-                Self::shift_thumb_immediate(self.registers[rs], kind, amount, self.flags.carry);
-            self.registers[rd] = result;
-            self.flags.negative = result >> 31 != 0;
-            self.flags.zero = result == 0;
-            if let Some(carry) = carry {
-                self.flags.carry = carry;
-            }
-        } else if raw & 0xF800 == 0x1800 {
-            // Thumb ADD/SUB with a register or a three-bit immediate.
-            let immediate = raw & (1 << 10) != 0;
-            let subtract = raw & (1 << 9) != 0;
-            let operand = u32::from((raw >> 6) & 7);
-            let rs = usize::from((raw >> 3) & 7);
-            let rd = usize::from(raw & 7);
-            let right = if immediate { operand } else { self.registers[operand as usize] };
-            let left = self.registers[rs];
-            let (result, carry, overflow) = if subtract {
-                Self::subtract(left, right, false)
-            } else {
-                Self::add(left, right, false)
-            };
-            self.registers[rd] = result;
-            self.set_arithmetic_flags(result, carry, overflow);
-        } else if raw & 0xE000 == 0x2000 {
-            // Thumb MOV/CMP/ADD/SUB with an eight-bit immediate.
-            let operation = (raw >> 11) & 3;
-            let rd = usize::from((raw >> 8) & 7);
-            let immediate = u32::from(raw & 0xFF);
-            let left = self.registers[rd];
-            match operation {
-                0 => {
-                    self.registers[rd] = immediate;
-                    self.flags.negative = false;
-                    self.flags.zero = immediate == 0;
-                }
-                1 => {
-                    let (result, carry, overflow) = Self::subtract(left, immediate, false);
-                    self.set_arithmetic_flags(result, carry, overflow);
-                }
-                2 | 3 => {
-                    let (result, carry, overflow) = if operation == 2 {
-                        Self::add(left, immediate, false)
-                    } else {
-                        Self::subtract(left, immediate, false)
-                    };
-                    self.registers[rd] = result;
-                    self.set_arithmetic_flags(result, carry, overflow);
-                }
-                _ => unreachable!(),
-            }
-        } else if raw & 0xFC00 == 0x4000 {
-            // The complete Thumb low-register ALU group.
-            let operation = (raw >> 6) & 0xF;
-            let rs = usize::from((raw >> 3) & 7);
-            let rd = usize::from(raw & 7);
-            let left = self.registers[rd];
-            let right = self.registers[rs];
-            let mut write_result = true;
-            let (result, carry, overflow) = match operation {
-                0 => (left & right, None, None), // AND
-                1 => (left ^ right, None, None), // EOR
-                2..=4 => {
-                    let (value, carry) = Self::shift_register(left, operation - 2, right & 0xFF);
-                    (value, carry, None)
-                }
-                5 => {
-                    let (value, carry, overflow) = Self::add(left, right, self.flags.carry);
-                    (value, Some(carry), Some(overflow))
-                }
-                6 => {
-                    let (value, carry, overflow) =
-                        Self::subtract(left, right, !self.flags.carry);
-                    (value, Some(carry), Some(overflow))
-                }
-                7 => {
-                    let (value, carry) = Self::shift_register(left, 3, right & 0xFF);
-                    (value, carry, None)
-                }
-                8 => { write_result = false; (left & right, None, None) } // TST
-                9 => {
-                    let (value, carry, overflow) = Self::subtract(0, right, false);
-                    (value, Some(carry), Some(overflow)) // NEG
-                }
-                10 => {
-                    write_result = false;
-                    let (value, carry, overflow) = Self::subtract(left, right, false);
-                    (value, Some(carry), Some(overflow))
-                }
-                11 => {
-                    write_result = false;
-                    let (value, carry, overflow) = Self::add(left, right, false);
-                    (value, Some(carry), Some(overflow))
-                }
-                12 => (left | right, None, None), // ORR
-                13 => (left.wrapping_mul(right), None, None), // MUL
-                14 => (left & !right, None, None), // BIC
-                15 => (!right, None, None), // MVN
-                _ => unreachable!(),
-            };
-            if write_result {
-                self.registers[rd] = result;
-            }
-            self.flags.negative = result >> 31 != 0;
-            self.flags.zero = result == 0;
-            if let Some(carry) = carry {
-                self.flags.carry = carry;
-            }
-            if let (Some(carry), Some(overflow)) = (carry, overflow) {
-                self.flags.carry = carry;
-                self.flags.overflow = overflow;
-            }
-        } else if raw & 0xF800 == 0xF000 {
+            if raw & 0xF800 == 0xF000 {
                 return 1;
             }
             // High-register ADD/MOV to PC and BX redirect execution and
@@ -578,6 +460,126 @@ impl Cpu {
         self.registers[15] = address.wrapping_add(2);
         let raw = instruction as u16;
 
+        if raw & 0xE000 == 0x0000 && raw & 0x1800 != 0x1800 {
+            // Thumb immediate LSL/LSR/ASR (format 1).
+            let kind = u32::from((raw >> 11) & 3);
+            let amount = u32::from((raw >> 6) & 0x1F);
+            let rs = usize::from((raw >> 3) & 7);
+            let rd = usize::from(raw & 7);
+            let (result, carry) =
+                Self::shift_thumb_immediate(self.registers[rs], kind, amount, self.flags.carry);
+            self.registers[rd] = result;
+            self.flags.negative = result >> 31 != 0;
+            self.flags.zero = result == 0;
+            if let Some(carry) = carry {
+                self.flags.carry = carry;
+            }
+        } else if raw & 0xF800 == 0x1800 {
+            // Thumb ADD/SUB with a register or a three-bit immediate.
+            let immediate = raw & (1 << 10) != 0;
+            let subtract = raw & (1 << 9) != 0;
+            let operand = usize::from((raw >> 6) & 7);
+            let rs = usize::from((raw >> 3) & 7);
+            let rd = usize::from(raw & 7);
+            let right = if immediate { operand as u32 } else { self.registers[operand] };
+            let left = self.registers[rs];
+            let (result, carry, overflow) = if subtract {
+                Self::subtract(left, right, false)
+            } else {
+                Self::add(left, right, false)
+            };
+            self.registers[rd] = result;
+            self.set_arithmetic_flags(result, carry, overflow);
+        } else if raw & 0xE000 == 0x2000 {
+            // Thumb MOV/CMP/ADD/SUB with an eight-bit immediate.
+            let operation = (raw >> 11) & 3;
+            let rd = usize::from((raw >> 8) & 7);
+            let immediate = u32::from(raw & 0xFF);
+            let left = self.registers[rd];
+            match operation {
+                0 => {
+                    self.registers[rd] = immediate;
+                    self.flags.negative = false;
+                    self.flags.zero = immediate == 0;
+                }
+                1 => {
+                    let (result, carry, overflow) = Self::subtract(left, immediate, false);
+                    self.set_arithmetic_flags(result, carry, overflow);
+                }
+                2 | 3 => {
+                    let (result, carry, overflow) = if operation == 2 {
+                        Self::add(left, immediate, false)
+                    } else {
+                        Self::subtract(left, immediate, false)
+                    };
+                    self.registers[rd] = result;
+                    self.set_arithmetic_flags(result, carry, overflow);
+                }
+                _ => unreachable!(),
+            }
+        } else if raw & 0xFC00 == 0x4000 {
+            // The complete Thumb low-register ALU group.
+            let operation = (raw >> 6) & 0xF;
+            let rs = usize::from((raw >> 3) & 7);
+            let rd = usize::from(raw & 7);
+            let left = self.registers[rd];
+            let right = self.registers[rs];
+            let mut write_result = true;
+            let (result, carry, overflow) = match operation {
+                0 => (left & right, None, None), // AND
+                1 => (left ^ right, None, None), // EOR
+                2..=4 => {
+                    let (value, carry) = Self::shift_register(left, operation - 2, right & 0xFF);
+                    (value, carry, None)
+                }
+                5 => {
+                    let (value, carry, overflow) = Self::add(left, right, self.flags.carry);
+                    (value, Some(carry), Some(overflow))
+                }
+                6 => {
+                    let (value, carry, overflow) =
+                        Self::subtract(left, right, !self.flags.carry);
+                    (value, Some(carry), Some(overflow))
+                }
+                7 => {
+                    let (value, carry) = Self::shift_register(left, 3, right & 0xFF);
+                    (value, carry, None)
+                }
+                8 => {
+                    write_result = false;
+                    (left & right, None, None)
+                } // TST
+                9 => {
+                    let (value, carry, overflow) = Self::subtract(0, right, false);
+                    (value, Some(carry), Some(overflow)) // NEG
+                }
+                10 => {
+                    write_result = false;
+                    let (value, carry, overflow) = Self::subtract(left, right, false);
+                    (value, Some(carry), Some(overflow))
+                }
+                11 => {
+                    write_result = false;
+                    let (value, carry, overflow) = Self::add(left, right, false);
+                    (value, Some(carry), Some(overflow))
+                }
+                12 => (left | right, None, None), // ORR
+                13 => (left.wrapping_mul(right), None, None), // MUL
+                14 => (left & !right, None, None), // BIC
+                15 => (!right, None, None), // MVN
+                _ => unreachable!(),
+            };
+            if write_result {
+                self.registers[rd] = result;
+            }
+            self.flags.negative = result >> 31 != 0;
+            self.flags.zero = result == 0;
+            if let Some(carry) = carry {
+                self.flags.carry = carry;
+            }
+            if let Some(overflow) = overflow {
+                self.flags.overflow = overflow;
+            }
         if raw & 0xF800 == 0xF000 {
             // First half of Thumb BL: form the signed high displacement in LR.
             let high_displacement = ((u32::from(raw & 0x07FF) << 21) as i32 >> 9) as u32;
