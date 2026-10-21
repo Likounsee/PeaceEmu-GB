@@ -378,7 +378,13 @@ impl GbaMachine {
         count: usize,
         max_steps_per_frame: usize,
     ) -> Result<Option<Vec<VideoFrame>>, CpuError> {
-        let mut frames = Vec::with_capacity(count);
+        // Do not reserve the caller-provided count up front: an untrusted or
+        // accidental enormous count must not trigger an immediate allocation
+        // panic when the first frame would fail its budget anyway.
+        if count == 0 {
+            return Ok(Some(Vec::new()));
+        }
+        let mut frames = Vec::new();
         for _ in 0..count {
             let Some(frame) = self.run_frame(max_steps_per_frame)? else {
                 return Ok(None);
@@ -612,6 +618,14 @@ mod tests {
     fn run_frames_with_zero_count_does_not_advance_the_machine() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_frames(0, 0).unwrap().unwrap().len(), 0);
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
+    }
+
+    #[test]
+    fn run_frames_does_not_preallocate_an_unbounded_requested_count() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert!(machine.run_frames(usize::MAX, 0).unwrap().is_none());
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
     }
