@@ -748,9 +748,14 @@ mod tests {
         assert_eq!(machine.keys_pressed(), 0);
 
         machine.set_keys_pressed(GbaButton::A.mask() | GbaButton::Down.mask() | (1 << 15));
-        assert_eq!(machine.keys_pressed(), GbaButton::A.mask() | GbaButton::Down.mask());
-        assert_eq!(machine.bus().read16(0x0400_0130) & 0x03FF,
-            !(GbaButton::A.mask() | GbaButton::Down.mask()) & 0x03FF);
+        assert_eq!(
+            machine.keys_pressed(),
+            GbaButton::A.mask() | GbaButton::Down.mask()
+        );
+        assert_eq!(
+            machine.bus().read16(0x0400_0130) & 0x03FF,
+            !(GbaButton::A.mask() | GbaButton::Down.mask()) & 0x03FF
+        );
 
         machine.run_steps(1).unwrap();
         assert!(machine.cycles_elapsed() > 0);
