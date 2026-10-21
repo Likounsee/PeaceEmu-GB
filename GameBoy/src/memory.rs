@@ -4012,4 +4012,77 @@ mod tests {
         bus.write8(0x0600_0003, 0x5C);
         assert_eq!(bus.read16(0x0600_0002), 0x5C5C);
     }
+
+    #[test]
+    fn hblank_and_vblank_irqs_latch_only_at_their_video_boundaries() {
+        let mut bus = MemoryBus::new(cartridge());
+        let hblank_irq = 1 << 1;
+        let vblank_irq = 1;
+
+        bus.write16(0x0400_0004, (1 << 3) | (1 << 4));
+        bus.advance_cycles(959);
+        assert_eq!(bus.interrupt_request_flags() & hblank_irq, 0);
+
+        bus.advance_cycles(1);
+        assert_eq!(bus.interrupt_request_flags() & hblank_irq, hblank_irq);
+        assert_eq!(bus.video_cycles_into_scanline(), 960);
+
+        bus.acknowledge_interrupts(hblank_irq);
+        bus.advance_cycles(272 + 159 * 1232);
+        assert_eq!(bus.video_scanline(), 160);
+        assert_eq!(bus.interrupt_request_flags() & vblank_irq, vblank_irq);
+        assert_eq!(bus.video_in_vblank(), true);
+    }
+
+    #[test]
+    fn vblank_dma_waits_for_boundary_then_copies_and_requests_irq() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0200_0100, 0xCAFE_BABE);
+        bus.write32(0x0400_00B0, 0x0200_0100);
+        bus.write32(0x0400_00B4, 0x0300_0020);
+        bus.write16(0x0400_00B8, 1);
+        // DMA0: enable, VBlank timing, and completion IRQ.
+        bus.write16(0x0400_00BA, 0xD000);
+
+        assert_eq!(bus.read32(0x0300_0020), 0);
+        assert_eq!(bus.read16(0x0400_0202) & (1 << 8), 0);
+        bus.advance_cycles(160 * 1232 - 1);
+        assert_eq!(bus.read32(0x0300_0020), 0);
+
+        bus.advance_cycles(1);
+        assert_eq!(bus.read32(0x0300_0020), 0xCAFE_BABE);
+        assert_eq!(bus.read16(0x0400_0202) & (1 << 8), 1 << 8);
+        assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
+    fn direct_sound_fifo_caps_at_32_bytes_and_holds_last_sample_on_underflow() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, 1 << 8); // FIFO A uses timer 0.
+
+        for _ in 0..10 {
+            bus.write32(0x0400_00A0, 0x7F40_20E0);
+        }
+        assert_eq!(bus.audio_fifo_len(0), Some(32));
+        assert_eq!(bus.audio_fifo_status(0).unwrap().capacity, 32);
+        assert_eq!(bus.audio_fifo_bytes_until_refill(0), Some(16));
+
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(31));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0xE0_u8 as i8));
+
+        // Reset the queue, clock an empty FIFO, and ensure the DAC latch holds.
+        bus.write16(0x0400_0082, 1 << 11);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0xE0_u8 as i8));
+    }
+
 }
