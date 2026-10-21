@@ -24,6 +24,41 @@ pub const IO_SIZE: usize = 1024;
 /// SRAM backup-device capacity (32 KiB); the 64 KiB bus window mirrors it.
 pub const SRAM_SIZE: usize = 32 * 1024;
 
+/// A physical button on the Game Boy Advance keypad.
+///
+/// The discriminant is the button's bit in the active-high pressed-key mask.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u16)]
+pub enum GbaButton {
+    /// A button.
+    A = 1 << 0,
+    /// B button.
+    B = 1 << 1,
+    /// Select button.
+    Select = 1 << 2,
+    /// Start button.
+    Start = 1 << 3,
+    /// Right direction.
+    Right = 1 << 4,
+    /// Left direction.
+    Left = 1 << 5,
+    /// Up direction.
+    Up = 1 << 6,
+    /// Down direction.
+    Down = 1 << 7,
+    /// Right shoulder button.
+    R = 1 << 8,
+    /// Left shoulder button.
+    L = 1 << 9,
+}
+
+impl GbaButton {
+    /// Returns this button's bit in the pressed-key mask.
+    pub const fn mask(self) -> u16 {
+        self as u16
+    }
+}
+
 /// GBA bus and writable memory regions.
 #[derive(Clone, Debug)]
 pub struct MemoryBus {
@@ -493,6 +528,25 @@ impl MemoryBus {
         let was_requested = self.keypad_irq_requested();
         self.keys_pressed = pressed & 0x03FF;
         self.latch_keypad_irq_on_rising_edge(was_requested);
+    }
+
+    /// Sets one button's state without changing the other nine buttons.
+    ///
+    /// `pressed = true` means physically pressed; KEYINPUT remains active-low.
+    /// A newly satisfied KEYCNT condition raises the keypad interrupt request.
+    pub fn set_button_pressed(&mut self, button: GbaButton, pressed: bool) {
+        let mask = button.mask();
+        let next = if pressed {
+            self.keys_pressed | mask
+        } else {
+            self.keys_pressed & !mask
+        };
+        self.set_keys_pressed(next);
+    }
+
+    /// Returns whether the specified physical button is currently pressed.
+    pub fn is_button_pressed(&self, button: GbaButton) -> bool {
+        self.keys_pressed & button.mask() != 0
     }
 
     /// Returns whether KEYCNT's configured keypad interrupt condition is met.
@@ -1194,6 +1248,24 @@ mod tests {
             .wrapping_neg();
         rom[0xBD] = checksum;
         GbaCartridge::parse(&rom).expect("test ROM header should validate")
+    }
+
+    #[test]
+    fn individual_button_updates_preserve_other_keys_and_trigger_keypad_irq() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0132, (1 << 14) | GbaButton::A.mask() | GbaButton::Start.mask());
+        bus.set_button_pressed(GbaButton::Start, true);
+        assert!(bus.is_button_pressed(GbaButton::Start));
+        assert!(!bus.is_button_pressed(GbaButton::A));
+        assert_eq!(bus.read16(0x0400_0130) & 0x03FF, !(GbaButton::Start.mask()) & 0x03FF);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
+
+        bus.set_button_pressed(GbaButton::A, true);
+        assert!(bus.is_button_pressed(GbaButton::A));
+        assert!(bus.is_button_pressed(GbaButton::Start));
+        bus.set_button_pressed(GbaButton::Start, false);
+        assert!(!bus.is_button_pressed(GbaButton::Start));
+        assert!(bus.is_button_pressed(GbaButton::A));
     }
 
     #[test]
