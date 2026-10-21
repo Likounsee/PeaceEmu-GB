@@ -1964,7 +1964,7 @@ mod tests {
     #[test]
     fn external_state_setup_updates_flags_and_aligns_pc_by_instruction_state() {
         let mut cpu = Cpu::new();
-        cpu.set_register(15, 0x0200_0003);
+        cpu.set_register(15, 0x0200_0000);
         cpu.set_condition_flags(ConditionFlags {
             negative: true,
             zero: false,
@@ -1972,6 +1972,7 @@ mod tests {
             overflow: true,
         });
         cpu.set_execution_state(true);
+        cpu.set_register(15, 0x0200_0003);
         assert!(cpu.is_thumb());
         assert_eq!(cpu.register(15), Some(0x0200_0002));
         assert!(cpu.flags().negative);
