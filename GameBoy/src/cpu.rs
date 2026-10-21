@@ -3996,9 +3996,8 @@ mod tests {
         });
         bus.write16(0x0400_0204, 1 << 4);
 
-        cpu.step_with_cycles(&mut bus).unwrap();
-        assert_eq!(cpu.register(15), Some(0x0800_00C2));
         let (_, branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(cpu.register(15), Some(0x0800_00C2));
         let (_, after_branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
 
         assert!(branch_cycles >= 3);
