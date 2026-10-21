@@ -1171,6 +1171,21 @@ mod tests {
     }
 
     #[test]
+    fn cpu_reset_restarts_instruction_count_runner_without_rebuilding_machine() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.run_steps(2).unwrap();
+        assert_eq!(machine.instructions_executed(), 2);
+        assert!(machine.cycles_elapsed() > 0);
+
+        machine.reset_cpu();
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
+        assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
+        assert_eq!(machine.run_until_instruction_count(1, 1).unwrap(), Some(1));
+        assert_eq!(machine.instructions_executed(), 1);
+    }
+
+    #[test]
     fn instruction_count_runner_uses_absolute_counter_and_honors_limits() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_until_instruction_count(0, 0).unwrap(), Some(0));
