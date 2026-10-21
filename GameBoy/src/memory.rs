@@ -2414,20 +2414,50 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
 
         // A ROM word is two 16-bit accesses: non-sequential first, sequential second.
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 1), Some(4));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 2), Some(4));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(6));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0A00_0000, false, 4), Some(8));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0C00_0000, false, 4), Some(12));
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 1),
+            Some(4)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 2),
+            Some(4)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+            Some(6)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0A00_0000, false, 4),
+            Some(8)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0C00_0000, false, 4),
+            Some(12)
+        );
 
         // SRAM is byte-wide, so each byte incurs the configured wait duration.
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4), Some(16));
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4),
+            Some(16)
+        );
         bus.write16(0x0400_0204, 0x7FFF);
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(9));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4), Some(32));
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+            Some(9)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4),
+            Some(32)
+        );
 
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0200_0000, false, 4), None);
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3),
+            None
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0200_0000, false, 4),
+            None
+        );
         // A word straddling two independently configured ROM wait-state regions
         // is intentionally not represented as one homogeneous transfer.
         assert_eq!(bus.gamepak_access_cycles_for_width(0x09FF_FFFE, false, 4), None);
