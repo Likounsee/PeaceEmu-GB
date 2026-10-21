@@ -3251,6 +3251,7 @@ mod tests {
         assert_eq!(eeprom_bus.read8(0x0E00_0000), 0xFF);
         assert_eq!(eeprom_bus.flash_data(), None);
     }
+
     #[test]
     fn gamepak_sequence_timing_handles_empty_sequences_and_region_boundaries() {
         let mut bus = MemoryBus::new(cartridge());
@@ -3261,7 +3262,10 @@ mod tests {
         assert_eq!(bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1), None);
         assert_eq!(bus.gamepak_sequence_cycles(0x0FFF_FFFF, false, 2, 1), None);
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
-        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, usize::MAX), None);
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0800_0000, false, 2, usize::MAX),
+            None
+        );
     }
 
 }
