@@ -283,7 +283,7 @@ impl MemoryBus {
             let scaled = if control & (1 << volume_bit) != 0 {
                 sample
             } else {
-                sample / 2
+                sample >> 1
             };
             let (left_bit, right_bit) = if fifo == 0 { (9, 8) } else { (13, 12) };
             if control & (1 << left_bit) != 0 {
@@ -3794,6 +3794,15 @@ mod tests {
         // The B-left route can be removed without changing either right route.
         bus.write16(0x0400_0082, (1 << 2) | (1 << 9) | (1 << 8));
         assert_eq!(bus.direct_sound_stereo_sample(), (10, 10));
+
+        // FIFO B's full-volume bit also selects the unattenuated signed sample.
+        bus.write16(0x0400_0082, (1 << 2) | (1 << 3) | (1 << 9) | (1 << 13));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 5));
+
+        // Half volume behaves like an arithmetic shift for negative odd samples.
+        bus.audio_last_samples = [-19, 19];
+        bus.write16(0x0400_0082, (1 << 9) | (1 << 13));
+        assert_eq!(bus.direct_sound_stereo_sample(), (-10, 0));
 
         // SOUNDCNT_X master disable silences the mix regardless of FIFO latches.
         bus.write16(0x0400_0084, 0);
