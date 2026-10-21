@@ -1875,6 +1875,29 @@ mod tests {
     }
 
     #[test]
+    fn thumb_shift_immediate_and_arithmetic_update_registers_and_flags() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0200_0000, 0x2005); // MOVS r0, #5
+        bus.write16(0x0200_0002, 0x3003); // ADDS r0, #3
+        bus.write16(0x0200_0004, 0x0041); // LSLS r1, r0, #1
+        bus.write16(0x0200_0006, 0x2808); // CMP r0, #8
+        bus.write16(0x0200_0008, 0x4008); // ANDS r0, r1
+        let mut cpu = Cpu::new();
+        cpu.thumb = true;
+        cpu.set_register(15, 0x0200_0000);
+
+        for _ in 0..5 {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(1), Some(16));
+        assert!(cpu.flags().zero);
+        assert!(!cpu.flags().negative);
+        assert_eq!(cpu.register(15), Some(0x0200_000A));
+    }
+
+    #[test]
     fn cpu_debug_snapshots_report_registers_and_modeled_cpsr_flags() {
         let mut cpu = Cpu::new();
         cpu.set_register(0, 0x1234_5678);
