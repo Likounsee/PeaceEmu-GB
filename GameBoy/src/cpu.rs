@@ -448,13 +448,21 @@ impl Cpu {
             let offset = if instruction & (1 << 25) == 0 {
                 instruction & 0xFFF
             } else {
-                let rm = self.read_operand_register((instruction & 0xF) as usize, address);
+                let rm_index = (instruction & 0xF) as usize;
+                let rm = if rm_index == 15 {
+                    address.wrapping_add(12)
+                } else {
+                    self.read_operand_register(rm_index, address)
+                };
                 let shift_type = (instruction >> 5) & 3;
                 if instruction & (1 << 4) != 0 {
+                    // Rs=PC is unpredictable for register-controlled shifts.
+                    if (instruction >> 8) & 0xF == 15 {
+                        return None;
+                    }
                     // Register-specified shifts use Rs[7:0]. A zero shift
                     // leaves Rm unchanged for all four shift types.
-                    let rs =
-                        self.read_operand_register(((instruction >> 8) & 0xF) as usize, address);
+                    let rs = self.registers[((instruction >> 8) & 0xF) as usize];
                     let amount = rs & 0xFF;
                     match shift_type {
                         0 => match amount {
@@ -2080,19 +2088,31 @@ impl Cpu {
             });
         }
 
-        if register_offset && instruction & (1 << 4) != 0 {
-            return Err(CpuError::UnsupportedInstruction {
-                address,
-                instruction,
-            });
-        }
         let base = self.read_operand_register(rn, address);
         let offset = if register_offset {
             let rm = (instruction & 0xF) as usize;
-            let value = self.read_operand_register(rm, address);
+            let value = if rm == 15 {
+                // ARM7TDMI exposes PC+12 when PC supplies a single-transfer
+                // register offset, including the shifted-register form.
+                address.wrapping_add(12)
+            } else {
+                self.read_operand_register(rm, address)
+            };
             let shift_type = (instruction >> 5) & 3;
-            let shift_amount = (instruction >> 7) & 0x1F;
-            Self::shift_immediate(value, shift_type, shift_amount, self.flags.carry).0
+            if instruction & (1 << 4) != 0 {
+                let rs = ((instruction >> 8) & 0xF) as usize;
+                if rs == 15 {
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
+                }
+                let amount = self.registers[rs] & 0xFF;
+                Self::shift_register(value, shift_type, amount).0
+            } else {
+                let shift_amount = (instruction >> 7) & 0x1F;
+                Self::shift_immediate(value, shift_type, shift_amount, self.flags.carry).0
+            }
         } else {
             instruction & 0xFFF
         };
@@ -4296,6 +4316,41 @@ mod tests {
         let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
 
         assert!(rom_cycles > ram_cycles);
+    }
+
+    #[test]
+    fn arm_register_specified_shift_transfer_executes_and_uses_shifted_address() {
+        // LDR r0, [r1, r2, LSL r3] reaches ROM at 0x08000000.
+        let mut bus = bus_with_program(&[0xE791_0312, 0xE1A0_0000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(1, 0x07FF_FFFC);
+        cpu.set_register(2, 1);
+        cpu.set_register(3, 2);
+
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(outcome, StepOutcome::Executed { .. }));
+        assert_eq!(cpu.register(0), Some(0));
+        assert!(cycles > 3);
+    }
+
+    #[test]
+    fn arm_register_specified_shift_transfer_rejects_pc_shift_amount() {
+        // LDR r0, [r1, r2, LSL pc] is an unpredictable address form.
+        let instruction = 0xE791_F112;
+        let mut bus = bus_with_program(&[instruction]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(1, 0x0300_0100);
+        cpu.set_register(2, 1);
+
+        assert_eq!(
+            cpu.step(&mut bus),
+            Err(CpuError::UnsupportedInstruction {
+                address: 0x0200_0000,
+                instruction,
+            })
+        );
     }
 
     #[test]
