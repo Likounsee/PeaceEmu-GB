@@ -463,6 +463,35 @@ impl GbaMachine {
         self.bus.timer_cycles_until_overflow(timer)
     }
 
+    /// Executes until an enabled non-cascade timer is estimated to overflow.
+    ///
+    /// Returns `Some(0)` if the timer is already due, `Some(n)` after the
+    /// estimated overflow duration is covered by `n` instructions, or `None`
+    /// for an invalid/unsupported timer mode or when `max_steps` is exhausted.
+    /// Since instructions are indivisible, the final step may pass the overflow
+    /// point by up to one instruction. This is based on the bus timing model,
+    /// not a cycle-exact hardware event callback.
+    pub fn run_until_timer_overflow(
+        &mut self,
+        timer: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        let Some(cycles_to_overflow) = self.bus.timer_cycles_until_overflow(timer) else {
+            return Ok(None);
+        };
+        if cycles_to_overflow == 0 {
+            return Ok(Some(0));
+        }
+        let starting_cycles = self.cycles_elapsed;
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.cycles_elapsed.saturating_sub(starting_cycles) >= cycles_to_overflow {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Returns the number of cycles elapsed in the current scanline.
     pub fn video_cycles_into_scanline(&self) -> u16 {
         self.bus.video_cycles_into_scanline()
@@ -1017,6 +1046,19 @@ mod tests {
             machine.bus().read16(0x0400_0130) & 0x03FF,
             (!(GbaButton::Left.mask())) & 0x03FF
         );
+    }
+
+    #[test]
+    fn machine_can_wait_for_timer_overflow_with_a_step_limit() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_timer_overflow(4, 10).unwrap(), None);
+        assert_eq!(machine.run_until_timer_overflow(0, 0).unwrap(), None);
+
+        machine.bus_mut().write16(0x0400_0100, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0102, 0x0080);
+        assert_eq!(machine.timer_cycles_until_overflow(0), Some(1));
+        assert_eq!(machine.run_until_timer_overflow(0, 1).unwrap(), Some(1));
+        assert!(machine.cycles_elapsed() >= 1);
     }
 
     #[test]
