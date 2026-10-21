@@ -1676,6 +1676,31 @@ mod tests {
     }
 
     #[test]
+    fn zero_frame_stream_does_not_invoke_callback_or_advance_machine() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+        let mut callbacks = 0;
+        assert_eq!(
+            machine
+                .for_each_frame(0, 0, |_, _| {
+                    callbacks += 1;
+                    true
+                })
+                .unwrap(),
+            Some(0)
+        );
+        assert_eq!(callbacks, 0);
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+    }
+
+    #[test]
     fn run_frames_with_zero_count_does_not_advance_the_machine() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_frames(0, 0).unwrap().unwrap().len(), 0);
