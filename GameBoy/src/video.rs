@@ -694,9 +694,7 @@ impl WindowConfig {
             && Self::inside(y, self.win0_y)
         {
             self.win0_control
-        } else if self.win1_enabled
-            && Self::inside(x, self.win1_x)
-            && Self::inside(y, self.win1_y)
+        } else if self.win1_enabled && Self::inside(x, self.win1_x) && Self::inside(y, self.win1_y)
         {
             self.win1_control
         } else {
