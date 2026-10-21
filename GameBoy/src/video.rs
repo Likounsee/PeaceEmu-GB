@@ -116,6 +116,27 @@ impl VideoFrame {
         Some(bytes)
     }
 
+    /// Converts the frame to little-endian RGB555 pixel bytes.
+    ///
+    /// Each channel is truncated to five bits and packed as RRRRRGGGGGBBBBB
+    /// in the 16-bit value (the most significant bit is zero). Pixels are
+    /// emitted least-significant byte first; malformed frames return None.
+    pub fn to_rgb555_le(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let byte_count = self.pixels.len().checked_mul(2)?;
+        let mut bytes = Vec::with_capacity(byte_count);
+        for &pixel in &self.pixels {
+            let red = (pixel >> 19) & 0x1F;
+            let green = (pixel >> 11) & 0x1F;
+            let blue = (pixel >> 3) & 0x1F;
+            let packed = ((red << 10) | (green << 5) | blue) as u16;
+            bytes.extend_from_slice(&packed.to_le_bytes());
+        }
+        Some(bytes)
+    }
+
     /// Converts the frame to tightly packed BGR888 bytes in row-major order.
     ///
     /// Alpha is omitted and each pixel is emitted blue, green, red. Malformed
