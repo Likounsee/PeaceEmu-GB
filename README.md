@@ -6,6 +6,9 @@ PeaceEmu-GB is a community-driven, open-source Rust project. It is an early hard
 
 ## Current implementation
 
+The CPU exposes `set_execution_state` and `set_condition_flags` for test harnesses, external loaders, and debugger setup. These helpers align the program counter for ARM/Thumb state and let tools seed N/Z/C/V without executing setup instructions. Guest code should use architectural instructions such as `BX` to change execution state.
+
+
 - GBA cartridge header parsing, basic validation, title/game-code access, and save-type detection.
 - An ARM7TDMI execution core with implemented ARM-state and Thumb instruction subsets.
 - A memory bus with GBA address decoding, work RAM, palette RAM, VRAM, OAM, keypad input, and I/O registers.
