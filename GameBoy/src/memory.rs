@@ -2360,7 +2360,7 @@ mod tests {
         assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(1));
         assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, true), Some(1));
         assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(1));
-        assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, false), Some(3));
+        assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, false), Some(8));
     }
 
     #[test]
