@@ -346,6 +346,27 @@ impl GbaMachine {
         self.bus.direct_sound_stereo_sample()
     }
 
+    /// Runs until the next fresh VBlank entry and returns the rendered frame.
+    ///
+    /// If VBlank is already active, this waits for it to end before waiting for
+    /// the next entry. Returns `None` if the instruction budget is exhausted
+    /// first or the current display mode cannot be rendered. CPU errors are
+    /// propagated; instructions successfully executed before an error remain
+    /// reflected in the machine state and counters.
+    pub fn run_frame(&mut self, max_steps: usize) -> Result<Option<VideoFrame>, CpuError> {
+        let mut saw_vblank_end = !self.bus.video_in_vblank();
+        for _ in 0..max_steps {
+            self.step()?;
+            let in_vblank = self.bus.video_in_vblank();
+            if !in_vblank {
+                saw_vblank_end = true;
+            } else if saw_vblank_end {
+                return Ok(self.render_frame());
+            }
+        }
+        Ok(None)
+    }
+
     /// Renders a frame from the current video-memory and register snapshot.
     ///
     /// Returns no frame for unsupported display modes unless forced blank is active.
@@ -564,6 +585,13 @@ mod tests {
         assert_eq!(frame.width, crate::SCREEN_WIDTH);
         assert_eq!(frame.height, crate::SCREEN_HEIGHT);
         assert!(frame.is_well_formed());
+    }
+
+    #[test]
+    fn run_frame_respects_a_zero_instruction_budget() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert!(machine.run_frame(0).unwrap().is_none());
+        assert_eq!(machine.instructions_executed(), 0);
     }
 
     #[test]
