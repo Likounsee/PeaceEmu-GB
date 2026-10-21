@@ -587,6 +587,24 @@ mod tests {
         assert!(!machine.interrupt_pending());
         assert_eq!(machine.instructions_executed(), 2);
     }
+
+    #[test]
+    fn interrupt_mask_runners_ignore_unselected_sources_and_match_selected_sources() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0200, 1 << 3); // Enable timer 0 IRQ only.
+        machine.bus_mut().write16(0x0400_0208, 1); // IME on.
+        machine.bus_mut().request_interrupt(1 << 0); // Unselected VBlank request.
+        assert!(!machine.interrupt_pending());
+
+        assert_eq!(machine.run_until_interrupt_mask(1 << 3, 2).unwrap(), 2);
+        assert_eq!(machine.run_until_next_interrupt_mask(0, 2).unwrap(), 2);
+        assert_eq!(machine.instructions_executed(), 4);
+
+        machine.bus_mut().request_interrupt(1 << 3);
+        assert!(machine.interrupt_pending());
+        assert_eq!(machine.run_until_interrupt_mask(1 << 3, 2).unwrap(), 0);
+        assert_eq!(machine.run_until_interrupt_mask(0, 2).unwrap(), 2);
+    }
     #[test]
     fn next_scanline_runner_does_not_return_for_the_current_line() {
         let mut machine = GbaMachine::new(cartridge());
