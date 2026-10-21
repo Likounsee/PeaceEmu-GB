@@ -32,6 +32,14 @@ pub struct MachineSnapshot {
     pub pending_interrupt_source: Option<u8>,
     /// Whether IME, IE, and IF jointly indicate an IRQ ready for service.
     pub interrupt_pending: bool,
+    /// Estimated cycles until overflow for timers 0 through 3; `None` means disabled or invalid.
+    pub timer_cycles_until_overflow: [Option<u64>; 4],
+    /// Enabled state of DMA channels 0 through 3.
+    pub dma_enabled: [Option<bool>; 4],
+    /// Queued byte counts for Direct Sound FIFOs A and B.
+    pub audio_fifo_lengths: [Option<usize>; 2],
+    /// Last signed sample values for Direct Sound FIFOs A and B.
+    pub audio_fifo_last_samples: [Option<i8>; 2],
 }
 
 /// A runnable, partially implemented Game Boy Advance machine.
@@ -897,6 +905,26 @@ impl GbaMachine {
             pending_interrupts: self.bus.pending_interrupts(),
             pending_interrupt_source: self.bus.pending_interrupt_source(),
             interrupt_pending: self.bus.interrupt_pending(),
+            timer_cycles_until_overflow: [
+                self.bus.timer_cycles_until_overflow(0),
+                self.bus.timer_cycles_until_overflow(1),
+                self.bus.timer_cycles_until_overflow(2),
+                self.bus.timer_cycles_until_overflow(3),
+            ],
+            dma_enabled: [
+                self.bus.dma_enabled(0),
+                self.bus.dma_enabled(1),
+                self.bus.dma_enabled(2),
+                self.bus.dma_enabled(3),
+            ],
+            audio_fifo_lengths: [
+                self.bus.audio_fifo_len(0),
+                self.bus.audio_fifo_len(1),
+            ],
+            audio_fifo_last_samples: [
+                self.bus.audio_fifo_last_sample(0),
+                self.bus.audio_fifo_last_sample(1),
+            ],
         }
     }
 
@@ -1460,6 +1488,10 @@ mod tests {
         assert_eq!(initial.pending_interrupts, 0);
         assert_eq!(initial.pending_interrupt_source, None);
         assert!(!initial.interrupt_pending());
+        assert_eq!(initial.timer_cycles_until_overflow[0], None);
+        assert_eq!(initial.dma_enabled, [Some(false); 4]);
+        assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
+        assert_eq!(initial.audio_fifo_last_samples, [Some(0); 2]);
 
         machine.bus_mut().write16(0x0400_0200, 1 << 2);
         machine.bus_mut().write16(0x0400_0208, 1);
