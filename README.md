@@ -48,6 +48,8 @@ The machine facade now forwards `gamepak_wait_control()` and `gamepak_access_cyc
 
 The exported `MachineSnapshot` provides a detached, immutable debugger view of CPU registers, estimated execution counters, WAITCNT configuration, video phase and time-to-boundary estimates, VCOUNT comparison state, interrupt state, timer counters, reload values, prescaler/cascade configuration, IRQ state and overflow estimates, DMA enable/start/repeat/width/IRQ configuration, programmed source/destination addresses, raw count registers and effective transfer counts, audio FIFO levels/samples, and keypad pressed/KEYCNT condition state. Capturing it does not advance emulation.
 
+The WAITCNT timing inspection helpers are regression-tested for valid transfer widths, unmapped addresses, accesses that cross ROM wait-state regions, zero-length sequences, and their non-mutating contract: querying timing must not advance CPU counters or video phase. These estimates remain separate from actual instruction timing until bus wait states are integrated into CPU execution.
+
 The library exposes a high-level machine facade so callers do not have to wire
 the CPU and bus manually:
 
