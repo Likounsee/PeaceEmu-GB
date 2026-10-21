@@ -177,6 +177,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             &mut frame,
         ),
         3 => {
+            frame.pixels.fill(apply_brightness_effect(
+                rgb555(bus.read16(PALETTE_BASE)),
+                bitmap_brightness_effect(bus, display_control, 5),
+            ));
             let bg2_control = bus.read16(BG0CNT + 4);
             let mosaic_enabled = bg2_control & (1 << 6) != 0;
             let mosaic = bus.read16(0x0400_004C);
