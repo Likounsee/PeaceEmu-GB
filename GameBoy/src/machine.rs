@@ -230,11 +230,6 @@ impl GbaMachine {
         self.bus.interrupt_master_enabled()
     }
 
-    /// Returns enabled interrupt sources with a latched request (IE & IF), regardless of IME.
-    pub fn pending_interrupts(&self) -> u16 {
-        self.bus.pending_interrupts()
-    }
-
     /// Returns whether an enabled interrupt is ready for CPU service (IME, IE, and IF).
     ///
     /// This is a status query only; IRQ exception entry is not implemented yet.
