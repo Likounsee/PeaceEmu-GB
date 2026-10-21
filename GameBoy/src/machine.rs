@@ -1704,7 +1704,7 @@ mod tests {
         assert_eq!(initial.dma_count_registers, [Some(0); 4]);
         assert_eq!(
             initial.dma_transfer_counts,
-            [Some(0x4000), Some(0x4000), Some(0x10000), Some(0x10000)]
+            [Some(0x4000), Some(0x4000), Some(0x4000), Some(0x10000)]
         );
         assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
         assert_eq!(initial.audio_fifo_last_samples, [Some(0); 2]);
