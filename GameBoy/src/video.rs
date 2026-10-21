@@ -157,7 +157,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
         return Some(frame);
     }
 
-    match mode {
+    let bitmap_effect = if mode >= 3 {\n        bitmap_brightness_effect(bus, display_control)\n    } else {\n        None\n    };\n\n    match mode {
         0..=2 => render_text_backgrounds(
             bus,
             display_control,
@@ -188,7 +188,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         continue;
                     };
                     let address = VRAM_BASE + ((source_y * SCREEN_WIDTH + source_x) * 2) as u32;
-                    frame.pixels[y * SCREEN_WIDTH + x] = rgb555(bus.read16(address));
+                    frame.pixels[y * SCREEN_WIDTH + x] =\n                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
                 }
             }
         }
@@ -224,7 +224,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let address =
                         VRAM_BASE + page_offset + (source_y * SCREEN_WIDTH + source_x) as u32;
                     let index = usize::from(bus.read8(address));
-                    frame.pixels[y * SCREEN_WIDTH + x] = palette[index];
+                    frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(palette[index], bitmap_effect);
                 }
             }
         }
@@ -262,7 +262,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let target = (y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2) * SCREEN_WIDTH
                         + x
                         + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
-                    frame.pixels[target] = rgb555(bus.read16(address));
+                    frame.pixels[target] =\n                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
                 }
             }
         }
@@ -658,6 +658,42 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
         (coefficients & 0x1F).min(16),
         ((coefficients >> 8) & 0x1F).min(16),
     ))
+}
+
+/// Returns BG2 brightness/darkness settings for bitmap modes when BG2 is a first target.
+/// Alpha blending is handled separately because it needs the second compositing target.
+fn bitmap_brightness_effect(bus: &MemoryBus, display_control: u16) -> Option<(bool, u16)> {
+    if display_control & (1 << 10) == 0 {
+        return None;
+    }
+    let control = bus.read16(0x0400_0050);
+    if control & (1 << 2) == 0 {
+        return None;
+    }
+    let brighten = match (control >> 6) & 3 {
+        2 => true,
+        3 => false,
+        _ => return None,
+    };
+    Some((brighten, (bus.read16(0x0400_0054) & 0x1F).min(16)))
+}
+
+/// Applies GBA BLDY brightness or darkness to an opaque RGB555-derived color.
+fn apply_brightness_effect(color: u32, effect: Option<(bool, u16)>) -> u32 {
+    let Some((brighten, coefficient)) = effect else {
+        return color;
+    };
+    let transform = |shift: u32| {
+        let channel = ((color >> shift) & 0xFF) >> 3;
+        let amount = u32::from(coefficient);
+        let result = if brighten {
+            channel + (((31 - channel) * amount) >> 4)
+        } else {
+            channel - ((channel * amount) >> 4)
+        };
+        (result.min(31) << 3) | (result.min(31) >> 2)
+    };
+    0xFF00_0000 | (transform(16) << 16) | (transform(8) << 8) | transform(0)
 }
 
 fn blend_argb555(source: u32, target: u32, eva: u16, evb: u16) -> u32 {
@@ -2042,6 +2078,28 @@ mod tests {
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
         assert_eq!(frame.pixel(0, 8), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn bitmap_brightness_effect_respects_first_target_and_effect_mode() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 10);
+        bus.write16(0x0400_0050, (1 << 2) | (2 << 6));
+        bus.write16(0x0400_0054, 16);
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), Some((true, 16)));
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 2));
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), None);
+        bus.write16(0x0400_0050, 2 << 6);
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), None);
+    }
+
+    #[test]
+    fn bitmap_brightness_and_darkness_reach_expected_rgb555_limits() {
+        let black = 0xFF00_0000;
+        let white = 0xFFFFFFFF;
+        assert_eq!(apply_brightness_effect(black, Some((true, 16))), white);
+        assert_eq!(apply_brightness_effect(white, Some((false, 16))), black);
+        assert_eq!(apply_brightness_effect(0xFF808080, None), 0xFF808080);
     }
 
     #[test]
