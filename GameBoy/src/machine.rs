@@ -1271,6 +1271,16 @@ mod tests {
     }
 
     #[test]
+    fn machine_forwards_gamepak_sequence_boundary_behavior() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0204, 0);
+        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 0), Some(0));
+        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), Some(8));
+        assert_eq!(machine.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1), None);
+        assert_eq!(machine.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
+    }
+
+    #[test]
     fn machine_forwards_timer_video_and_gamepak_inspection() {
         let machine = GbaMachine::new(cartridge());
         assert_eq!(machine.timer_counter(4), None);
