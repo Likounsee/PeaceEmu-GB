@@ -185,7 +185,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut obj_tile_cache,
                 &oam_snapshot,
                 &allowed_lines,
-                None,
+                bitmap_backdrop_alpha_blend(bus),
                 bitmap_brightness_effect(bus, display_control, 4),
                 None,
                 &windows,
@@ -877,6 +877,20 @@ fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 12
     }
 
     allowed_lines
+}
+
+/// Returns EVA/EVB when bitmap modes show the backdrop instead of BG2 and
+/// the backdrop is selected as BLDCNT's second alpha-blending target.
+fn bitmap_backdrop_alpha_blend(bus: &MemoryBus) -> Option<(u16, u16)> {
+    let blend_control = bus.read16(0x0400_0050);
+    if (blend_control >> 6) & 3 != 1 || blend_control & (1 << 13) == 0 {
+        return None;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    Some((
+        (coefficients & 0x1F).min(16),
+        ((coefficients >> 8) & 0x1F).min(16),
+    ))
 }
 
 /// Returns EVA/EVB for bitmap BG2 when it is enabled as a second blend target.
@@ -2215,6 +2229,23 @@ mod tests {
         let frame = render_bitmap_frame(&bus).expect("forced blank is valid in any mode");
         assert!(frame.pixels.iter().all(|pixel| *pixel == 0xFFFF_FFFF));
     }
+    #[test]
+    fn semi_transparent_obj_blends_with_backdrop_when_bg2_is_disabled() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 12)); // Mode 3, OBJ enabled, BG2 disabled.
+        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ palette index 1.
+        bus.write16(0x0601_4000, 0x1111); // Bitmap-mode OBJ tile index 512.
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ.
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 512);
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 13)); // Backdrop is target 2.
+        bus.write16(0x0400_0052, 8 | (8 << 8)); // EVA = EVB = 8.
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_7B00));
+    }
+
     #[test]
     fn semi_transparent_obj_blends_with_bitmap_bg2_when_selected_as_second_target() {
         let mut bus = bus();
