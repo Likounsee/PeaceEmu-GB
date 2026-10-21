@@ -2699,6 +2699,32 @@ mod tests {
     }
 
     #[test]
+    fn machine_keypad_irq_is_edge_triggered_across_release_and_repress() {
+        let mut machine = GbaMachine::new(cartridge());
+        let irq = 1_u16 << 12;
+        machine
+            .bus_mut()
+            .write16(0x0400_0132, (1 << 14) | crate::GbaButton::A.mask());
+
+        machine.set_button_pressed(crate::GbaButton::A, true);
+        assert!(machine.keypad_irq_requested());
+        assert_eq!(machine.interrupt_request_flags() & irq, irq);
+
+        machine.acknowledge_interrupts(irq);
+        machine.set_button_pressed(crate::GbaButton::A, true);
+        assert_eq!(
+            machine.interrupt_request_flags() & irq,
+            0,
+            "holding a matching key must not relatch the edge-triggered IRQ"
+        );
+
+        machine.set_button_pressed(crate::GbaButton::A, false);
+        assert!(!machine.keypad_irq_requested());
+        machine.set_button_pressed(crate::GbaButton::A, true);
+        assert_eq!(machine.interrupt_request_flags() & irq, irq);
+    }
+
+    #[test]
     fn machine_forwards_keypad_and_fifo_status_without_advancing_time() {
         let mut machine = GbaMachine::new(cartridge());
         let before = machine.diagnostic_snapshot();
