@@ -18,6 +18,14 @@ pub struct MachineSnapshot {
     pub gamepak_wait_control: u16,
     /// Size of the loaded cartridge ROM image in bytes.
     pub cartridge_rom_size_bytes: usize,
+    /// Cartridge title copied into the detached diagnostic snapshot.
+    pub cartridge_title: String,
+    /// Four-byte cartridge game code copied into the snapshot.
+    pub cartridge_game_code: String,
+    /// Two-byte cartridge maker code copied into the snapshot.
+    pub cartridge_maker_code: String,
+    /// Validated complement checksum byte stored at header offset 0xBD.
+    pub cartridge_header_checksum: u8,
     /// Backup-device type inferred from the loaded cartridge ROM, if recognized.
     pub cartridge_save_type: Option<crate::SaveType>,
     /// Currently allocated save-image size in bytes, if a save image is available.
@@ -1180,6 +1188,10 @@ impl GbaMachine {
             cycles_elapsed: self.cycles_elapsed,
             gamepak_wait_control: self.bus.gamepak_wait_control(),
             cartridge_rom_size_bytes: self.bus.cartridge_rom_size_bytes(),
+            cartridge_title: self.bus.cartridge_title().to_owned(),
+            cartridge_game_code: self.bus.cartridge_game_code().to_owned(),
+            cartridge_maker_code: self.bus.cartridge_maker_code().to_owned(),
+            cartridge_header_checksum: self.bus.cartridge_header_checksum(),
             cartridge_save_type: self.bus.cartridge_save_type(),
             cartridge_save_size_bytes: self.save_data_size_bytes(),
             cartridge_header_fixed_value: self.bus.cartridge_header_fixed_value(),
@@ -1400,6 +1412,10 @@ mod tests {
         assert_eq!(machine.cartridge_software_version(), 7);
         let snapshot = machine.diagnostic_snapshot();
         assert_eq!(snapshot.cartridge_rom_size_bytes, GBA_HEADER_SIZE);
+        assert_eq!(snapshot.cartridge_title, "TEST GAME");
+        assert_eq!(snapshot.cartridge_game_code, "TGME");
+        assert_eq!(snapshot.cartridge_maker_code, "01");
+        assert_eq!(snapshot.cartridge_header_checksum, rom[0xBD]);
         assert_eq!(snapshot.cartridge_save_type, None);
         assert_eq!(snapshot.cartridge_save_size_bytes, None);
         assert_eq!(snapshot.cartridge_header_fixed_value, 0x96);
