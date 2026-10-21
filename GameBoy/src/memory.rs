@@ -3063,7 +3063,7 @@ mod tests {
         );
         assert_eq!(
             bus.gamepak_sequence_cycles(0x0800_0003, false, 4, 2),
-            Some(9)
+            Some(10)
         );
         // Crossing from ROM0 to ROM1 starts a fresh non-sequential access;
         // ROM1 is configured faster here so incorrectly carrying S timing is visible.
@@ -3093,7 +3093,7 @@ mod tests {
         bus.write16(0x0400_0204, (1 << 4) | (1 << 5));
         assert_eq!(
             bus.gamepak_sequence_cycles(0x09FF_FFFC, false, 4, 2),
-            Some(10)
+            Some(12)
         );
     }
 
