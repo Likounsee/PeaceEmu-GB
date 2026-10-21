@@ -3285,6 +3285,21 @@ mod tests {
     }
 
     #[test]
+    fn gamepak_waitcnt_byte_writes_preserve_other_byte_and_mask_reserved_bits() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0204, 0x0214);
+        bus.write8(0x0400_0204, 0x08);
+        assert_eq!(bus.read16(0x0400_0204), 0x0208);
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(4));
+        assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, false), Some(2));
+
+        bus.write8(0x0400_0205, 0xFF);
+        assert_eq!(bus.read16(0x0400_0204), 0x7F08);
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(2));
+        assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(1));
+    }
+
+    #[test]
     fn gamepak_waitcnt_all_nonsequential_encodings_match_regions() {
         let mut bus = MemoryBus::new(cartridge());
         let cases = [
