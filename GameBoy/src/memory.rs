@@ -1573,7 +1573,7 @@ impl MemoryBus {
             self.wait_control = value & 0x7FFF;
             return;
         }
-        if (address == 0x0400_0084 || address == 0x0400_0085) {
+        if address == 0x0400_0084 || address == 0x0400_0085 {
             // SOUNDCNT_X's master-enable bit lives only in the low byte;
             // writes to the reserved high byte must not change sound state.
             if address == 0x0400_0084 {
