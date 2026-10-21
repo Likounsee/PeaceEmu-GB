@@ -259,15 +259,14 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         VRAM_BASE + page_offset + (source_y * SCREEN_WIDTH + source_x) as u32;
                     let index = usize::from(bus.read8(address));
                     if windows.allows(x, y, 2) {
-                        frame.pixels[y * SCREEN_WIDTH + x] =
-                            apply_brightness_effect(
-                                palette[index],
-                                if windows.effects_allowed(x, y) {
-                                    bitmap_effect
-                                } else {
-                                    None
-                                },
-                            );
+                        frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                            palette[index],
+                            if windows.effects_allowed(x, y) {
+                                bitmap_effect
+                            } else {
+                                None
+                            },
+                        );
                     }
                 }
             }
@@ -314,11 +313,14 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let screen_x = x + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
                     let screen_y = y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2;
                     if windows.allows(screen_x, screen_y, 2) {
-                        frame.pixels[target] =
-                            apply_brightness_effect(
-                                rgb555(bus.read16(address)),
-                                if windows.effects_allowed(screen_x, screen_y) { bitmap_effect } else { None },
-                            );
+                        frame.pixels[target] = apply_brightness_effect(
+                            rgb555(bus.read16(address)),
+                            if windows.effects_allowed(screen_x, screen_y) {
+                                bitmap_effect
+                            } else {
+                                None
+                            },
+                        );
                     }
                 }
             }
@@ -749,10 +751,7 @@ impl WindowConfig {
             // With no windows enabled, layer visibility and color effects are unrestricted.
             return 0x3F;
         }
-        if self.win0_enabled
-            && Self::inside(x, self.win0_x)
-            && Self::inside(y, self.win0_y)
-        {
+        if self.win0_enabled && Self::inside(x, self.win0_x) && Self::inside(y, self.win0_y) {
             self.win0_control
         } else if self.win1_enabled && Self::inside(x, self.win1_x) && Self::inside(y, self.win1_y)
         {
@@ -1125,7 +1124,10 @@ fn render_regular_objects(
                     continue;
                 }
                 let source_color = palette[palette_index as usize];
-                frame.pixels[destination] = if object_mode == 1 && mode >= 3 && windows.effects_allowed(screen_x as usize, screen_y as usize) {
+                frame.pixels[destination] = if object_mode == 1
+                    && mode >= 3
+                    && windows.effects_allowed(screen_x as usize, screen_y as usize)
+                {
                     if let Some((eva, evb)) = bitmap_blend {
                         blend_argb555(source_color, frame.pixels[destination], eva, evb)
                     } else {
