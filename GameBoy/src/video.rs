@@ -334,6 +334,7 @@ fn render_text_backgrounds(
             &obj_palette,
             obj_tile_cache,
             oam_snapshot,
+            allowed_lines,
             frame,
         );
     }
@@ -593,7 +594,7 @@ fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 12
         }
         let shape = (attr0 >> 14) & 3;
         let size = (attr1 >> 14) & 3;
-        let (width, height) = match (shape, size) {
+        let (_, height) = match (shape, size) {
             (0, 0) => (8_u32, 8_u32),
             (0, 1) => (16, 16),
             (0, 2) => (32, 32),
