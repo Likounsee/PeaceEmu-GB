@@ -147,11 +147,12 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             height: SCREEN_HEIGHT,
             pixels: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT],
         };
+        let mask_windows = windows.clone();
         for priority in (0..=3).rev() {
             render_regular_objects(
                 bus, display_control, priority, &obj_palette, &mut obj_tile_cache,
                 &oam_snapshot, &allowed_lines, None, None, Some(&mut windows.obj_window_mask),
-                &windows, &mut mask_frame,
+                &mask_windows, &mut mask_frame,
             );
         }
     }
@@ -163,7 +164,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             &mut frame,
             rgb555(bus.read16(PALETTE_BASE)),
             bitmap_brightness_effect(bus, display_control, 5),
-            windows,
+            windows.clone(),
         );
         let obj_palette = obj_palette_snapshot(bus);
         for priority in (0..=3).rev() {
@@ -220,7 +221,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut frame,
                 rgb555(bus.read16(PALETTE_BASE)),
                 bitmap_brightness_effect(bus, display_control, 5),
-                windows,
+                windows.clone(),
             );
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
