@@ -3554,10 +3554,18 @@ mod tests {
         ] {
             assert!(bus.gamepak_access_cycles(start, false).is_some());
             assert!(bus.gamepak_access_cycles(end, false).is_some());
+            let expected = if start < 0x0E00_0000 {
+                // ROM halfword accesses align down to the physical bus lane.
+                Some(4)
+            } else {
+                // SRAM selects the original byte lane; the final byte has no
+                // second byte available inside the modeled Game Pak window.
+                None
+            };
             assert_eq!(
                 bus.gamepak_access_cycles_for_width(end, false, 2),
-                Some(4),
-                "unaligned halfword access must align down at {end:#010X}"
+                expected,
+                "halfword boundary behavior at {end:#010X}"
             );
         }
         assert_eq!(bus.gamepak_access_cycles(0x07FF_FFFF, false), None);
