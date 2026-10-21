@@ -896,7 +896,8 @@ impl GbaMachine {
     ///
     /// This is a configuration snapshot. WAITCNT excess latency is partially
     /// integrated for instruction fetches; data accesses and DMA stalls remain
-    /// outside actual CPU cycle accounting.
+    /// outside actual CPU cycle accounting. Scalar ARM immediate-offset and
+    /// common Thumb load/store forms now add excess WAITCNT data-access latency.
     pub fn gamepak_wait_control(&self) -> u16 {
         self.bus.gamepak_wait_control()
     }
