@@ -350,22 +350,6 @@ impl GbaMachine {
         self.bus.is_button_pressed(button)
     }
 
-    /// Returns the total estimated CPU cycles executed since machine creation.
-    pub fn cycles_elapsed(&self) -> u64 {
-        self.cycles_elapsed
-    }
-
-    /// Returns the active-high mask of physically pressed keypad buttons.
-    pub fn keys_pressed(&self) -> u16 {
-        self.bus.keys_pressed()
-    }
-
-    /// Replaces the complete keypad state using an active-high pressed-button mask.
-    /// Bits outside the ten physical buttons are ignored. KEYINPUT reads remain active-low.
-    pub fn set_keys_pressed(&mut self, pressed: u16) {
-        self.bus.set_keys_pressed(pressed);
-    }
-
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
     /// The mix reflects SOUNDCNT_H volume and left/right routing. It is a sample
