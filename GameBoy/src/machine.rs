@@ -82,6 +82,60 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Executes until the CPU reaches an instruction address or the step limit.
+    ///
+    /// The target is aligned to the CPU's current instruction state (halfword in
+    /// Thumb, word in ARM) on each check. Returns Some(0) when already at the
+    /// target, Some(n) after reaching it in n steps, or None if the limit expires
+    /// first. CPU errors are propagated and prior progress is retained.
+    pub fn run_until_pc(
+        &mut self,
+        target_address: u32,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        let at_target = |machine: &Self| {
+            let alignment_mask = if machine.cpu.is_thumb() { !1 } else { !3 };
+            machine.cpu.register(15) == Some(target_address & alignment_mask)
+        };
+        if at_target(self) {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if at_target(self) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Executes until the CPU leaves the given instruction address and later
+    /// returns to it, or until the instruction limit expires.
+    ///
+    /// This is useful for waiting for a loop or subroutine address to be
+    /// revisited. The target is aligned according to the active ARM/Thumb state.
+    /// Returns Some(n) when the address is revisited and None on timeout.
+    pub fn run_until_pc_revisit(
+        &mut self,
+        target_address: u32,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        let at_target = |machine: &Self| {
+            let alignment_mask = if machine.cpu.is_thumb() { !1 } else { !3 };
+            machine.cpu.register(15) == Some(target_address & alignment_mask)
+        };
+        let mut left_target = !at_target(self);
+        for executed in 0..max_steps {
+            self.step()?;
+            if !at_target(self) {
+                left_target = true;
+            } else if left_target {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Executes up to the requested number of instructions, returning estimated total cycles.
     ///
     /// If an unsupported instruction is encountered, execution stops with that
@@ -579,6 +633,16 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 8);
         assert_eq!(machine.cycles_elapsed(), cycles);
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 32));
+    }
+
+    #[test]
+    fn program_counter_runners_handle_current_target_limits_and_revisits() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_pc(CARTRIDGE_ENTRY_POINT, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_pc(CARTRIDGE_ENTRY_POINT + 8, 1).unwrap(), None);
+        assert_eq!(machine.instructions_executed(), 1);
+        assert_eq!(machine.run_until_pc(CARTRIDGE_ENTRY_POINT + 8, 2).unwrap(), Some(1));
+        assert_eq!(machine.run_until_pc_revisit(CARTRIDGE_ENTRY_POINT + 8, 0).unwrap(), None);
     }
 
     #[test]
