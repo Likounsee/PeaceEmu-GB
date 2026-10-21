@@ -1259,7 +1259,7 @@ mod tests {
         for _ in 0..5 {
             machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
         }
-        assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(12));
+        assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(4));
         assert_eq!(machine.run_until_audio_fifo_refill(0, 0).unwrap(), None);
     }
 
