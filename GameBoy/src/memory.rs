@@ -2219,9 +2219,9 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0102), 0x0080);
         assert_eq!(bus.timer_cascade_enabled(0), Some(false));
 
-        // The same reserved bit must be masked when the control high byte is
+        // The same reserved bit must be masked when the control low byte is
         // written independently, without disturbing the enable bit.
-        bus.write8(0x0400_0103, 0x84);
+        bus.write8(0x0400_0102, 0x84);
         assert_eq!(bus.read16(0x0400_0102), 0x0080);
         assert_eq!(bus.timer_cascade_enabled(0), Some(false));
 
