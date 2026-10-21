@@ -53,6 +53,20 @@ pub enum GbaButton {
 }
 
 impl GbaButton {
+    /// All ten physical buttons in stable bit-index order.
+    pub const ALL: [Self; 10] = [
+        Self::A,
+        Self::B,
+        Self::Select,
+        Self::Start,
+        Self::Right,
+        Self::Left,
+        Self::Up,
+        Self::Down,
+        Self::R,
+        Self::L,
+    ];
+
     /// Returns this button's bit in the pressed-key mask.
     pub const fn mask(self) -> u16 {
         self as u16
@@ -528,6 +542,11 @@ impl MemoryBus {
         let was_requested = self.keypad_irq_requested();
         self.keys_pressed = pressed & 0x03FF;
         self.latch_keypad_irq_on_rising_edge(was_requested);
+    }
+
+    /// Returns the active-high mask of physically pressed buttons (KEYINPUT is inverted).
+    pub fn keys_pressed(&self) -> u16 {
+        self.keys_pressed
     }
 
     /// Sets one button's state without changing the other nine buttons.
@@ -1248,6 +1267,17 @@ mod tests {
             .wrapping_neg();
         rom[0xBD] = checksum;
         GbaCartridge::parse(&rom).expect("test ROM header should validate")
+    }
+
+    #[test]
+    fn button_catalog_covers_all_hardware_key_bits() {
+        let combined = GbaButton::ALL
+            .iter()
+            .fold(0_u16, |mask, button| mask | button.mask());
+        assert_eq!(GbaButton::ALL.len(), 10);
+        assert_eq!(combined, 0x03FF);
+        assert_eq!(GbaButton::ALL.iter().map(|button| button.mask()).collect::<Vec<_>>(),
+            (0..10).map(|bit| 1_u16 << bit).collect::<Vec<_>>());
     }
 
     #[test]
