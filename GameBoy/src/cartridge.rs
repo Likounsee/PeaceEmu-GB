@@ -209,14 +209,21 @@ mod tests {
     }
 
     #[test]
-    fn parses_title_and_cartridge_identifiers() {
-        let cartridge = GbaCartridge::parse(&valid_rom(GBA_HEADER_SIZE)).unwrap();
+    fn parses_title_identifiers_and_additional_header_metadata() {
+        let mut rom = valid_rom(GBA_HEADER_SIZE);
+        rom[0xB2] = 0x96;
+        rom[0xBC] = 3;
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        let cartridge = GbaCartridge::parse(&rom).unwrap();
         assert_eq!(cartridge.title(), "TEST GAME");
         assert_eq!(cartridge.game_code(), "TGME");
         assert_eq!(cartridge.maker_code(), "01");
-        assert_eq!(cartridge.header_fixed_value(), 0);
-        assert_eq!(cartridge.software_version(), 0);
-        assert_eq!(cartridge.header_checksum(), cartridge.rom()[0xBD]);
+        assert_eq!(cartridge.header_fixed_value(), 0x96);
+        assert_eq!(cartridge.software_version(), 3);
+        assert_eq!(cartridge.header_checksum(), rom[0xBD]);
         assert_eq!(cartridge.len(), GBA_HEADER_SIZE);
     }
 
