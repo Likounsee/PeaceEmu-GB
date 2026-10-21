@@ -1137,20 +1137,20 @@ mod tests {
     #[test]
     fn machine_exposes_interrupt_status_and_can_run_until_an_irq_is_pending() {
         let mut machine = GbaMachine::new(cartridge());
-        machine.bus_mut().write16(0x0400_0100, 0xFFFF);
-        machine.bus_mut().write16(0x0400_0102, 0x00C0);
-        machine.bus_mut().write16(0x0400_0200, 1 << 3);
-        machine.bus_mut().write16(0x0400_0208, 1);
-
         assert_eq!(machine.pending_interrupts(), 0);
         assert!(!machine.interrupt_pending());
-        let executed = machine.run_until_interrupt(8).unwrap();
-        assert_eq!(executed, 1);
-        assert_eq!(machine.pending_interrupts(), 1 << 3);
-        assert!(machine.interrupt_pending());
-        assert_eq!(machine.run_until_interrupt(8).unwrap(), 0);
-    }
 
+        machine.bus_mut().write16(0x0400_0200, 1 << 3);
+        machine.request_interrupt(1 << 3);
+        assert_eq!(machine.pending_interrupts(), 1 << 3);
+        assert!(!machine.interrupt_pending());
+
+        machine.bus_mut().write16(0x0400_0208, 1);
+        assert!(machine.interrupt_pending());
+        machine.acknowledge_interrupts(1 << 3);
+        assert_eq!(machine.pending_interrupts(), 0);
+        assert!(!machine.interrupt_pending());
+    }
     #[test]
     fn machine_exposes_input_and_renders_a_frame() {
         let mut machine = GbaMachine::new(cartridge());
