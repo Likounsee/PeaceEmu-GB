@@ -362,6 +362,42 @@ impl MemoryBus {
         }
     }
 
+    /// Returns total Game Pak bus cycles for an 8-, 16-, or 32-bit access.
+    ///
+    /// ROM uses a 16-bit external data bus: byte and halfword accesses consume
+    /// one halfword access, while a word consumes the requested first access
+    /// plus a sequential second halfword. SRAM uses an 8-bit bus, so wider
+    /// accesses consume one SRAM wait-state duration per byte. This helper
+    /// reports bus duration only; CPU execution does not yet apply it.
+    /// Unsupported widths and addresses outside the Game Pak window return None.
+    pub fn gamepak_access_cycles_for_width(
+        &self,
+        address: u32,
+        sequential: bool,
+        width_bytes: u8,
+    ) -> Option<u32> {
+        if !matches!(width_bytes, 1 | 2 | 4) {
+            return None;
+        }
+        let first = self.gamepak_access_cycles(address, sequential)?;
+        match address {
+            0x0800_0000..=0x0DFF_FFFF => {
+                if width_bytes == 4 {
+                    let second_address = address.checked_add(2)?;
+                    let first_region = address >> 25;
+                    if second_address >> 25 != first_region {
+                        return None;
+                    }
+                    first.checked_add(self.gamepak_access_cycles(second_address, true)?)
+                } else {
+                    Some(first)
+                }
+            }
+            0x0E00_0000..=0x0FFF_FFFF => first.checked_mul(u32::from(width_bytes)),
+            _ => None,
+        }
+    }
+
     fn write_sound_control_high(&mut self, value: u16) {
         if value & (1 << 11) != 0 {
             self.audio_fifos[0].clear();
@@ -2371,6 +2407,27 @@ mod tests {
                 "SRAM wait-state encoding {encoding:02b}"
             );
         }
+    }
+
+    #[test]
+    fn gamepak_width_timing_models_rom_halfwords_and_sram_bytes() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // A ROM word is two 16-bit accesses: non-sequential first, sequential second.
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 1), Some(4));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 2), Some(4));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(6));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0A00_0000, false, 4), Some(8));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0C00_0000, false, 4), Some(12));
+
+        // SRAM is byte-wide, so each byte incurs the configured wait duration.
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4), Some(16));
+        bus.write16(0x0400_0204, 0x7FFF);
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(9));
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 4), Some(32));
+
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
+        assert_eq!(bus.gamepak_access_cycles_for_width(0x0200_0000, false, 4), None);
     }
 
     #[test]
