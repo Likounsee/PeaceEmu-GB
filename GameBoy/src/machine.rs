@@ -2084,6 +2084,37 @@ mod tests {
     }
 
     #[test]
+    fn machine_snapshot_tracks_repeated_vblank_dma_registers() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0200_0000, 0xCAFE);
+        machine.bus_mut().write16(0x0200_0002, 0xFACE);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0x9260);
+
+        let armed = machine.diagnostic_snapshot();
+        assert_eq!(armed.dma_enabled[0], Some(true));
+        assert_eq!(armed.dma_source_addresses[0], Some(0x0200_0000));
+        assert_eq!(armed.dma_destination_addresses[0], Some(0x0300_0000));
+
+        machine.bus_mut().advance_cycles(1232 * 160);
+        let first = machine.diagnostic_snapshot();
+        assert_eq!(machine.bus().read16(0x0300_0000), 0xCAFE);
+        assert_eq!(first.dma_source_addresses[0], Some(0x0200_0002));
+        assert_eq!(first.dma_destination_addresses[0], Some(0x0300_0000));
+        assert_eq!(first.dma_count_registers[0], Some(1));
+        assert_eq!(first.dma_enabled[0], Some(true));
+
+        machine.bus_mut().advance_cycles(1232 * 228);
+        let repeated = machine.diagnostic_snapshot();
+        assert_eq!(machine.bus().read16(0x0300_0000), 0xFACE);
+        assert_eq!(repeated.dma_source_addresses[0], Some(0x0200_0004));
+        assert_eq!(repeated.dma_destination_addresses[0], Some(0x0300_0000));
+        assert_eq!(repeated.dma_enabled[0], Some(true));
+    }
+
+    #[test]
     fn machine_cpu_snapshot_tracks_execution_state() {
         let machine = GbaMachine::new(cartridge());
         let snapshot = machine.cpu_snapshot();
