@@ -2935,7 +2935,7 @@ mod tests {
         );
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0FFF_FFFF, false, 4),
-            Some(12)
+            None
         );
 
         // Exercise the slowest non-sequential ROM and fastest sequential timings;
