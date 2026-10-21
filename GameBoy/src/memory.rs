@@ -2927,13 +2927,15 @@ mod tests {
             bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3),
             None
         );
+        // ROM accesses align to the physical halfword bus address before
+        // checking the bank boundary; the last odd byte is not a crossing.
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 2),
-            None
+            Some(4)
         );
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0FFF_FFFF, false, 4),
-            None
+            Some(12)
         );
 
         // Exercise the slowest non-sequential ROM and fastest sequential timings;
@@ -3035,7 +3037,7 @@ mod tests {
         // physical halfword transfers, so both remain in ROM bank 0x08/0x09.
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x09FF_FFFE, false, 4),
-            Some(6)
+            Some(9)
         );
 
         // Verify every non-sequential encoding and both sequential choices for each ROM bank.
