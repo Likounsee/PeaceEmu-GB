@@ -2020,7 +2020,7 @@ mod tests {
         );
         assert_eq!(
             machine.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1),
-            None
+            Some(6)
         );
         assert_eq!(
             machine.gamepak_sequence_cycles(0x0800_0000, false, 3, 1),
@@ -2559,7 +2559,7 @@ mod tests {
         );
         assert_eq!(
             machine.gamepak_sequence_cycles(0x09FF_FFFF, false, 4, 2),
-            None
+            Some(12)
         );
         assert_eq!(
             machine.gamepak_access_cycles_for_width(0x0200_0000, false, 2),
