@@ -1591,13 +1591,16 @@ mod tests {
             None
         );
 
-        // If the target phase is still ahead on the current scanline, it can
-        // be reached without waiting for a full frame.
-        machine.bus_mut().advance_cycles(900);
-        let steps = machine.run_until_next_video_position(0, 960, 64).unwrap();
-        assert!(steps.is_some_and(|count| count > 0 && count <= 64));
-        assert_eq!(machine.video_scanline(), 0);
-        assert!(machine.video_cycles_into_scanline() >= 960);
+        // Use a fresh machine so this check is independent of the earlier
+        // timeout run. The target phase is still ahead on scanline zero.
+        let mut phase_machine = GbaMachine::new(cartridge());
+        phase_machine.bus_mut().advance_cycles(950);
+        let steps = phase_machine
+            .run_until_next_video_position(0, 960, 16)
+            .unwrap();
+        assert!(steps.is_some_and(|count| count > 0 && count <= 16));
+        assert_eq!(phase_machine.video_scanline(), 0);
+        assert!(phase_machine.video_cycles_into_scanline() >= 960);
     }
 
     #[test]
