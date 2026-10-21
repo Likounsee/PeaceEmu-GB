@@ -638,11 +638,25 @@ mod tests {
     #[test]
     fn program_counter_runners_handle_current_target_limits_and_revisits() {
         let mut machine = GbaMachine::new(cartridge());
-        assert_eq!(machine.run_until_pc(CARTRIDGE_ENTRY_POINT, 0).unwrap(), Some(0));
-        assert_eq!(machine.run_until_pc(CARTRIDGE_ENTRY_POINT + 8, 1).unwrap(), None);
+        assert_eq!(
+            machine.run_until_pc(CARTRIDGE_ENTRY_POINT, 0).unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            machine.run_until_pc(CARTRIDGE_ENTRY_POINT + 8, 1).unwrap(),
+            None
+        );
         assert_eq!(machine.instructions_executed(), 1);
-        assert_eq!(machine.run_until_pc(CARTRIDGE_ENTRY_POINT + 8, 2).unwrap(), Some(1));
-        assert_eq!(machine.run_until_pc_revisit(CARTRIDGE_ENTRY_POINT + 8, 0).unwrap(), None);
+        assert_eq!(
+            machine.run_until_pc(CARTRIDGE_ENTRY_POINT + 8, 2).unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            machine
+                .run_until_pc_revisit(CARTRIDGE_ENTRY_POINT + 8, 0)
+                .unwrap(),
+            None
+        );
     }
 
     #[test]
