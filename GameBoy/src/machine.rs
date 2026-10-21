@@ -1,6 +1,6 @@
 //! High-level machine facade that wires the CPU, memory bus, input, and video together.
 
-use crate::{render_bitmap_frame, Cpu, CpuError, GbaCartridge, MemoryBus, VideoFrame};
+use crate::{render_bitmap_frame, Cpu, CpuError, GbaButton, GbaCartridge, MemoryBus, VideoFrame};
 
 /// Initial entry point for a GBA cartridge in the Game Pak ROM window.
 pub const CARTRIDGE_ENTRY_POINT: u32 = 0x0800_0000;
@@ -335,6 +335,19 @@ impl GbaMachine {
     /// Returns mutable access to the memory bus for input, save data, and test setup.
     pub fn bus_mut(&mut self) -> &mut MemoryBus {
         &mut self.bus
+    }
+
+    /// Updates one physical keypad button while preserving the other button states.
+    ///
+    /// This is a convenience wrapper around the memory bus input API. Keypad
+    /// interrupt requests are latched when the configured KEYCNT condition becomes true.
+    pub fn set_button_pressed(&mut self, button: GbaButton, pressed: bool) {
+        self.bus.set_button_pressed(button, pressed);
+    }
+
+    /// Returns whether a physical keypad button is currently pressed.
+    pub fn is_button_pressed(&self, button: GbaButton) -> bool {
+        self.bus.is_button_pressed(button)
     }
 
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
@@ -710,6 +723,19 @@ mod tests {
         );
         assert!(!called);
         assert_eq!(machine.instructions_executed(), 0);
+    }
+
+    #[test]
+    fn machine_button_api_preserves_independent_button_states() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.set_button_pressed(GbaButton::A, true);
+        machine.set_button_pressed(GbaButton::Left, true);
+        assert!(machine.is_button_pressed(GbaButton::A));
+        assert!(machine.is_button_pressed(GbaButton::Left));
+        machine.set_button_pressed(GbaButton::A, false);
+        assert!(!machine.is_button_pressed(GbaButton::A));
+        assert!(machine.is_button_pressed(GbaButton::Left));
+        assert_eq!(machine.bus().read16(0x0400_0130) & 0x03FF, (!(GbaButton::Left.mask())) & 0x03FF);
     }
 
     #[test]
