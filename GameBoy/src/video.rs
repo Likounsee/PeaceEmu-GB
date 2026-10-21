@@ -1914,6 +1914,65 @@ mod tests {
     }
 
     #[test]
+    fn semi_transparent_obj_blends_in_mode4_with_selected_bitmap_page() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 4 | (1 << 4) | (1 << 10) | (1 << 12));
+        bus.write8(VRAM_BASE + 0xA000, 2); // Page 1 BG pixel uses palette index 2.
+        bus.write16(PALETTE_BASE + 4, 0x03E0); // BG green.
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // OBJ red.
+        bus.write16(0x0601_4000, 0x1111); // Bitmap-mode OBJ tile 512.
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent OBJ.
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 512);
+        bus.write16(0x0400_0050, 1 << 8);
+        bus.write16(0x0400_0052, 8 | (8 << 8));
+
+        let frame = render_bitmap_frame(&bus).expect("mode 4 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_7B00));
+    }
+
+    #[test]
+    fn semi_transparent_obj_does_not_blend_when_bg2_is_not_selected_as_second_target() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12));
+        bus.write16(VRAM_BASE, 0x03E0); // Green bitmap pixel.
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
+        bus.write16(0x0601_4000, 0x1111);
+        bus.write16(0x0700_0000, 1 << 10);
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 512);
+        bus.write16(0x0400_0050, 0); // BG2 is not a second target.
+        bus.write16(0x0400_0052, 8 | (8 << 8));
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn object_scanline_limit_resets_for_each_scanline() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12);
+        bus.write16(PALETTE_BASE + 0x202, 0x001F);
+        bus.write16(0x0601_0000, 0x1111);
+        // First 32 objects occupy only scanline zero (8x8 sprites).
+        for index in 0..32_u32 {
+            let base = 0x0700_0000 + index * 8;
+            bus.write16(base, 0);
+            bus.write16(base + 2, 0);
+            bus.write16(base + 4, 0);
+        }
+        // Object 32 is vertically displaced and should be evaluated on line 8.
+        let next_line = 0x0700_0000 + 32 * 8;
+        bus.write16(next_line, 8);
+        bus.write16(next_line + 2, 0);
+        bus.write16(next_line + 4, 0);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(0, 8), Some(0xFFFF_0000));
+    }
+
+    #[test]
     fn bitmap_alpha_blend_clamps_coefficients_and_blends_5bit_channels() {
         assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 8, 8), 0xFF7B_0000);
         assert_eq!(blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31), 0xFFFF_FFFF);
