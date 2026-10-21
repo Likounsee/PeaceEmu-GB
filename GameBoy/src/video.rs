@@ -1544,6 +1544,23 @@ mod tests {
     }
 
     #[test]
+    fn video_frame_exports_rgb555_little_endian_and_rejects_malformed_frames() {
+        let frame = VideoFrame {
+            width: 2,
+            height: 1,
+            pixels: vec![0xFFFF_FFFF, 0xFF80_8040],
+        };
+        assert_eq!(frame.to_rgb555_le(), Some(vec![0xFF, 0x7F, 0x08, 0x42]));
+
+        let malformed = VideoFrame {
+            width: 2,
+            height: 2,
+            pixels: vec![0xFFFF_FFFF],
+        };
+        assert_eq!(malformed.to_rgb555_le(), None);
+    }
+
+    #[test]
     fn video_frame_exports_bgra8888_and_rgb565_little_endian() {
         let frame = VideoFrame {
             width: 1,
