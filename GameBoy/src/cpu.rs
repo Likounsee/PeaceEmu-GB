@@ -162,6 +162,10 @@ impl Cpu {
         if index >= self.registers.len() {
             return false;
         }
+        if index == 15 {
+            // A debugger/loader PC edit breaks the previous fetch sequence.
+            self.last_fetch_next = None;
+        }
         self.registers[index] = if index == 15 {
             if self.thumb {
                 value & !1
