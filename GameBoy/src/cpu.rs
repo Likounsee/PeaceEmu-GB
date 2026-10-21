@@ -3806,4 +3806,24 @@ mod tests {
             );
         }
     }
+
+
+    #[test]
+    fn failed_arm_condition_skips_memory_side_effects() {
+        // STRNE r0, [r1] is skipped while Z=1.
+        let mut bus = bus_with_program(&[0x1581_0000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0xDEAD_BEEF);
+        cpu.set_register(1, 0x0200_0100);
+        bus.write32(0x0200_0100, 0x1234_5678);
+        cpu.set_register(16, 1 << 30); // CPSR Z flag.
+
+        cpu.step(&mut bus).unwrap();
+
+        assert_eq!(bus.read32(0x0200_0100), 0x1234_5678);
+        assert_eq!(cpu.register(1), Some(0x0200_0100));
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
 }
