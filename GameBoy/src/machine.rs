@@ -419,13 +419,20 @@ mod tests {
     #[test]
     fn next_vcount_match_runner_waits_for_a_fresh_match() {
         let mut machine = GbaMachine::new(cartridge());
+        // The comparator initially matches line zero. Advance to line one,
+        // then verify the runner waits for the next occurrence of line zero
+        // instead of treating the stale match as a new event.
         machine.bus_mut().write16(0x0400_0004, 0);
         assert!(machine.bus().video_vcount_match());
         machine.bus_mut().advance_cycles(1232);
         assert!(!machine.bus().video_vcount_match());
+
         let before = machine.instructions_executed();
-        assert_eq!(machine.run_until_next_vcount_match(2).unwrap(), 2);
-        assert_eq!(machine.instructions_executed(), before + 2);
+        let executed = machine.run_until_next_vcount_match(280_000).unwrap();
+        assert!(executed > 2, "runner returned for a stale VCOUNT match");
+        assert_eq!(machine.instructions_executed(), before + executed as u64);
+        assert_eq!(machine.bus().video_scanline(), 0);
+        assert!(machine.bus().video_vcount_match());
     }
 
     #[test]
