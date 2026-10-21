@@ -206,7 +206,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let address = VRAM_BASE + ((source_y * SCREEN_WIDTH + source_x) * 2) as u32;
                     if windows.allows(x, y, 2) {
                         frame.pixels[y * SCREEN_WIDTH + x] =
-                            apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                            apply_brightness_effect(
+                                rgb555(bus.read16(address)),
+                                if windows.effects_allowed(x, y) { bitmap_effect } else { None },
+                            );
                     }
                 }
             }
@@ -492,7 +495,10 @@ fn render_affine_background(
             let palette_index = u32::from(pixels[pixel_offset]);
             if palette_index != 0 && windows.allows(x, y, bg as u16) {
                 frame.pixels[y * SCREEN_WIDTH + x] =
-                    apply_brightness_effect(palette[palette_index as usize], brightness_effect);
+                    apply_brightness_effect(
+                        palette[palette_index as usize],
+                        if windows.effects_allowed(x, y) { brightness_effect } else { None },
+                    );
             }
         }
     }
@@ -631,7 +637,10 @@ fn render_text_background(
             // makes its absolute palette index nonzero.
             if !transparent && windows.allows(x, y, bg as u16) {
                 frame.pixels[y * SCREEN_WIDTH + x] =
-                    apply_brightness_effect(palette[palette_index as usize], brightness_effect);
+                    apply_brightness_effect(
+                    palette[palette_index as usize],
+                    if windows.effects_allowed(x, y) { brightness_effect } else { None },
+                );
             }
         }
     }
@@ -685,11 +694,12 @@ impl WindowConfig {
         }
     }
 
-    fn allows(self, x: usize, y: usize, layer: u16) -> bool {
+    fn control_at(self, x: usize, y: usize) -> u16 {
         if !self.enabled {
-            return true;
+            // With no windows enabled, layer visibility and color effects are unrestricted.
+            return 0x3F;
         }
-        let control = if self.win0_enabled
+        if self.win0_enabled
             && Self::inside(x, self.win0_x)
             && Self::inside(y, self.win0_y)
         {
@@ -699,8 +709,16 @@ impl WindowConfig {
             self.win1_control
         } else {
             self.outside_control
-        };
-        control & (1 << layer) != 0
+        }
+    }
+
+    fn allows(self, x: usize, y: usize, layer: u16) -> bool {
+        self.control_at(x, y) & (1 << layer) != 0
+    }
+
+    /// Window control bit 5 independently gates color effects at each pixel.
+    fn effects_allowed(self, x: usize, y: usize) -> bool {
+        self.control_at(x, y) & (1 << 5) != 0
     }
 }
 
