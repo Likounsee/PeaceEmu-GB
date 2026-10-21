@@ -170,6 +170,21 @@ impl GbaMachine {
         self.bus.dma_start_timing(channel)
     }
 
+    /// Returns the destination address control mode for a DMA channel.
+    pub fn dma_destination_control(&self, channel: usize) -> Option<u8> {
+        self.bus.dma_destination_control(channel)
+    }
+
+    /// Returns the source address control mode for a DMA channel.
+    pub fn dma_source_control(&self, channel: usize) -> Option<u8> {
+        self.bus.dma_source_control(channel)
+    }
+
+    /// Returns whether a DMA channel repeats on a non-immediate trigger.
+    pub fn dma_repeat(&self, channel: usize) -> Option<bool> {
+        self.bus.dma_repeat(channel)
+    }
+
     /// Returns whether a DMA channel uses 32-bit word transfers.
     pub fn dma_word_transfer(&self, channel: usize) -> Option<bool> {
         self.bus.dma_word_transfer(channel)
@@ -1293,6 +1308,18 @@ mod tests {
         assert_eq!(machine.dma_start_timing(0), Some(1));
         assert_eq!(machine.dma_word_transfer(0), Some(true));
         assert_eq!(machine.dma_irq_enabled(0), Some(true));
+    }
+
+    #[test]
+    fn machine_forwards_dma_address_modes_and_repeat() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_00BA, 0xD7E0);
+        assert_eq!(machine.dma_destination_control(0), Some(3));
+        assert_eq!(machine.dma_source_control(0), Some(3));
+        assert_eq!(machine.dma_repeat(0), Some(true));
+        assert_eq!(machine.dma_destination_control(4), None);
+        assert_eq!(machine.dma_source_control(4), None);
+        assert_eq!(machine.dma_repeat(4), None);
     }
 
     #[test]
