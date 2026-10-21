@@ -152,6 +152,43 @@ impl GbaMachine {
         }
         Ok(None)
     }
+    /// Executes until the next fresh VCOUNT-match assertion.
+    ///
+    /// If the comparison currently matches, the runner waits until it stops
+    /// matching and then matches again. Returns the number of executed
+    /// instructions, or `max_steps` when no fresh match occurs within the limit.
+    pub fn run_until_next_vcount_match(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        let mut saw_match_end = !self.bus.video_vcount_match();
+        for executed in 0..max_steps {
+            self.step()?;
+            let matches = self.bus.video_vcount_match();
+            if !matches {
+                saw_match_end = true;
+            } else if saw_match_end {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
+
+    /// Executes until a fresh enabled interrupt becomes pending.
+    ///
+    /// If an interrupt is already pending, this waits for the pending state to
+    /// clear before accepting a later assertion. It does not enter an IRQ
+    /// exception; it only observes the IE/IF/IME status exposed by the machine.
+    pub fn run_until_next_interrupt(&mut self, max_steps: usize) -> Result<usize, CpuError> {
+        let mut saw_clear = !self.interrupt_pending();
+        for executed in 0..max_steps {
+            self.step()?;
+            let pending = self.interrupt_pending();
+            if !pending {
+                saw_clear = true;
+            } else if saw_clear {
+                return Ok(executed + 1);
+            }
+        }
+        Ok(max_steps)
+    }
     /// Executes until the PPU enters the next VBlank period, even if one is active now.
     ///
     /// Unlike [`run_until_vblank`](Self::run_until_vblank), this always waits for a
@@ -379,6 +416,25 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 2);
     }
 
+    #[test]
+    fn next_vcount_match_runner_waits_for_a_fresh_match() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0004, 0);
+        assert!(machine.bus().video_vcount_match());
+        machine.bus_mut().advance_cycles(1232);
+        assert!(!machine.bus().video_vcount_match());
+        let before = machine.instructions_executed();
+        assert_eq!(machine.run_until_next_vcount_match(2).unwrap(), 2);
+        assert_eq!(machine.instructions_executed(), before + 2);
+    }
+
+    #[test]
+    fn next_interrupt_runner_does_not_claim_an_event_without_pending_irq() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_next_interrupt(2).unwrap(), 2);
+        assert!(!machine.interrupt_pending());
+        assert_eq!(machine.instructions_executed(), 2);
+    }
     #[test]
     fn next_scanline_runner_does_not_return_for_the_current_line() {
         let mut machine = GbaMachine::new(cartridge());
