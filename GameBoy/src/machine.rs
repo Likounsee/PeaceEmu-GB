@@ -910,8 +910,9 @@ impl GbaMachine {
 
     /// Estimates total Game Pak bus cycles for a sequence of same-width accesses.
     ///
-    /// The first access uses the first_sequential flag; later accesses are modeled as sequential.
-    /// This inspection helper does not advance emulation.
+    /// The first access uses `first_sequential`; subsequent accesses are sequential
+    /// only while they remain in the same WAITCNT region. Crossing ROM0/ROM1/ROM2
+    /// restarts with a non-sequential access. This query does not advance emulation.
     pub fn gamepak_sequence_cycles(
         &self,
         address: u32,
@@ -1338,6 +1339,26 @@ mod tests {
         machine.bus_mut().write16(0x0400_0204, 1 << 2);
         assert_eq!(machine.gamepak_wait_control(), 1 << 2);
         assert_eq!(machine.gamepak_access_cycles(0x0800_0000, false), Some(3));
+        assert_eq!(
+            machine.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+            Some(5)
+        );
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
+            Some(7)
+        );
+
+        // ROM1's configured wait must take effect after crossing from ROM0;
+        // timing inspection must not advance CPU or peripheral counters.
+        machine.bus_mut().write16(0x0400_0204, (1 << 2) | (2 << 5));
+        let before_instructions = machine.instructions_executed();
+        let before_cycles = machine.cycles_elapsed();
+        assert_eq!(
+            machine.gamepak_sequence_cycles(0x09FF_FFFE, false, 2, 2),
+            Some(6)
+        );
+        assert_eq!(machine.instructions_executed(), before_instructions);
+        assert_eq!(machine.cycles_elapsed(), before_cycles);
 
         let snapshot = machine.cpu_snapshot();
         assert_eq!(snapshot.pc, CARTRIDGE_ENTRY_POINT);
