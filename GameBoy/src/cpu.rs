@@ -78,6 +78,21 @@ impl CpuError {
 
 impl std::error::Error for CpuError {}
 
+/// Immutable, debugger-friendly snapshot of the modeled ARM7TDMI state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CpuSnapshot {
+    /// General-purpose registers r0 through r15.
+    pub registers: [u32; 16],
+    /// Modeled condition flags.
+    pub flags: ConditionFlags,
+    /// Modeled CPSR bits (N, Z, C, V and T).
+    pub cpsr: u32,
+    /// Whether the processor is in Thumb state.
+    pub thumb: bool,
+    /// Stored program-counter value.
+    pub pc: u32,
+}
+
 /// ARM7TDMI CPU state, initially implementing ARM-state data processing,
 /// branches, and single word/byte transfers.
 #[derive(Clone, Debug)]
@@ -163,6 +178,17 @@ impl Cpu {
     /// Returns the modeled CPSR condition flags.
     pub fn flags(&self) -> ConditionFlags {
         self.flags
+    }
+
+    /// Captures the current modeled state for debugging or save-state tooling.
+    pub fn snapshot(&self) -> CpuSnapshot {
+        CpuSnapshot { registers: self.registers, flags: self.flags, cpsr: self.cpsr_flags(), thumb: self.thumb, pc: self.registers[15] }
+    }
+
+    /// Evaluates an ARM condition code against the current flags.
+    /// Codes 0x0–0xE follow ARM semantics; reserved 0xF and larger values return false.
+    pub fn condition_passed_for(&self, condition: u8) -> bool {
+        condition <= 0xF && self.condition_passed(u32::from(condition))
     }
 
     /// Executes one instruction and advances bus timers by an approximate cycle count.
@@ -1887,6 +1913,29 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn snapshot_is_detached_and_consistent() {
+        let mut cpu = Cpu::new();
+        cpu.set_register(0, 0x1234_5678);
+        cpu.set_register(15, 0x0800_0000);
+        let snapshot = cpu.snapshot();
+        assert_eq!(snapshot.registers[0], 0x1234_5678);
+        assert_eq!(snapshot.pc, 0x0800_0000);
+        assert_eq!(snapshot.cpsr, cpu.cpsr_flags());
+        assert!(!snapshot.thumb);
+        cpu.set_register(0, 9);
+        assert_eq!(snapshot.registers[0], 0x1234_5678);
+    }
+
+    #[test]
+    fn public_condition_evaluator_handles_reserved_codes() {
+        let cpu = Cpu::new();
+        assert!(cpu.condition_passed_for(0xE));
+        assert!(!cpu.condition_passed_for(0xF));
+        assert!(!cpu.condition_passed_for(0x10));
+    }
+
+
     use super::*;
     use crate::GbaCartridge;
 
