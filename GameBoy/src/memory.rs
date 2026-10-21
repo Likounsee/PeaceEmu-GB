@@ -1537,6 +1537,7 @@ mod tests {
         bus.advance_cycles(1);
         assert_eq!(bus.video_cycles_until_hblank(), 1232);
 
+        bus.advance_cycles(272);
         bus.advance_cycles(1232 * 159);
         assert_eq!(bus.video_scanline(), 160);
         assert!(bus.video_in_vblank());
