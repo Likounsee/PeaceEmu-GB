@@ -481,7 +481,11 @@ impl Cpu {
             let operand = usize::from((raw >> 6) & 7);
             let rs = usize::from((raw >> 3) & 7);
             let rd = usize::from(raw & 7);
-            let right = if immediate { operand as u32 } else { self.registers[operand] };
+            let right = if immediate {
+                operand as u32
+            } else {
+                self.registers[operand]
+            };
             let left = self.registers[rs];
             let (result, carry, overflow) = if subtract {
                 Self::subtract(left, right, false)
@@ -537,8 +541,7 @@ impl Cpu {
                     (value, Some(carry), Some(overflow))
                 }
                 6 => {
-                    let (value, carry, overflow) =
-                        Self::subtract(left, right, !self.flags.carry);
+                    let (value, carry, overflow) = Self::subtract(left, right, !self.flags.carry);
                     (value, Some(carry), Some(overflow))
                 }
                 7 => {
@@ -563,10 +566,10 @@ impl Cpu {
                     let (value, carry, overflow) = Self::add(left, right, false);
                     (value, Some(carry), Some(overflow))
                 }
-                12 => (left | right, None, None), // ORR
+                12 => (left | right, None, None),             // ORR
                 13 => (left.wrapping_mul(right), None, None), // MUL
-                14 => (left & !right, None, None), // BIC
-                15 => (!right, None, None), // MVN
+                14 => (left & !right, None, None),            // BIC
+                15 => (!right, None, None),                   // MVN
                 _ => unreachable!(),
             };
             if write_result {
