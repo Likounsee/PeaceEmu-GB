@@ -2698,16 +2698,14 @@ mod tests {
         );
     }
 
-
     #[test]
     fn machine_forwards_keypad_and_fifo_status_without_advancing_time() {
         let mut machine = GbaMachine::new(cartridge());
         let before = machine.diagnostic_snapshot();
 
-        machine.bus_mut().write16(
-            0x0400_0132,
-            (1 << 14) | crate::GbaButton::Start.mask(),
-        );
+        machine
+            .bus_mut()
+            .write16(0x0400_0132, (1 << 14) | crate::GbaButton::Start.mask());
         machine.set_button_pressed(crate::GbaButton::Start, true);
         assert!(machine.is_button_pressed(crate::GbaButton::Start));
         assert!(machine.keypad_irq_requested());
@@ -2728,5 +2726,4 @@ mod tests {
             before.video_cycles_into_scanline
         );
     }
-
 }
