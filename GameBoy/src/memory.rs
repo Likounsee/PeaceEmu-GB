@@ -1275,6 +1275,20 @@ mod tests {
     }
 
     #[test]
+    fn keypad_and_mode_waits_for_every_selected_button() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(
+            0x0400_0132,
+            (1 << 14) | GbaButton::A.mask() | GbaButton::Start.mask(),
+        );
+
+        bus.set_button_pressed(GbaButton::Start, true);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 0);
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
+    }
+
+    #[test]
     fn memory_region_snapshots_reflect_bus_writes_and_keep_hardware_sizes() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write8(0x0200_0012, 0xA5);
