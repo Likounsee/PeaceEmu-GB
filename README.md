@@ -12,6 +12,8 @@ PeaceEmu-GB is a community-driven, open-source Rust project. It is an early hard
 - Timer progression, scanline/VBlank/HBlank timing, interrupt flags, and several DMA paths.
 - SRAM, Flash, and EEPROM save-device handling and save-data import/export APIs.
 - Initial rendering for tiled backgrounds and bitmap display modes, plus regular and affine OBJ rendering.
+- A high-level machine facade for bounded execution, VBlank-synchronized frame capture, multi-frame capture, and callback-based frame streaming.
+- Initial Direct Sound FIFO queueing, timer-driven FIFO consumption, stereo sample inspection, and FIFO status snapshots (queue length/capacity/refill-threshold hint).
 
 These features are partial implementations. Passing unit tests does not imply compatibility with every commercial game or hardware edge case.
 
