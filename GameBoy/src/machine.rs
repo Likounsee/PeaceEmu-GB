@@ -1320,6 +1320,28 @@ mod tests {
     }
 
     #[test]
+    fn machine_exposes_nondefault_cartridge_header_metadata() {
+        let mut rom = vec![0; GBA_HEADER_SIZE];
+        rom[0xA0..0xAC].copy_from_slice(b"TEST GAME   ");
+        rom[0xAC..0xB0].copy_from_slice(b"TGME");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0xB2] = 0x96;
+        rom[0xBC] = 7;
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        let machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+
+        assert_eq!(machine.cartridge_title(), "TEST GAME");
+        assert_eq!(machine.cartridge_game_code(), "TGME");
+        assert_eq!(machine.cartridge_maker_code(), "01");
+        assert_eq!(machine.cartridge_header_fixed_value(), 0x96);
+        assert_eq!(machine.cartridge_software_version(), 7);
+        assert_eq!(machine.cartridge_header_checksum(), rom[0xBD]);
+    }
+
+    #[test]
     fn batch_execution_matches_machine_diagnostic_counters() {
         let mut machine = GbaMachine::new(cartridge());
         let cycles = machine.run_steps(8).unwrap();
