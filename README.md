@@ -13,7 +13,7 @@ The CPU exposes `set_execution_state` and `set_condition_flags` for test harness
 - An ARM7TDMI execution core with implemented ARM-state and Thumb instruction subsets.
 - A memory bus with GBA address decoding, work RAM, palette RAM, VRAM, OAM, keypad input, and I/O registers.
 - Timer progression, scanline/VBlank/HBlank timing, interrupt flags, and several DMA paths.
-- WAITCNT decoding for ROM0/ROM1/ROM2 and SRAM, including transfer-width-aware bus-duration estimates for 8-, 16-, and 32-bit accesses (not yet integrated into CPU instruction timing).
+- WAITCNT decoding for ROM0/ROM1/ROM2 and SRAM, including transfer-width-aware bus-duration estimates for 8-, 16-, and 32-bit accesses. ROM estimates align halfword/word transfers to the physical bus address; SRAM estimates preserve byte-wide timing. These estimates are not yet integrated into CPU instruction timing.
 - SRAM, Flash, and EEPROM save-device handling and save-data import/export APIs.
 - Initial rendering for tiled backgrounds and bitmap display modes, plus regular and affine OBJ rendering. Frame export supports RGB/RGBA/BGRA/BGR888, RGB555, and RGB565 byte layouts.
 - A high-level machine facade for bounded execution, program-counter breakpoints/revisit waits, VBlank-synchronized frame capture, multi-frame capture, and callback-based frame streaming.
