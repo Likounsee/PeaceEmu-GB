@@ -189,8 +189,8 @@ impl GbaMachine {
         }
         let current_scanline = self.bus.video_scanline();
         let current_cycle = self.bus.video_cycles_into_scanline();
-        let mut left_current_occurrence = current_scanline != target_scanline
-            || current_cycle < target_cycle;
+        let mut left_current_occurrence =
+            current_scanline != target_scanline || current_cycle < target_cycle;
         for executed in 0..max_steps {
             self.step()?;
             let scanline = self.bus.video_scanline();
@@ -1572,12 +1572,24 @@ mod tests {
     #[test]
     fn next_video_position_runner_requires_a_fresh_occurrence() {
         let mut machine = GbaMachine::new(cartridge());
-        assert_eq!(machine.run_until_next_video_position(228, 0, 10).unwrap(), None);
-        assert_eq!(machine.run_until_next_video_position(0, 1232, 10).unwrap(), None);
-        assert_eq!(machine.run_until_next_video_position(0, 0, 0).unwrap(), None);
+        assert_eq!(
+            machine.run_until_next_video_position(228, 0, 10).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_next_video_position(0, 1232, 10).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_next_video_position(0, 0, 0).unwrap(),
+            None
+        );
 
         // At the exact target, the next occurrence is on the next frame.
-        assert_eq!(machine.run_until_next_video_position(0, 0, 4).unwrap(), None);
+        assert_eq!(
+            machine.run_until_next_video_position(0, 0, 4).unwrap(),
+            None
+        );
 
         // If the target phase is still ahead on the current scanline, it can
         // be reached without waiting for a full frame.
