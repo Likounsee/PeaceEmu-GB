@@ -2673,7 +2673,6 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 2);
     }
 
-
     #[test]
     fn diagnostic_snapshot_is_read_only_and_tracks_waitcnt_updates() {
         let mut machine = GbaMachine::new(cartridge());
@@ -2698,5 +2697,4 @@ mod tests {
             before.video_cycles_into_scanline
         );
     }
-
 }
