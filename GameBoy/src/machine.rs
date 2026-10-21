@@ -2517,5 +2517,4 @@ mod tests {
         assert_eq!(machine.audio_fifo_last_sample(2), None);
         assert_eq!(machine.audio_fifo_bytes_until_refill(2), None);
     }
-
 }
