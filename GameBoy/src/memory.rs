@@ -3511,4 +3511,28 @@ mod tests {
         assert_eq!(bus.dma_transfer_count(3), Some(0xFFFF));
         assert_eq!(bus.dma_transfer_count(4), None);
     }
+
+
+    #[test]
+    fn waitcnt_byte_writes_preserve_other_fields_and_mask_reserved_bits() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0204, 0x7FFF);
+        assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
+
+        bus.write8(0x0400_0204, 0x00);
+        assert_eq!(bus.gamepak_wait_control(), 0x7F00);
+        assert_eq!(bus.read8(0x0400_0205), 0x7F);
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(4));
+
+        bus.write8(0x0400_0205, 0xFF);
+        assert_eq!(bus.gamepak_wait_control(), 0x7F00);
+        bus.write8(0x0400_0204, 0xFF);
+        assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
+        assert_eq!(bus.read16(0x0400_0204), 0x7FFF);
+
+        // Reserved bit 15 reads as zero on a halfword write as well.
+        bus.write16(0x0400_0204, 0xFFFF);
+        assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
+    }
+
 }
