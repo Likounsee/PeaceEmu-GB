@@ -177,10 +177,6 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             &mut frame,
         ),
         3 => {
-            frame.pixels.fill(apply_brightness_effect(
-                rgb555(bus.read16(PALETTE_BASE)),
-                bitmap_brightness_effect(bus, display_control, 5),
-            ));
             let bg2_control = bus.read16(BG0CNT + 4);
             let mosaic_enabled = bg2_control & (1 << 6) != 0;
             let mosaic = bus.read16(0x0400_004C);
@@ -2324,6 +2320,7 @@ mod tests {
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 13)); // BG2 and WIN0.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
         bus.write16(VRAM_BASE, 0x001F); // Red bitmap.
+        bus.write16(VRAM_BASE + 5 * 2, 0x001F);
         bus.write16(0x0400_0040, (4 << 8) | 236); // X1=236, X2=4.
         bus.write16(0x0400_0044, 1 << 8); // Y1=0, Y2=1.
         bus.write16(0x0400_0048, 0); // WIN0 hides BG2.
@@ -2341,6 +2338,7 @@ mod tests {
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 14)); // BG2 and WIN1.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
         bus.write16(VRAM_BASE, 0x001F); // Red bitmap pixel.
+        bus.write16(VRAM_BASE + 4 * 2, 0x001F);
         bus.write16(0x0400_0042, 4 << 8); // WIN1 horizontal range [0,4).
         bus.write16(0x0400_0046, 1 << 8); // WIN1 vertical range [0,1).
         bus.write16(0x0400_0048, 1 << 8); // WIN1 allows BG0 but not BG2.
