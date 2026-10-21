@@ -2697,4 +2697,36 @@ mod tests {
             before.video_cycles_into_scanline
         );
     }
+
+
+    #[test]
+    fn machine_forwards_keypad_and_fifo_status_without_advancing_time() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+
+        machine.bus_mut().write16(
+            0x0400_0132,
+            (1 << 14) | crate::GbaButton::Start.mask(),
+        );
+        machine.set_button_pressed(crate::GbaButton::Start, true);
+        assert!(machine.is_button_pressed(crate::GbaButton::Start));
+        assert!(machine.keypad_irq_requested());
+        assert_eq!(machine.interrupt_request_flags() & (1 << 12), 1 << 12);
+
+        machine.bus_mut().write32(0x0400_00A4, 0x807F_01FF);
+        assert_eq!(machine.audio_fifo_len(1), Some(4));
+        assert_eq!(machine.audio_fifo_bytes_until_refill(1), Some(0));
+        assert_eq!(machine.audio_fifo_status(1).unwrap().queued_bytes, 4);
+        assert_eq!(machine.audio_fifo_len(2), None);
+
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+    }
+
 }
