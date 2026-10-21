@@ -3285,6 +3285,61 @@ mod tests {
     }
 
     #[test]
+    fn gamepak_waitcnt_all_nonsequential_encodings_match_regions() {
+        let mut bus = MemoryBus::new(cartridge());
+        let cases = [
+            (0x0800_0000, 2, [4, 3, 2, 8]),
+            (0x0A00_0000, 5, [4, 3, 2, 8]),
+            (0x0C00_0000, 8, [4, 3, 2, 8]),
+        ];
+
+        for (base, shift, expected) in cases {
+            for (encoding, cycles) in expected.into_iter().enumerate() {
+                bus.write16(0x0400_0204, (encoding as u16) << shift);
+                assert_eq!(
+                    bus.gamepak_access_cycles(base, false),
+                    Some(cycles),
+                    "base={base:#010X}, encoding={encoding}"
+                );
+            }
+        }
+
+        for (encoding, cycles) in [4, 3, 2, 8].into_iter().enumerate() {
+            bus.write16(0x0400_0204, encoding as u16);
+            assert_eq!(
+                bus.gamepak_access_cycles(0x0E00_0000, false),
+                Some(cycles),
+                "SRAM encoding={encoding}"
+            );
+        }
+    }
+
+    #[test]
+    fn gamepak_waitcnt_sequential_flags_are_independent_and_reserved_bits_masked() {
+        let mut bus = MemoryBus::new(cartridge());
+        for (flag, base, default_cycles) in [
+            (1 << 4, 0x0800_0000, 2),
+            (1 << 7, 0x0A00_0000, 4),
+            (1 << 10, 0x0C00_0000, 8),
+        ] {
+            bus.write16(0x0400_0204, 0);
+            assert_eq!(bus.gamepak_access_cycles(base, true), Some(default_cycles));
+            bus.write16(0x0400_0204, flag | 0x8000);
+            assert_eq!(bus.read16(0x0400_0204), flag);
+            assert_eq!(bus.gamepak_access_cycles(base, true), Some(1));
+            for (other_flag, other_base, other_default) in [
+                (1 << 4, 0x0800_0000, 2),
+                (1 << 7, 0x0A00_0000, 4),
+                (1 << 10, 0x0C00_0000, 8),
+            ] {
+                if other_flag != flag {
+                    assert_eq!(bus.gamepak_access_cycles(other_base, true), Some(other_default));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn gamepak_waitcnt_fields_select_each_rom_wait_state() {
         let mut bus = MemoryBus::new(cartridge());
         let non_sequential = [4, 3, 2, 8];
