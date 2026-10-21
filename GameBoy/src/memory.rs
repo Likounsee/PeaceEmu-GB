@@ -405,6 +405,31 @@ impl MemoryBus {
         Some(self.read16(0x0400_00BA + channel as u32 * 12))
     }
 
+    /// Returns the currently programmed source address for DMA channel 0–3.
+    pub fn dma_source_address(&self, channel: usize) -> Option<u32> {
+        if channel >= 4 {
+            return None;
+        }
+        Some(self.read32(0x0400_00B0 + channel as u32 * 12))
+    }
+
+    /// Returns the currently programmed destination address for DMA channel 0–3.
+    pub fn dma_destination_address(&self, channel: usize) -> Option<u32> {
+        if channel >= 4 {
+            return None;
+        }
+        Some(self.read32(0x0400_00B4 + channel as u32 * 12))
+    }
+
+    /// Returns the masked DMA count register as programmed (zero retains its hardware-specific meaning).
+    pub fn dma_count_register(&self, channel: usize) -> Option<u16> {
+        if channel >= 4 {
+            return None;
+        }
+        let mask = if channel == 3 { 0xFFFF } else { 0x3FFF };
+        Some(self.read16(0x0400_00B8 + channel as u32 * 12) & mask)
+    }
+
     /// Returns whether a DMA channel is currently enabled.
     pub fn dma_enabled(&self, channel: usize) -> Option<bool> {
         self.dma_control(channel)
@@ -2168,6 +2193,26 @@ mod tests {
         assert_eq!(bus.dma_start_timing(0), Some(2));
         assert_eq!(bus.dma_word_transfer(0), Some(false));
         assert_eq!(bus.dma_irq_enabled(0), Some(true));
+    }
+
+    #[test]
+    fn dma_address_and_count_registers_are_inspectable() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.dma_source_address(4), None);
+        assert_eq!(bus.dma_destination_address(4), None);
+        assert_eq!(bus.dma_count_register(4), None);
+
+        bus.write32(0x0400_00B0, 0x0200_1234);
+        bus.write32(0x0400_00B4, 0x0300_5678);
+        bus.write16(0x0400_00B8, 0xFFFF);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_1234));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_5678));
+        assert_eq!(bus.dma_count_register(0), Some(0x3FFF));
+
+        bus.write16(0x0400_00D8, 0xFFFF);
+        assert_eq!(bus.dma_count_register(3), Some(0xFFFF));
+        bus.write16(0x0400_00B8, 0);
+        assert_eq!(bus.dma_count_register(0), Some(0));
     }
 
     #[test]
