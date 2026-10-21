@@ -201,8 +201,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         continue;
                     };
                     let address = VRAM_BASE + ((source_y * SCREEN_WIDTH + source_x) * 2) as u32;
-                    frame.pixels[y * SCREEN_WIDTH + x] =
-                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                    if window_allows_layer(bus, x, y, 2) {
+                        frame.pixels[y * SCREEN_WIDTH + x] =
+                            apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                    }
                 }
             }
         }
@@ -241,8 +243,10 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let address =
                         VRAM_BASE + page_offset + (source_y * SCREEN_WIDTH + source_x) as u32;
                     let index = usize::from(bus.read8(address));
-                    frame.pixels[y * SCREEN_WIDTH + x] =
-                        apply_brightness_effect(palette[index], bitmap_effect);
+                    if window_allows_layer(bus, x, y, 2) {
+                        frame.pixels[y * SCREEN_WIDTH + x] =
+                            apply_brightness_effect(palette[index], bitmap_effect);
+                    }
                 }
             }
         }
@@ -283,8 +287,12 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let target = (y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2) * SCREEN_WIDTH
                         + x
                         + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
-                    frame.pixels[target] =
-                        apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                    let screen_x = x + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
+                    let screen_y = y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2;
+                    if window_allows_layer(bus, screen_x, screen_y, 2) {
+                        frame.pixels[target] =
+                            apply_brightness_effect(rgb555(bus.read16(address)), bitmap_effect);
+                    }
                 }
             }
         }
@@ -473,7 +481,7 @@ fn render_affine_background(
             });
             let pixel_offset = ((source_y & 7) * 8 + (source_x & 7)) as usize;
             let palette_index = u32::from(pixels[pixel_offset]);
-            if palette_index != 0 {
+            if palette_index != 0 && window_allows_layer(bus, x, y, bg as u16) {
                 frame.pixels[y * SCREEN_WIDTH + x] =
                     apply_brightness_effect(palette[palette_index as usize], brightness_effect);
             }
@@ -611,12 +619,51 @@ fn render_text_background(
             };
             // Color index zero is transparent even when a 4bpp palette bank
             // makes its absolute palette index nonzero.
-            if !transparent {
+            if !transparent && window_allows_layer(bus, x, y, bg as u16) {
                 frame.pixels[y * SCREEN_WIDTH + x] =
                     apply_brightness_effect(palette[palette_index as usize], brightness_effect);
             }
         }
     }
+}
+
+/// Returns whether a layer is visible at a screen pixel under WIN0/WIN1.
+/// Window coordinates use the GBA's half-open ranges and wrap when start exceeds end.
+/// Layer bits are BG0..BG3=0..3, OBJ=4, backdrop=5.
+fn window_allows_layer(bus: &MemoryBus, x: usize, y: usize, layer: u16) -> bool {
+    let display_control = bus.read16(0x0400_0000);
+    let win0_enabled = display_control & (1 << 13) != 0;
+    let win1_enabled = display_control & (1 << 14) != 0;
+    if !win0_enabled && !win1_enabled {
+        return true;
+    }
+
+    let inside = |coordinate: usize, start: usize, end: usize| {
+        if start <= end {
+            coordinate >= start && coordinate < end
+        } else {
+            coordinate >= start || coordinate < end
+        }
+    };
+    let win0h = bus.read16(0x0400_0040);
+    let win0v = bus.read16(0x0400_0044);
+    let win1h = bus.read16(0x0400_0042);
+    let win1v = bus.read16(0x0400_0046);
+    let in_win0 = win0_enabled
+        && inside(x, usize::from(win0h >> 8), usize::from(win0h & 0xFF))
+        && inside(y, usize::from(win0v >> 8), usize::from(win0v & 0xFF));
+    let in_win1 = win1_enabled
+        && inside(x, usize::from(win1h >> 8), usize::from(win1h & 0xFF))
+        && inside(y, usize::from(win1v >> 8), usize::from(win1v & 0xFF));
+
+    let window_control = if in_win0 {
+        bus.read16(0x0400_0048) & 0x003F
+    } else if in_win1 {
+        (bus.read16(0x0400_0048) >> 8) & 0x003F
+    } else {
+        bus.read16(0x0400_004A) & 0x003F
+    };
+    window_control & (1 << layer) != 0
 }
 
 /// Reads a little-endian halfword from the snapshotted OAM address window.
@@ -967,6 +1014,9 @@ fn render_regular_objects(
                 // the decoded palette rather than performing a bus read and
                 // RGB555 conversion for every visible sprite pixel.
                 let destination = screen_y as usize * SCREEN_WIDTH + screen_x as usize;
+                if !window_allows_layer(bus, screen_x as usize, screen_y as usize, 4) {
+                    continue;
+                }
                 let source_color = palette[palette_index as usize];
                 frame.pixels[destination] = if object_mode == 1 && mode >= 3 {
                     if let Some((eva, evb)) = bitmap_blend {
@@ -2230,4 +2280,40 @@ mod tests {
         let frame = render_bitmap_frame(&bus).unwrap();
         assert_eq!(frame.pixel(0, 0), Some(0xFFFFFFFF));
     }
+    #[test]
+    fn win0_masks_selected_background_pixels_without_erasing_backdrop() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, (1 << 8) | (1 << 13)); // BG0 and WIN0.
+        bus.write16(VRAM_BASE, 1);
+        bus.write8(VRAM_BASE + 32, 1);
+        bus.write16(PALETTE_BASE + 2, 0x001F); // Red BG0.
+        bus.write16(0x0400_0040, 8); // WIN0 horizontal range [0,8).
+        bus.write16(0x0400_0044, 1 << 8); // WIN0 vertical range [0,1).
+        bus.write16(0x0400_0048, 0); // WIN0 hides all layers.
+        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+
+        let frame = render_bitmap_frame(&bus).unwrap();
+        assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
+        assert_eq!(frame.pixel(8, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn win0_can_hide_obj_pixels_while_leaving_background_visible() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, (1 << 12) | (1 << 13)); // OBJ and WIN0.
+        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
+        bus.write16(0x0601_0000, 0x1111);
+        bus.write16(0x0700_0000, 0);
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0040, 8);
+        bus.write16(0x0400_0044, 1 << 8);
+        bus.write16(0x0400_0048, 1 << 5); // Backdrop visible; OBJ hidden.
+
+        let frame = render_bitmap_frame(&bus).unwrap();
+        assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
+        assert_eq!(frame.pixel(8, 0), Some(0xFFFF_0000));
+    }
+
 }
