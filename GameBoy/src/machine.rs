@@ -1474,6 +1474,59 @@ mod tests {
     }
 
     #[test]
+    fn machine_snapshot_combines_timer_dma_video_and_irq_state() {
+        let mut machine = GbaMachine::new(cartridge());
+
+        // Timer 0: enabled, IRQ on, one cycle from overflow.
+        machine.bus_mut().write16(0x0400_0100, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0102, 0x00C0);
+        // DMA0: enabled for VBlank, with a one-halfword transfer configured.
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0x9000);
+        // Make the timer IRQ source observable in the combined snapshot.
+        machine.bus_mut().write16(0x0400_0200, 1 << 3);
+
+        let snapshot = machine.diagnostic_snapshot();
+        assert_eq!(snapshot.timer_counters[0], Some(0xFFFF));
+        assert_eq!(snapshot.timer_enabled[0], Some(true));
+        assert_eq!(snapshot.timer_irq_enabled[0], Some(true));
+        assert_eq!(snapshot.dma_enabled[0], Some(true));
+        assert_eq!(snapshot.dma_start_timing[0], Some(1));
+        assert_eq!(snapshot.dma_source_addresses[0], Some(0x0200_0000));
+        assert_eq!(snapshot.dma_destination_addresses[0], Some(0x0300_0000));
+        assert_eq!(snapshot.dma_transfer_counts[0], Some(1));
+        assert_eq!(snapshot.video_scanline, 0);
+        assert_eq!(snapshot.video_cycles_into_scanline, 0);
+        assert_eq!(snapshot.interrupt_enable, 1 << 3);
+        assert_eq!(snapshot.interrupt_requests & (1 << 3), 0);
+        assert_eq!(machine.diagnostic_snapshot(), snapshot);
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
+    }
+
+    #[test]
+    fn cpu_reset_clears_execution_counters_but_preserves_peripheral_state() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0100, 0x1234);
+        machine.bus_mut().write16(0x0400_0102, 0x0080);
+        machine.bus_mut().advance_cycles(17);
+        machine.cpu.set_register(0, 0xDEAD_BEEF);
+        machine.instructions_executed = 7;
+        machine.cycles_elapsed = 29;
+
+        machine.reset_cpu();
+
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
+        assert_eq!(machine.cpu.register(0), 0);
+        assert_eq!(machine.cpu.register(15), CARTRIDGE_ENTRY_POINT);
+        assert_eq!(machine.bus().timer_counter(0), Some(0x1255));
+        assert_eq!(machine.bus().video_cycles_into_scanline(), 17);
+    }
+
+    #[test]
     fn next_interrupt_runner_does_not_claim_an_event_without_pending_irq() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_until_next_interrupt(2).unwrap(), 2);
