@@ -155,6 +155,14 @@ impl GbaMachine {
         self.bus.pending_interrupts()
     }
 
+    /// Returns the lowest-numbered enabled interrupt source awaiting service.
+    ///
+    /// The result is a source bit index (0–13), and is available even when IME
+    /// is disabled. This reports priority only; it does not enter an IRQ exception.
+    pub fn pending_interrupt_source(&self) -> Option<u8> {
+        self.bus.pending_interrupt_source()
+    }
+
     /// Returns the masked DMA control register for channel 0–3.
     pub fn dma_control(&self, channel: usize) -> Option<u16> {
         self.bus.dma_control(channel)
@@ -1125,6 +1133,18 @@ mod tests {
         assert_eq!(machine.run_until_scanline(1, 10).unwrap(), Some(0));
         assert_eq!(machine.run_until_scanline(2, 1).unwrap(), None);
         assert_eq!(machine.bus().video_scanline(), 1);
+    }
+
+    #[test]
+    fn machine_reports_pending_interrupt_priority() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0200, (1 << 8) | (1 << 1));
+        machine.request_interrupt((1 << 8) | (1 << 1));
+        assert_eq!(machine.pending_interrupt_source(), Some(1));
+        machine.acknowledge_interrupts(1 << 1);
+        assert_eq!(machine.pending_interrupt_source(), Some(8));
+        machine.acknowledge_interrupts(1 << 8);
+        assert_eq!(machine.pending_interrupt_source(), None);
     }
 
     #[test]
