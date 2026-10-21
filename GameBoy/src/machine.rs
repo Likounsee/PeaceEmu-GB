@@ -135,6 +135,38 @@ impl GbaMachine {
         Ok(elapsed)
     }
 
+    /// Executes until the PPU reaches a scanline and cycle offset, with a step limit.
+    ///
+    /// `target_cycle` must be in 0..1232. The runner returns the number of
+    /// instructions executed once the PPU is on `target_scanline` at or after
+    /// that cycle offset. If the requested position has already passed on the
+    /// current scanline, it waits for the next frame's occurrence. Returns
+    /// `None` for an invalid position or when the step limit expires.
+    pub fn run_until_video_position(
+        &mut self,
+        target_scanline: u16,
+        target_cycle: u16,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if target_scanline >= 228 || target_cycle >= 1232 {
+            return Ok(None);
+        }
+        let already_passed = self.bus.video_scanline() == target_scanline
+            && self.bus.video_cycles_into_scanline() >= target_cycle;
+        let mut left_current_occurrence = !already_passed;
+        for executed in 0..max_steps {
+            self.step()?;
+            let scanline = self.bus.video_scanline();
+            let cycle = self.bus.video_cycles_into_scanline();
+            if scanline != target_scanline {
+                left_current_occurrence = true;
+            } else if left_current_occurrence && cycle >= target_cycle {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Executes until the PPU reaches a requested scanline or the instruction limit.
     ///
     /// The target must be in the GBA scanline range 0..228. Returns `None` for
