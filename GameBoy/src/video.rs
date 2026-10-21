@@ -1110,7 +1110,7 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
 /// Alpha blending is handled separately because it needs the second compositing target.
 fn bitmap_brightness_effect(
     bus: &MemoryBus,
-    display_control: u16,
+    _display_control: u16,
     target_bit: u16,
 ) -> Option<(bool, u16)> {
     let control = bus.read16(0x0400_0050);
@@ -1203,9 +1203,9 @@ fn render_regular_objects(
         if (!affine && attr0 & (1 << 9) != 0) || object_mode == 3 || (attr0 >> 14) & 3 == 3 {
             continue;
         }
-        if ((obj_window_mask.is_some() && object_mode != 2)
+        if (obj_window_mask.is_some() && object_mode != 2)
             || (obj_window_mask.is_none() && object_mode == 2)
-            || ((attr2 >> 10) & 3) != priority)
+            || ((attr2 >> 10) & 3) != priority
         {
             continue;
         }
