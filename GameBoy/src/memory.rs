@@ -304,6 +304,64 @@ impl MemoryBus {
         self.wait_control
     }
 
+    /// Returns the configured Game Pak access duration in CPU cycles.
+    ///
+    /// This decodes WAITCNT for ROM0 (0x08000000–0x09FFFFFF), ROM1
+    /// (0x0A000000–0x0BFFFFFF), ROM2 (0x0C000000–0x0DFFFFFF), and SRAM
+    /// (0x0E000000–0x0FFFFFFF). The result is the total access duration,
+    /// not an extra-cycle count. Sequential timing is ignored for SRAM, whose
+    /// accesses always use its configured wait duration. This helper exposes
+    /// register decoding for timing integrations; it does not by itself add
+    /// wait states to CPU execution.
+    pub fn gamepak_access_cycles(&self, address: u32, sequential: bool) -> Option<u32> {
+        let waitcnt = self.wait_control;
+        match address {
+            0x0800_0000..=0x09FF_FFFF => {
+                if sequential {
+                    Some(if waitcnt & (1 << 4) != 0 { 1 } else { 2 })
+                } else {
+                    Some(match (waitcnt >> 2) & 3 {
+                        0 => 4,
+                        1 => 3,
+                        2 => 2,
+                        _ => 8,
+                    })
+                }
+            }
+            0x0A00_0000..=0x0BFF_FFFF => {
+                if sequential {
+                    Some(if waitcnt & (1 << 7) != 0 { 1 } else { 4 })
+                } else {
+                    Some(match (waitcnt >> 5) & 3 {
+                        0 => 4,
+                        1 => 3,
+                        2 => 2,
+                        _ => 8,
+                    })
+                }
+            }
+            0x0C00_0000..=0x0DFF_FFFF => {
+                if sequential {
+                    Some(if waitcnt & (1 << 10) != 0 { 1 } else { 8 })
+                } else {
+                    Some(match (waitcnt >> 8) & 3 {
+                        0 => 4,
+                        1 => 3,
+                        2 => 2,
+                        _ => 8,
+                    })
+                }
+            }
+            0x0E00_0000..=0x0FFF_FFFF => Some(match waitcnt & 3 {
+                0 => 4,
+                1 => 3,
+                2 => 2,
+                _ => 8,
+            }),
+            _ => None,
+        }
+    }
+
     fn write_sound_control_high(&mut self, value: u16) {
         if value & (1 << 11) != 0 {
             self.audio_fifos[0].clear();
@@ -2279,6 +2337,30 @@ mod tests {
         bus.write16(0x0400_0082, (1 << 8) | (1 << 11));
         assert_eq!(bus.audio_fifo_len(0), Some(0));
         assert_eq!(bus.read16(0x0400_0082) & (1 << 11), 0);
+    }
+
+    #[test]
+    fn gamepak_waitstate_cycles_decode_all_regions_and_access_types() {
+        let mut bus = MemoryBus::new(cartridge());
+        // Reset WAITCNT: all non-sequential accesses use four cycles;
+        // sequential access durations are 2/4/8 cycles by ROM region.
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(4));
+        assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, false), Some(4));
+        assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, false), Some(4));
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(2));
+        assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, true), Some(4));
+        assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(8));
+        assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, true), Some(4));
+        assert_eq!(bus.gamepak_access_cycles(0x0200_0000, false), None);
+
+        // Set fastest non-sequential/sequence timings for all three ROM windows
+        // and the three fast SRAM encodings.
+        bus.write16(0x0400_0204, 0x7FFF);
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(8));
+        assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(1));
+        assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, true), Some(1));
+        assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(1));
+        assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, false), Some(3));
     }
 
     #[test]
