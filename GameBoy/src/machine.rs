@@ -225,13 +225,6 @@ impl GbaMachine {
         self.bus.interrupt_request_flags()
     }
 
-    /// Returns whether IME is enabled and at least one enabled interrupt is pending.
-    ///
-    /// This reports the condition for IRQ entry; it does not perform CPU exception entry.
-    pub fn interrupt_pending(&self) -> bool {
-        self.bus.interrupt_pending()
-    }
-
     /// Latches the selected interrupt request flags (only implemented GBA sources).
     pub fn request_interrupt(&mut self, sources: u16) {
         self.bus.request_interrupt(sources);
