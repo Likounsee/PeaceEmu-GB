@@ -3478,4 +3478,39 @@ mod tests {
             None
         );
     }
+
+
+    #[test]
+    fn dma_effective_zero_counts_follow_channel_specific_limits() {
+        let mut bus = MemoryBus::new(cartridge());
+        for channel in 0..4_usize {
+            assert_eq!(bus.dma_count_register(channel), Some(0));
+            assert_eq!(
+                bus.dma_transfer_count(channel),
+                Some(if channel == 3 { 0x1_0000 } else { 0x4000 }),
+                "DMA channel {channel}"
+            );
+        }
+
+        for channel in 0..4_usize {
+            let count_address = 0x0400_00B8 + channel as u32 * 12;
+            bus.write16(count_address, 7);
+            assert_eq!(bus.dma_count_register(channel), Some(7));
+            assert_eq!(bus.dma_transfer_count(channel), Some(7));
+        }
+
+        // DMA0–2 expose only 14 count bits, while DMA3 has a 16-bit count.
+        bus.write16(0x0400_00B8, 0xFFFF);
+        bus.write16(0x0400_00B8 + 12, 0xFFFF);
+        bus.write16(0x0400_00B8 + 24, 0xFFFF);
+        bus.write16(0x0400_00B8 + 36, 0xFFFF);
+        assert_eq!(bus.dma_count_register(0), Some(0x3FFF));
+        assert_eq!(bus.dma_count_register(1), Some(0x3FFF));
+        assert_eq!(bus.dma_count_register(2), Some(0x3FFF));
+        assert_eq!(bus.dma_count_register(3), Some(0xFFFF));
+        assert_eq!(bus.dma_transfer_count(0), Some(0x3FFF));
+        assert_eq!(bus.dma_transfer_count(3), Some(0xFFFF));
+        assert_eq!(bus.dma_transfer_count(4), None);
+    }
+
 }
