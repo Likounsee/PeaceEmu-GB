@@ -752,6 +752,36 @@ impl GbaMachine {
         self.cpu.snapshot()
     }
 
+    /// Returns the title declared in the loaded cartridge header.
+    pub fn cartridge_title(&self) -> &str {
+        self.bus.cartridge_title()
+    }
+
+    /// Returns the four-byte game code declared in the loaded cartridge header.
+    pub fn cartridge_game_code(&self) -> &str {
+        self.bus.cartridge_game_code()
+    }
+
+    /// Returns the two-byte maker code declared in the loaded cartridge header.
+    pub fn cartridge_maker_code(&self) -> &str {
+        self.bus.cartridge_maker_code()
+    }
+
+    /// Returns the cartridge header's fixed byte at offset 0xB2.
+    pub fn cartridge_header_fixed_value(&self) -> u8 {
+        self.bus.cartridge_header_fixed_value()
+    }
+
+    /// Returns the software revision byte at cartridge header offset 0xBC.
+    pub fn cartridge_software_version(&self) -> u8 {
+        self.bus.cartridge_software_version()
+    }
+
+    /// Returns the validated complement checksum stored at header offset 0xBD.
+    pub fn cartridge_header_checksum(&self) -> u8 {
+        self.bus.cartridge_header_checksum()
+    }
+
     /// Returns read-only access to the current memory bus.
     pub fn bus(&self) -> &MemoryBus {
         &self.bus
@@ -1277,6 +1307,12 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
         assert_eq!(machine.diagnostic_snapshot().gamepak_wait_control, 0);
+        assert_eq!(machine.cartridge_title(), "TEST GAME");
+        assert_eq!(machine.cartridge_game_code(), "TGME");
+        assert_eq!(machine.cartridge_maker_code(), "01");
+        assert_eq!(machine.cartridge_header_fixed_value(), 0);
+        assert_eq!(machine.cartridge_software_version(), 0);
+        assert_eq!(machine.cartridge_header_checksum(), machine.bus().cartridge_header_checksum());
         assert_eq!(machine.bus().cartridge_save_type(), None);
     }
 
