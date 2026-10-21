@@ -93,7 +93,7 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 The machine facade also exposes `run_until_instruction_count(target, max_steps)` for waiting on an absolute successful-instruction counter and `run_until_cycle_count(target, max_steps)` for an absolute estimated-cycle target. Both return the number of steps consumed or `None` on timeout; cycle targets can be overshot by the final instruction. `run_for_cycles(budget)` for approximate cycle-budget
-execution, `run_until_pc(address, max_steps)` for a bounded PC breakpoint and
+execution and `run_for_instructions(count)` for a fixed instruction batch (returning estimated cycles consumed), `run_until_pc(address, max_steps)` for a bounded PC breakpoint and
 `run_until_pc_revisit(address, max_steps)` for waiting until an address is revisited, `run_until_audio_fifo_refill(fifo, max_steps)` to run until Direct Sound FIFO A (0)
 or B (1) reaches its 16-byte refill threshold, `run_until_next_video_position(line, cycle, max_steps)` for the next fresh raster-position occurrence, `run_until_video_position(line, cycle, max_steps)` for bounded raster-position synchronization, `run_until_next_frame(max_steps)` for bounded synchronization with the next frame wrap, `run_until_scanline(line, max_steps)` for bounded scanline synchronization,
 `run_until_vblank(max_steps)` for VBlank synchronization, `run_until_hblank(max_steps)`
