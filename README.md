@@ -71,6 +71,8 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         let rgb565_be = frame.to_rgb565_be().expect("valid framebuffer");
         let rgb555 = frame.to_rgb555_le().expect("valid framebuffer");
         let bgr = frame.to_bgr888().expect("valid framebuffer");
+        let grayscale = frame.to_luma8().expect("valid framebuffer");
+        let center = frame.crop(40, 20, 160, 120).expect("valid crop");
         println!("RGB bytes: {}, RGBA bytes: {}", rgb.len(), rgba.len());
         println!("BGRA bytes: {}, BGR bytes: {}", bgra.len(), bgr.len());
         println!("RGB565 LE bytes: {}, BE bytes: {}", rgb565.len(), rgb565_be.len());
@@ -86,7 +88,7 @@ execution, `run_until_pc(address, max_steps)` for a bounded PC breakpoint and
 or B (1) reaches its 16-byte refill threshold, `run_until_scanline(line, max_steps)` for bounded scanline synchronization,
 `run_until_vblank(max_steps)` for VBlank synchronization, `run_until_hblank(max_steps)`
 for HBlank synchronization, `run_until_vcount_match(max_steps)` for the programmed DISPSTAT compare event,
-and `run_until_interrupt(max_steps)` for observing enabled pending IRQs. The masked variants `run_until_interrupt_mask(mask, max_steps)` and `run_until_next_interrupt_mask(mask, max_steps)` wait for selected IF/IE sources without stopping for unrelated IRQs; a zero mask never matches. Instruction-level
+and `run_until_interrupt(max_steps)` for observing enabled pending IRQs. `video_cycles_until_hblank()` and `video_cycles_until_vblank()` expose cycle distances to the next blanking events, including wraparound to the next frame. `VideoFrame::crop(x, y, width, height)` extracts a checked rectangle, while `to_luma8()` exports one grayscale byte per pixel. The masked variants `run_until_interrupt_mask(mask, max_steps)` and `run_until_next_interrupt_mask(mask, max_steps)` wait for selected IF/IE sources without stopping for unrelated IRQs; a zero mask never matches. Instruction-level
 cycle budgets may overshoot by the last instruction, and these helpers stop at their
 event or limit; IRQ exception entry is not implemented yet. The initial program counter is 0x08000000. The facade is a
 development API, not a promise of complete commercial-game compatibility or accurate
