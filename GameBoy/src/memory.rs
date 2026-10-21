@@ -2136,10 +2136,10 @@ mod tests {
         assert_eq!(bus.dma_enabled(4), None);
         assert_eq!(bus.dma_start_timing(4), None);
 
-        bus.write16(0x0400_00BA, 0xC400);
-        assert_eq!(bus.dma_control(0), Some(0xC400));
+        bus.write16(0x0400_00BA, 0xD400);
+        assert_eq!(bus.dma_control(0), Some(0xD400));
         assert_eq!(bus.dma_enabled(0), Some(true));
-        assert_eq!(bus.dma_start_timing(0), Some(0));
+        assert_eq!(bus.dma_start_timing(0), Some(1));
         assert_eq!(bus.dma_word_transfer(0), Some(true));
         assert_eq!(bus.dma_irq_enabled(0), Some(true));
 
