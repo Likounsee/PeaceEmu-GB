@@ -175,6 +175,51 @@ impl VideoFrame {
         Some(bytes)
     }
 
+    /// Converts the frame to one byte of luma per pixel in row-major order.
+    ///
+    /// Uses the integer BT.601 approximation (77R + 150G + 29B) / 256.
+    /// Returns None if the public dimensions and pixel buffer disagree.
+    pub fn to_luma8(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let mut bytes = Vec::with_capacity(self.pixels.len());
+        for &pixel in &self.pixels {
+            let red = (pixel >> 16) & 0xFF;
+            let green = (pixel >> 8) & 0xFF;
+            let blue = pixel & 0xFF;
+            bytes.push(((77 * red + 150 * green + 29 * blue) >> 8) as u8);
+        }
+        Some(bytes)
+    }
+
+    /// Copies a rectangular region into a new tightly packed frame.
+    ///
+    /// The rectangle must be non-empty, fit entirely inside the frame, and the
+    /// source frame must be well formed. Checked arithmetic prevents overflow
+    /// for caller-controlled coordinates and dimensions.
+    pub fn crop(&self, x: usize, y: usize, width: usize, height: usize) -> Option<Self> {
+        if !self.is_well_formed() || width == 0 || height == 0 {
+            return None;
+        }
+        let right = x.checked_add(width)?;
+        let bottom = y.checked_add(height)?;
+        if right > self.width || bottom > self.height {
+            return None;
+        }
+        let mut pixels = Vec::with_capacity(width.checked_mul(height)?);
+        for row_y in y..bottom {
+            let start = row_y.checked_mul(self.width)?.checked_add(x)?;
+            let end = start.checked_add(width)?;
+            pixels.extend_from_slice(self.pixels.get(start..end)?);
+        }
+        Some(Self {
+            width,
+            height,
+            pixels,
+        })
+    }
+
     /// Returns whether the dimensions exactly match the backing pixel buffer.
     ///
     /// The check uses checked multiplication so malformed public frame values
@@ -1498,6 +1543,43 @@ mod tests {
         };
         assert!(!overflowing_dimensions.is_well_formed());
         assert_eq!(overflowing_dimensions.pixel(0, 1), None);
+    }
+
+    #[test]
+    fn video_frame_crop_copies_rectangle_and_rejects_invalid_regions() {
+        let frame = VideoFrame {
+            width: 3,
+            height: 2,
+            pixels: vec![1, 2, 3, 4, 5, 6],
+        };
+        assert_eq!(
+            frame.crop(1, 0, 2, 2),
+            Some(VideoFrame {
+                width: 2,
+                height: 2,
+                pixels: vec![2, 3, 5, 6],
+            })
+        );
+        assert_eq!(frame.crop(3, 0, 1, 1), None);
+        assert_eq!(frame.crop(0, 0, 0, 1), None);
+        assert_eq!(frame.crop(0, 1, 3, 2), None);
+    }
+
+    #[test]
+    fn video_frame_exports_luma_and_rejects_malformed_frames() {
+        let frame = VideoFrame {
+            width: 3,
+            height: 1,
+            pixels: vec![0xFFFF_FFFF, 0xFF00_0000, 0xFFFF_0000],
+        };
+        assert_eq!(frame.to_luma8(), Some(vec![255, 0, 76]));
+        let malformed = VideoFrame {
+            width: 2,
+            height: 1,
+            pixels: vec![0xFFFF_FFFF],
+        };
+        assert_eq!(malformed.to_luma8(), None);
+        assert_eq!(malformed.crop(0, 0, 1, 1), None);
     }
 
     #[test]
