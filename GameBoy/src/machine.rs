@@ -2593,4 +2593,86 @@ mod tests {
         assert!(!machine.interrupt_pending());
         assert_eq!(machine.instructions_executed(), 3);
     }
+
+
+    #[test]
+    fn cycle_budget_and_absolute_runners_respect_zero_and_step_limits() {
+        let mut machine = GbaMachine::new(cartridge());
+        let initial = machine.diagnostic_snapshot();
+
+        assert_eq!(machine.run_for_cycles(0).unwrap(), 0);
+        assert_eq!(machine.run_until_instruction_count(1, 0).unwrap(), None);
+        assert_eq!(machine.run_until_cycle_count(1, 0).unwrap(), None);
+        let untouched = machine.diagnostic_snapshot();
+        assert_eq!(untouched.instructions_executed, initial.instructions_executed);
+        assert_eq!(untouched.cycles_elapsed, initial.cycles_elapsed);
+        assert_eq!(untouched.video_scanline, initial.video_scanline);
+        assert_eq!(
+            untouched.video_cycles_into_scanline,
+            initial.video_cycles_into_scanline
+        );
+
+        assert_eq!(machine.run_until_instruction_count(3, 3).unwrap(), Some(3));
+        assert_eq!(machine.instructions_executed(), 3);
+        assert_eq!(machine.run_until_instruction_count(2, 0).unwrap(), Some(0));
+
+        let before_cycle_wait = machine.cycles_elapsed();
+        assert_eq!(
+            machine
+                .run_until_cycle_count(before_cycle_wait + 1, 0)
+                .unwrap(),
+            None
+        );
+        assert_eq!(machine.cycles_elapsed(), before_cycle_wait);
+        assert_eq!(
+            machine
+                .run_until_cycle_count(before_cycle_wait, 0)
+                .unwrap(),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn interrupt_mask_runner_ignores_unselected_pending_sources() {
+        let mut machine = GbaMachine::new(cartridge());
+        let selected = 1_u16 << 4;
+        let unrelated = 1_u16 << 2;
+
+        machine.bus_mut().write16(0x0400_0200, selected | unrelated);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        machine.request_interrupt(unrelated);
+        assert_eq!(machine.pending_interrupts() & unrelated, unrelated);
+        assert_eq!(machine.pending_interrupts() & selected, 0);
+
+        let before = machine.instructions_executed();
+        assert_eq!(machine.run_until_interrupt_mask(selected, 2).unwrap(), 2);
+        assert_eq!(machine.instructions_executed(), before + 2);
+
+        machine.request_interrupt(selected);
+        assert_eq!(machine.run_until_interrupt_mask(selected, 2).unwrap(), 0);
+        assert_eq!(
+            machine.run_until_interrupt_mask(0, 2).unwrap(),
+            2,
+            "a zero mask must never match, even when interrupts are pending"
+        );
+    }
+
+    #[test]
+    fn next_interrupt_mask_wait_requires_a_fresh_selected_request() {
+        let mut machine = GbaMachine::new(cartridge());
+        let selected = 1_u16 << 4;
+        machine.bus_mut().write16(0x0400_0200, selected);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        machine.request_interrupt(selected);
+
+        assert_eq!(
+            machine
+                .run_until_next_interrupt_mask(selected, 2)
+                .unwrap(),
+            2,
+            "an already-pending source is not a fresh assertion"
+        );
+        assert_eq!(machine.instructions_executed(), 2);
+    }
+
 }
