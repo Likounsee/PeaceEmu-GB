@@ -2235,8 +2235,8 @@ mod tests {
 
     #[test]
     fn failed_arm_condition_advances_peripherals_by_one_cycle() {
-        let mut bus = bus_with_program(&[0x03A0_002A]); // MOVEQ r0, #42 (EQ fails after reset).
         // Keep this test focused on condition handling, not Game Pak wait states.
+        let mut bus = bus_with_program(&[0x03A0_002A]); // MOVEQ r0, #42 (EQ fails after reset).
         bus.write32(0x0300_0000, 0x03A0_002A);
         let mut cpu = Cpu::new();
         cpu.set_register(15, 0x0300_0000);
