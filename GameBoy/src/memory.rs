@@ -581,28 +581,39 @@ impl MemoryBus {
         if !matches!(width_bytes, 1 | 2 | 4) {
             return None;
         }
-        let first = self.gamepak_access_cycles(address, sequential)?;
-        let last_address = address.checked_add(u32::from(width_bytes) - 1)?;
         match address {
             0x0800_0000..=0x0DFF_FFFF => {
-                // A single access must not silently cross into a different
-                // WAITCNT ROM region, even when the starting byte is mapped.
-                let first_region = address >> 25;
+                // ARM7TDMI aligns the physical halfword/word bus access down,
+                // even when the CPU instruction uses an unaligned address.
+                let bus_address = match width_bytes {
+                    2 => address & !1,
+                    4 => address & !3,
+                    _ => address,
+                };
+                let first = self.gamepak_access_cycles(bus_address, sequential)?;
+                let last_address = bus_address.checked_add(u32::from(width_bytes) - 1)?;
+                // A physical access must not cross into a different WAITCNT
+                // ROM region after the address has been aligned.
+                let first_region = bus_address >> 25;
                 if last_address >> 25 != first_region {
                     return None;
                 }
                 if width_bytes == 4 {
-                    let second_address = address.checked_add(2)?;
+                    let second_address = bus_address.checked_add(2)?;
                     first.checked_add(self.gamepak_access_cycles(second_address, true)?)
                 } else {
                     Some(first)
                 }
             }
             0x0E00_0000..=0x0FFF_FFFF => {
+                // SRAM is byte-wide and selects its lane from the original
+                // address, so wider accesses repeat that byte without alignment.
+                let last_address = address.checked_add(u32::from(width_bytes) - 1)?;
                 if last_address > 0x0FFF_FFFF {
                     return None;
                 }
-                first.checked_mul(u32::from(width_bytes))
+                self.gamepak_access_cycles(address, sequential)?
+                    .checked_mul(u32::from(width_bytes))
             }
             _ => None,
         }
@@ -3507,13 +3518,29 @@ mod tests {
             bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3),
             Some(8)
         );
-        assert_eq!(bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1), None);
+        assert_eq!(bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 4, 1), Some(6));
         assert_eq!(bus.gamepak_sequence_cycles(0x0FFF_FFFF, false, 2, 1), None);
         assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
         assert_eq!(
             bus.gamepak_sequence_cycles(0x0800_0000, false, 2, usize::MAX),
             None
         );
+    }
+
+    #[test]
+    fn gamepak_rom_timing_aligns_unaligned_halfword_and_word_bus_addresses() {
+        let bus = MemoryBus::new(cartridge());
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 2),
+            bus.gamepak_access_cycles_for_width(0x0800_0001, false, 2)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+            bus.gamepak_access_cycles_for_width(0x0800_0003, false, 4)
+        );
+        // The final odd address in a ROM bank aligns to the last valid
+        // halfword instead of being misclassified as a cross-bank transfer.
+        assert!(bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 2).is_some());
     }
 
     #[test]
@@ -3529,8 +3556,8 @@ mod tests {
             assert!(bus.gamepak_access_cycles(end, false).is_some());
             assert_eq!(
                 bus.gamepak_access_cycles_for_width(end, false, 2),
-                None,
-                "halfword must not cross the window end at {end:#010X}"
+                Some(4),
+                "unaligned halfword access must align down at {end:#010X}"
             );
         }
         assert_eq!(bus.gamepak_access_cycles(0x07FF_FFFF, false), None);
