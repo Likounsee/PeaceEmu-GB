@@ -2409,7 +2409,7 @@ mod tests {
         machine.bus_mut().write32(base, 0x0200_0100);
         machine.bus_mut().write32(base + 4, 0x0300_0100);
         machine.bus_mut().write16(base + 8, 12);
-        machine.bus_mut().write16(base + 10, 0x8400);
+        machine.bus_mut().write16(base + 10, 0xA400);
 
         let first = machine.diagnostic_snapshot();
         assert_eq!(first.dma_enabled[0], Some(true));
@@ -2421,7 +2421,7 @@ mod tests {
         machine.bus_mut().write32(base, 0x0200_0300);
         machine.bus_mut().write32(base + 4, 0x0300_0500);
         machine.bus_mut().write16(base + 8, 3);
-        machine.bus_mut().write16(base + 10, 0xC000);
+        machine.bus_mut().write16(base + 10, 0xD000);
 
         let second = machine.diagnostic_snapshot();
         assert_eq!(second.dma_enabled[0], Some(true));
