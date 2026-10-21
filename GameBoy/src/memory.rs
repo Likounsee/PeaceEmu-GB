@@ -455,6 +455,39 @@ impl MemoryBus {
         }
     }
 
+    /// Returns the total Game Pak bus cycles for a sequence of same-width accesses.
+    ///
+    /// The first transfer uses the requested sequential/non-sequential setting;
+    /// subsequent transfers are treated as sequential. This estimates timing only
+    /// and does not advance the bus. A zero-length sequence costs zero cycles.
+    pub fn gamepak_sequence_cycles(
+        &self,
+        address: u32,
+        first_sequential: bool,
+        width_bytes: u8,
+        access_count: usize,
+    ) -> Option<u64> {
+        if access_count == 0 {
+            return Some(0);
+        }
+        if !matches!(width_bytes, 1 | 2 | 4) {
+            return None;
+        }
+        let stride = u32::from(width_bytes);
+        let mut total = 0_u64;
+        for index in 0..access_count {
+            let offset = u32::try_from(index).ok()?.checked_mul(stride)?;
+            let current = address.checked_add(offset)?;
+            let cycles = self.gamepak_access_cycles_for_width(
+                current,
+                if index == 0 { first_sequential } else { true },
+                width_bytes,
+            )?;
+            total = total.checked_add(u64::from(cycles))?;
+        }
+        Some(total)
+    }
+
     fn write_sound_control_high(&mut self, value: u16) {
         if value & (1 << 11) != 0 {
             self.audio_fifos[0].clear();
@@ -2554,6 +2587,19 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn gamepak_sequence_cycles_accumulates_sequential_accesses_safely() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0), Some(0));
+        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 1), Some(4));
+        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), Some(8));
+        assert_eq!(bus.gamepak_sequence_cycles(0x0200_0000, false, 2, 1), None);
+        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 2), None);
+        assert_eq!(bus.gamepak_sequence_cycles(0xFFFF_FFFE, false, 4, 2), None);
+        bus.write16(0x0400_0204, 1 << 4);
+        assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 3), Some(6));
+    }
+
     fn gamepak_width_timing_models_rom_halfwords_and_sram_bytes() {
         let mut bus = MemoryBus::new(cartridge());
 
