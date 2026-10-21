@@ -193,6 +193,20 @@ impl MemoryBus {
         self.wait_control
     }
 
+    fn write_sound_master_control(&mut self, value: u16) {
+        let was_enabled = self.io[0x84] & 0x80 != 0;
+        let enabled = value & 0x0080 != 0;
+        self.io[0x84] = if enabled { 0x80 } else { 0 };
+        self.io[0x85] = 0;
+        // Turning the sound master off resets the Direct Sound FIFO state too.
+        if was_enabled && !enabled {
+            for fifo in 0..2 {
+                self.audio_fifos[fifo].clear();
+                self.audio_last_samples[fifo] = 0;
+            }
+        }
+    }
+
     fn write_audio_fifo_word(&mut self, fifo: usize, value: u32) {
         if let Some(queue) = self.audio_fifos.get_mut(fifo) {
             for byte in value.to_le_bytes() {
@@ -329,6 +343,15 @@ impl MemoryBus {
     ///
     /// Unmapped and BIOS addresses return zero in this early bus model.
     pub fn read8(&self, address: u32) -> u8 {
+        // SOUNDCNT_X channel-status bits are read-only. Channel status is not
+        // synthesized yet, so expose only the writable sound-master bit.
+        if (0x0400_0084..=0x0400_0085).contains(&address) {
+            return if address == 0x0400_0084 {
+                self.io[0x84] & 0x80
+            } else {
+                0
+            };
+        }
         // Timer counters are live hardware state; control registers expose only
         // the documented low three bits plus IRQ and enable.
         if (0x0400_0100..=0x0400_010F).contains(&address) {
@@ -879,6 +902,14 @@ impl MemoryBus {
             return;
         }
 
+        // SOUNDCNT_X exposes only the sound-master enable bit to software.
+        if (0x0400_0084..=0x0400_0085).contains(&address) {
+            if address == 0x0400_0084 {
+                self.write_sound_master_control(u16::from(value));
+            }
+            return;
+        }
+
         // Sound FIFO ports are write-only and only accept 32-bit pushes.
         if (0x0400_00A0..=0x0400_00A7).contains(&address) {
             return;
@@ -1002,6 +1033,10 @@ impl MemoryBus {
         }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
             self.wait_control = value & 0x7FFB;
+            return;
+        }
+        if (address == 0x0400_0084 || address == 0x0400_0085) {
+            self.write_sound_master_control(value);
             return;
         }
         if address == 0x0400_0082 {
@@ -1851,6 +1886,28 @@ mod tests {
         assert_eq!(bus.read8(0x0E00_0001), 0xAB);
         bus.write32(0x0E00_0003, 0x7654_3210);
         assert_eq!(bus.read8(0x0E00_0003), 0x76);
+    }
+
+    #[test]
+    fn sound_master_control_masks_channel_status_and_resets_fifos_when_disabled() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // Channel status is read-only, while bit 7 is the master enable.
+        bus.write16(0x0400_0084, 0x008F);
+        assert_eq!(bus.read16(0x0400_0084), 0x0080);
+        bus.write32(0x0400_00A0, 0x1234_5678);
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+
+        bus.write8(0x0400_0085, 0xFF);
+        assert_eq!(bus.read16(0x0400_0084), 0x0080);
+        bus.write16(0x0400_0084, 0);
+        assert_eq!(bus.read16(0x0400_0084), 0);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+
+        // The disabled master cannot be re-enabled by writing reserved status bits.
+        bus.write8(0x0400_0085, 0xFF);
+        assert_eq!(bus.read16(0x0400_0084), 0);
     }
 
     #[test]
