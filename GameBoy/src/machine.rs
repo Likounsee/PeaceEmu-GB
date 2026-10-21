@@ -2469,4 +2469,53 @@ mod tests {
         );
         assert_eq!(after.gamepak_wait_control, before.gamepak_wait_control);
     }
+
+    #[test]
+    fn machine_video_position_helpers_reject_invalid_targets_without_running() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+
+        assert_eq!(machine.run_until_video_position(228, 0, 10).unwrap(), None);
+        assert_eq!(machine.run_until_video_position(0, 1232, 10).unwrap(), None);
+        assert_eq!(
+            machine.run_until_next_video_position(228, 0, 10).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_next_video_position(0, 1232, 10).unwrap(),
+            None
+        );
+        assert_eq!(machine.run_until_video_position(0, 0, 0).unwrap(), Some(0));
+
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+    }
+
+    #[test]
+    fn machine_interrupt_acknowledgement_preserves_unrelated_requests() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.request_interrupt(0b0000_0101);
+        assert_eq!(machine.interrupt_request_flags() & 0b0101, 0b0101);
+
+        machine.acknowledge_interrupts(0b0000_0001);
+        assert_eq!(machine.interrupt_request_flags() & 0b0001, 0);
+        assert_eq!(machine.interrupt_request_flags() & 0b0100, 0b0100);
+        assert_eq!(machine.pending_interrupts() & 0b0101, 0b0100);
+    }
+
+    #[test]
+    fn machine_audio_fifo_helpers_validate_fifo_indices() {
+        let machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.audio_fifo_status(2), None);
+        assert_eq!(machine.audio_fifo_len(2), None);
+        assert_eq!(machine.audio_fifo_last_sample(2), None);
+        assert_eq!(machine.audio_fifo_bytes_until_refill(2), None);
+    }
+
 }
