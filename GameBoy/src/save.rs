@@ -19,15 +19,32 @@ pub enum SaveType {
 impl SaveType {
     /// Detects a common GBA backup signature. Unknown images are not guessed.
     pub fn detect(rom: &[u8]) -> Option<Self> {
-        let has = |needle: &[u8]| rom.windows(needle.len()).any(|window| window == needle);
+        // Scan the image once rather than traversing a potentially 32-MiB ROM
+        // separately for every signature. Keep the historical global priority
+        // so a stale lower-priority marker cannot override a larger flash type.
+        let mut flash_128k = false;
+        let mut flash_64k = false;
+        let mut eeprom = false;
+        let mut sram = false;
 
-        if has(b"FLASH1M_V") {
+        for offset in 0..rom.len() {
+            let tail = &rom[offset..];
+            flash_128k |= tail.starts_with(b"FLASH1M_V");
+            flash_64k |= tail.starts_with(b"FLASH512_V") || tail.starts_with(b"FLASH_V");
+            eeprom |= tail.starts_with(b"EEPROM_V");
+            sram |= tail.starts_with(b"SRAM_V");
+            if flash_128k && flash_64k && eeprom && sram {
+                break;
+            }
+        }
+
+        if flash_128k {
             Some(Self::Flash128K)
-        } else if has(b"FLASH512_V") || has(b"FLASH_V") {
+        } else if flash_64k {
             Some(Self::Flash64K)
-        } else if has(b"EEPROM_V") {
+        } else if eeprom {
             Some(Self::Eeprom)
-        } else if has(b"SRAM_V") {
+        } else if sram {
             Some(Self::Sram)
         } else {
             None
@@ -196,6 +213,19 @@ mod tests {
         }
 
         assert_eq!(SaveType::detect(b"no save marker"), None);
+    }
+
+    #[test]
+    fn detection_preserves_flash_priority_when_multiple_markers_are_present() {
+        // ROM hacks can retain stale signatures from an earlier backup device.
+        assert_eq!(
+            SaveType::detect(b"SRAM_V\0EEPROM_V\0FLASH_V\0FLASH1M_V"),
+            Some(SaveType::Flash128K)
+        );
+        assert_eq!(
+            SaveType::detect(b"SRAM_V\0EEPROM_V\0FLASH512_V\0FLASH_V"),
+            Some(SaveType::Flash64K)
+        );
     }
 
     #[test]
