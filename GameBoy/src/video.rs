@@ -2478,7 +2478,7 @@ mod tests {
         bus.write16(0x0700_0000, 2 << 10);
         bus.write16(0x0700_0002, 0);
         bus.write16(0x0700_0004, 512);
-        bus.write16(VRAM_BASE + 0x4000, 0x1111);
+        bus.write16(VRAM_BASE + 0x14000, 0x1111);
 
         let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
