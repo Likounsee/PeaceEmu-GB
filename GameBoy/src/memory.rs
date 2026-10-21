@@ -216,6 +216,11 @@ impl MemoryBus {
         &self.oam
     }
 
+    /// Returns the loaded cartridge ROM image size in bytes.
+    pub fn cartridge_rom_size_bytes(&self) -> usize {
+        self.cartridge.len()
+    }
+
     /// Returns the title declared in the loaded cartridge header.
     pub fn cartridge_title(&self) -> &str {
         self.cartridge.title()
