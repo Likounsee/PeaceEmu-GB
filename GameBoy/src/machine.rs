@@ -156,6 +156,31 @@ impl GbaMachine {
     }
 
     /// Returns the interrupt-enable (IE) bitmask, with reserved bits removed.
+    /// Returns the masked DMA control register for channel 0–3.
+    pub fn dma_control(&self, channel: usize) -> Option<u16> {
+        self.bus.dma_control(channel)
+    }
+
+    /// Returns whether a DMA channel is enabled.
+    pub fn dma_enabled(&self, channel: usize) -> Option<bool> {
+        self.bus.dma_enabled(channel)
+    }
+
+    /// Returns the DMA start timing selector (0 immediate, 1 VBlank, 2 HBlank, 3 special).
+    pub fn dma_start_timing(&self, channel: usize) -> Option<u8> {
+        self.bus.dma_start_timing(channel)
+    }
+
+    /// Returns whether a DMA channel uses 32-bit word transfers.
+    pub fn dma_word_transfer(&self, channel: usize) -> Option<bool> {
+        self.bus.dma_word_transfer(channel)
+    }
+
+    /// Returns whether a DMA channel is configured to request an IRQ on completion.
+    pub fn dma_irq_enabled(&self, channel: usize) -> Option<bool> {
+        self.bus.dma_irq_enabled(channel)
+    }
+
     pub fn interrupt_enable_mask(&self) -> u16 {
         self.bus.interrupt_enable_mask()
     }
@@ -1251,6 +1276,23 @@ mod tests {
         assert_eq!(snapshot.registers[15], CARTRIDGE_ENTRY_POINT);
         assert!(!snapshot.thumb);
         assert_eq!(snapshot.cpsr, machine.cpu().cpsr_flags());
+    }
+
+    #[test]
+    fn machine_forwards_dma_control_diagnostics() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.dma_control(4), None);
+        assert_eq!(machine.dma_enabled(4), None);
+        assert_eq!(machine.dma_start_timing(4), None);
+        assert_eq!(machine.dma_word_transfer(4), None);
+        assert_eq!(machine.dma_irq_enabled(4), None);
+
+        machine.bus_mut().write16(0x0400_00BA, 0xD400);
+        assert_eq!(machine.dma_control(0), Some(0xD400));
+        assert_eq!(machine.dma_enabled(0), Some(true));
+        assert_eq!(machine.dma_start_timing(0), Some(1));
+        assert_eq!(machine.dma_word_transfer(0), Some(true));
+        assert_eq!(machine.dma_irq_enabled(0), Some(true));
     }
 
     #[test]
