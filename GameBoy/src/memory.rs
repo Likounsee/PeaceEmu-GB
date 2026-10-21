@@ -417,6 +417,26 @@ impl MemoryBus {
             .map(|control| ((control >> 12) & 3) as u8)
     }
 
+    /// Returns the destination address control mode (0 increment, 1 decrement,
+    /// 2 fixed, 3 increment/reload) for a DMA channel.
+    pub fn dma_destination_control(&self, channel: usize) -> Option<u8> {
+        self.dma_control(channel)
+            .map(|control| ((control >> 5) & 3) as u8)
+    }
+
+    /// Returns the source address control mode (0 increment, 1 decrement,
+    /// 2 fixed, 3 prohibited) for a DMA channel.
+    pub fn dma_source_control(&self, channel: usize) -> Option<u8> {
+        self.dma_control(channel)
+            .map(|control| ((control >> 7) & 3) as u8)
+    }
+
+    /// Returns whether a DMA channel repeats when using a non-immediate trigger.
+    pub fn dma_repeat(&self, channel: usize) -> Option<bool> {
+        self.dma_control(channel)
+            .map(|control| control & (1 << 9) != 0)
+    }
+
     /// Returns whether a DMA channel transfers 32-bit words rather than halfwords.
     pub fn dma_word_transfer(&self, channel: usize) -> Option<bool> {
         self.dma_control(channel)
@@ -2148,6 +2168,21 @@ mod tests {
         assert_eq!(bus.dma_start_timing(0), Some(2));
         assert_eq!(bus.dma_word_transfer(0), Some(false));
         assert_eq!(bus.dma_irq_enabled(0), Some(true));
+    }
+
+    #[test]
+    fn dma_address_modes_and_repeat_flag_are_decoded() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_00BA, 0xD7E0);
+        assert_eq!(bus.dma_destination_control(0), Some(3));
+        assert_eq!(bus.dma_source_control(0), Some(3));
+        assert_eq!(bus.dma_repeat(0), Some(true));
+
+        bus.write16(0x0400_00BA, 0x8000);
+        assert_eq!(bus.dma_destination_control(0), Some(0));
+        assert_eq!(bus.dma_source_control(0), Some(0));
+        assert_eq!(bus.dma_repeat(0), Some(false));
+        assert_eq!(bus.dma_repeat(4), None);
     }
 
     #[test]
