@@ -2250,7 +2250,7 @@ mod tests {
         assert!(matches!(outcome, StepOutcome::ConditionFailed { .. }));
         assert_eq!(cycles, 1);
         assert_eq!(cpu.register(0), Some(0));
-        assert_eq!(cpu.register(15), Some(0x0800_0004));
+        assert_eq!(cpu.register(15), Some(0x0300_0004));
         // Overflow reloads the configured value, which is FFFF here;
         // the timer IRQ flag is the observable proof that the tick occurred.
         assert_eq!(bus.read16(0x0400_0100), 0xFFFF);
@@ -3960,5 +3960,11 @@ mod tests {
         let (_, first_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         let (_, second_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(first_cycles > second_cycles);
+
+        // An external PC edit breaks the sequential fetch stream even when
+        // the new address is adjacent to the previous instruction.
+        assert!(cpu.set_register(15, 0x0800_00C4));
+        let (_, edited_pc_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(edited_pc_cycles, first_cycles);
     }
 }
