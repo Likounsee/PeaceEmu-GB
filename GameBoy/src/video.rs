@@ -2101,7 +2101,7 @@ mod tests {
         bus.write16(0x0400_0050, (1 << 6) | (1 << 2));
         assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), None);
         bus.write16(0x0400_0050, 2 << 6);
-        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000)), None);
+        assert_eq!(bitmap_brightness_effect(&bus, bus.read16(0x0400_0000), 2), None);
     }
 
     #[test]
