@@ -919,13 +919,11 @@ impl MemoryBus {
         // SOUNDCNT_H supports byte writes too; reset commands in its high
         // byte must not be lost by the generic I/O backing-store path.
         if (0x0400_0082..=0x0400_0083).contains(&address) {
-            let aligned = address & !1;
             let current = u16::from_le_bytes([self.io[0x82], self.io[0x83]]);
             let shift = (address & 1) * 8;
             let mask = 0x00FF_u16 << shift;
             let next = (current & !mask) | (u16::from(value) << shift);
             self.write_sound_control_high(next);
-            let _ = aligned;
             return;
         }
 
