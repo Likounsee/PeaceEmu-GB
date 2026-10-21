@@ -367,6 +367,27 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Captures a sequence of frames, giving each frame its own instruction budget.
+    ///
+    /// Returns an empty vector immediately when `count` is zero. Returns
+    /// `None` if any frame misses its budget or the display mode cannot be
+    /// rendered; CPU errors are propagated. Machine progress is not rolled back
+    /// if a later frame cannot be captured.
+    pub fn run_frames(
+        &mut self,
+        count: usize,
+        max_steps_per_frame: usize,
+    ) -> Result<Option<Vec<VideoFrame>>, CpuError> {
+        let mut frames = Vec::with_capacity(count);
+        for _ in 0..count {
+            let Some(frame) = self.run_frame(max_steps_per_frame)? else {
+                return Ok(None);
+            };
+            frames.push(frame);
+        }
+        Ok(Some(frames))
+    }
+
     /// Renders a frame from the current video-memory and register snapshot.
     ///
     /// Returns no frame for unsupported display modes unless forced blank is active.
@@ -585,6 +606,14 @@ mod tests {
         assert_eq!(frame.width, crate::SCREEN_WIDTH);
         assert_eq!(frame.height, crate::SCREEN_HEIGHT);
         assert!(frame.is_well_formed());
+    }
+
+    #[test]
+    fn run_frames_with_zero_count_does_not_advance_the_machine() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_frames(0, 0).unwrap().unwrap().len(), 0);
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
     }
 
     #[test]
