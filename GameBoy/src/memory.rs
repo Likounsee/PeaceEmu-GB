@@ -3533,4 +3533,74 @@ mod tests {
         bus.write16(0x0400_0204, 0xFFFF);
         assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
     }
+
+
+    #[test]
+    fn keypad_input_is_active_low_and_irq_latches_on_new_match() {
+        let mut bus = MemoryBus::new(cartridge());
+        let keypad_irq = 1_u16 << 12;
+
+        assert_eq!(bus.read16(0x0400_0130), 0x03FF);
+        bus.write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
+        assert!(!bus.keypad_irq_requested());
+        assert_eq!(bus.interrupt_request_flags() & keypad_irq, 0);
+
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_eq!(bus.read16(0x0400_0130) & GbaButton::A.mask(), 0);
+        assert!(bus.keypad_irq_requested());
+        assert_eq!(bus.interrupt_request_flags() & keypad_irq, keypad_irq);
+
+        bus.acknowledge_interrupts(keypad_irq);
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_eq!(
+            bus.interrupt_request_flags() & keypad_irq,
+            0,
+            "holding a matching key must not retrigger the rising-edge latch"
+        );
+
+        bus.set_button_pressed(GbaButton::A, false);
+        assert_eq!(bus.read16(0x0400_0130) & GbaButton::A.mask(), GbaButton::A.mask());
+        assert!(!bus.keypad_irq_requested());
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_eq!(bus.interrupt_request_flags() & keypad_irq, keypad_irq);
+    }
+
+    #[test]
+    fn keypad_and_mode_requires_all_selected_keys_and_byte_writes_work() {
+        let mut bus = MemoryBus::new(cartridge());
+        let selected = GbaButton::A.mask() | GbaButton::B.mask();
+        bus.write8(0x0400_0132, selected as u8);
+        bus.write8(0x0400_0133, 0xC0); // IRQ enable and AND mode.
+        assert_eq!(bus.read16(0x0400_0132), selected | (1 << 14) | (1 << 15));
+
+        bus.set_button_pressed(GbaButton::A, true);
+        assert!(!bus.keypad_irq_requested());
+        bus.set_button_pressed(GbaButton::B, true);
+        assert!(bus.keypad_irq_requested());
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
+        bus.set_button_pressed(GbaButton::A, false);
+        assert!(!bus.keypad_irq_requested());
+    }
+
+    #[test]
+    fn sound_fifo_caps_at_32_bytes_and_refill_query_tracks_low_watermark() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.audio_fifo_status(0).unwrap().queued_bytes, 0);
+        assert_eq!(bus.audio_fifo_bytes_until_refill(0), Some(0));
+        assert_eq!(bus.audio_fifo_bytes_until_refill(2), None);
+
+        for word in 0..8_u32 {
+            bus.write32(0x0400_00A0, word.wrapping_mul(0x0404_0404));
+        }
+        assert_eq!(bus.audio_fifo_len(0), Some(32));
+        assert_eq!(bus.audio_fifo_bytes_until_refill(0), Some(16));
+        assert!(!bus.audio_fifo_status(0).unwrap().refill_threshold_reached);
+
+        // Writes to a full FIFO are discarded rather than extending its queue.
+        bus.write32(0x0400_00A0, 0xFFFF_FFFF);
+        assert_eq!(bus.audio_fifo_len(0), Some(32));
+        assert_eq!(bus.audio_fifo_status(0).unwrap().capacity, 32);
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+    }
+
 }
