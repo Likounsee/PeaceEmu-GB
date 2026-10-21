@@ -40,6 +40,10 @@ pub struct MachineSnapshot {
     pub audio_fifo_lengths: [Option<usize>; 2],
     /// Last signed sample values for Direct Sound FIFOs A and B.
     pub audio_fifo_last_samples: [Option<i8>; 2],
+    /// Active-high pressed-button mask (bits 0–9 map to A, B, Select, Start, directions, R, L).
+    pub keypad_pressed: u16,
+    /// Whether the configured KEYCNT selected-button condition is currently satisfied.
+    pub keypad_irq_requested: bool,
 }
 
 /// A runnable, partially implemented Game Boy Advance machine.
@@ -940,6 +944,8 @@ impl GbaMachine {
                 self.bus.audio_fifo_last_sample(0),
                 self.bus.audio_fifo_last_sample(1),
             ],
+            keypad_pressed: self.bus.keys_pressed(),
+            keypad_irq_requested: self.bus.keypad_irq_requested(),
         }
     }
 
@@ -1507,6 +1513,8 @@ mod tests {
         assert_eq!(initial.dma_enabled, [Some(false); 4]);
         assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
         assert_eq!(initial.audio_fifo_last_samples, [Some(0); 2]);
+        assert_eq!(initial.keypad_pressed, 0);
+        assert!(!initial.keypad_irq_requested);
 
         machine.bus_mut().write16(0x0400_0200, 1 << 2);
         machine.bus_mut().write16(0x0400_0208, 1);
@@ -1518,6 +1526,12 @@ mod tests {
         assert_eq!(pending.pending_interrupt_source, Some(2));
         assert!(pending.interrupt_pending);
         assert_eq!(pending.cpu.pc, machine.cpu().register(15).unwrap());
+
+        machine.bus_mut().write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
+        machine.set_button_pressed(GbaButton::A, true);
+        let keypad = machine.diagnostic_snapshot();
+        assert_eq!(keypad.keypad_pressed, GbaButton::A.mask());
+        assert!(keypad.keypad_irq_requested);
     }
 
     #[test]
