@@ -2469,5 +2469,4 @@ mod tests {
         );
         assert_eq!(after.gamepak_wait_control, before.gamepak_wait_control);
     }
-
 }
