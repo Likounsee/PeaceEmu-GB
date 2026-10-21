@@ -68,7 +68,7 @@ The machine facade also exposes `run_for_cycles(budget)` for approximate cycle-b
 execution, `run_until_scanline(line, max_steps)` for bounded scanline synchronization,
 `run_until_vblank(max_steps)` for VBlank synchronization, `run_until_hblank(max_steps)`
 for HBlank synchronization, `run_until_vcount_match(max_steps)` for the programmed DISPSTAT compare event,
-and `run_until_interrupt(max_steps)` for observing enabled pending IRQs. Instruction-level
+and `run_until_interrupt(max_steps)` for observing enabled pending IRQs. The masked variants `run_until_interrupt_mask(mask, max_steps)` and `run_until_next_interrupt_mask(mask, max_steps)` wait for selected IF/IE sources without stopping for unrelated IRQs; a zero mask never matches. Instruction-level
 cycle budgets may overshoot by the last instruction, and these helpers stop at their
 event or limit; IRQ exception entry is not implemented yet. The initial program counter is 0x08000000. The facade is a
 development API, not a promise of complete commercial-game compatibility or accurate
