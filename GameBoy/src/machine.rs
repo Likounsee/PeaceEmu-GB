@@ -1871,6 +1871,25 @@ mod tests {
     }
 
     #[test]
+    fn machine_gamepak_sram_timing_tracks_waitcnt_and_snapshot() {
+        let mut machine = GbaMachine::new(cartridge());
+        for (encoding, cycles) in [4, 3, 2, 8].into_iter().enumerate() {
+            machine.bus_mut().write16(0x0400_0204, encoding as u16);
+            assert_eq!(machine.gamepak_wait_control(), encoding as u16);
+            assert_eq!(
+                machine.gamepak_access_cycles_for_width(0x0E00_0000, false, 4),
+                Some(cycles * 4)
+            );
+            assert_eq!(
+                machine.diagnostic_snapshot().gamepak_wait_control,
+                encoding as u16
+            );
+        }
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0E00_0000, false, 3), None);
+        assert_eq!(machine.gamepak_access_cycles_for_width(0x0FFF_FFFE, false, 4), None);
+    }
+
+    #[test]
     fn machine_forwards_gamepak_sequence_boundary_behavior() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0204, 0);
