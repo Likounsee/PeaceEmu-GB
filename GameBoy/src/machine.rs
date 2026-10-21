@@ -355,6 +355,11 @@ impl GbaMachine {
         self.bus.is_button_pressed(button)
     }
 
+    /// Returns frontend-relevant state for Direct Sound FIFO A (0) or B (1).
+    pub fn audio_fifo_status(&self, fifo: usize) -> Option<crate::AudioFifoStatus> {
+        self.bus.audio_fifo_status(fifo)
+    }
+
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
     /// The mix reflects SOUNDCNT_H volume and left/right routing. It is a sample
