@@ -430,6 +430,18 @@ impl MemoryBus {
         Some(self.read16(0x0400_00B8 + channel as u32 * 12) & mask)
     }
 
+    /// Returns the effective transfer length, expanding a zero count to the channel's maximum.
+    pub fn dma_transfer_count(&self, channel: usize) -> Option<u32> {
+        let programmed = u32::from(self.dma_count_register(channel)?);
+        Some(if programmed != 0 {
+            programmed
+        } else if channel == 3 {
+            0x1_0000
+        } else {
+            0x4000
+        })
+    }
+
     /// Returns whether a DMA channel is currently enabled.
     pub fn dma_enabled(&self, channel: usize) -> Option<bool> {
         self.dma_control(channel)
@@ -2213,6 +2225,11 @@ mod tests {
         assert_eq!(bus.dma_count_register(3), Some(0xFFFF));
         bus.write16(0x0400_00B8, 0);
         assert_eq!(bus.dma_count_register(0), Some(0));
+        assert_eq!(bus.dma_transfer_count(0), Some(0x4000));
+        assert_eq!(bus.dma_transfer_count(3), Some(0x1_0000));
+        bus.write16(0x0400_00B8, 12);
+        assert_eq!(bus.dma_transfer_count(0), Some(12));
+        assert_eq!(bus.dma_transfer_count(4), None);
     }
 
     #[test]
