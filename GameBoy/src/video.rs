@@ -1894,6 +1894,23 @@ mod tests {
         assert!(frame.pixels.iter().all(|pixel| *pixel == 0xFFFF_FFFF));
     }
     #[test]
+    fn semi_transparent_obj_blends_with_bitmap_bg2_when_selected_as_second_target() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12)); // Mode 3, BG2 and OBJ
+        bus.write16(VRAM_BASE, 0x03E0); // Green BG2 pixel
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ palette index 1
+        bus.write16(0x0601_4000, 0x1111); // Bitmap-mode OBJ tile index 512
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 512);
+        bus.write16(0x0400_0050, 1 << 8); // BG2 is second alpha target
+        bus.write16(0x0400_0052, 8 | (8 << 8)); // EVA = EVB = 8
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_7B00));
+    }
+
+    #[test]
     fn bitmap_alpha_blend_clamps_coefficients_and_blends_5bit_channels() {
         assert_eq!(blend_argb555(0xFFFF_0000, 0xFF00_0000, 8, 8), 0xFF7B_0000);
         assert_eq!(blend_argb555(0xFFFF_FFFF, 0xFFFF_FFFF, 31, 31), 0xFFFF_FFFF);
