@@ -1532,6 +1532,25 @@ mod tests {
     }
 
     #[test]
+    fn next_frame_runner_waits_for_wraparound_and_respects_budget() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_next_frame(0).unwrap(), None);
+        assert_eq!(machine.video_scanline(), 0);
+
+        // Start immediately before the frame boundary. One valid instruction
+        // crosses into scanline zero, without requiring a full-frame run.
+        machine.bus_mut().advance_cycles(228 * 1232 - 1);
+        assert_eq!(machine.video_scanline(), 227);
+        let steps = machine.run_until_next_frame(4).unwrap();
+        assert!(steps.is_some_and(|count| count > 0 && count <= 4));
+        assert_eq!(machine.video_scanline(), 0);
+
+        // Starting on scanline zero waits for the *next* wrap, not an immediate hit.
+        assert_eq!(machine.run_until_next_frame(0).unwrap(), None);
+        assert_eq!(machine.video_scanline(), 0);
+    }
+
+    #[test]
     fn run_frames_with_zero_count_does_not_advance_the_machine() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_frames(0, 0).unwrap().unwrap().len(), 0);
