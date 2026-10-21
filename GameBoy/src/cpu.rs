@@ -448,38 +448,66 @@ impl Cpu {
             let offset = if instruction & (1 << 25) == 0 {
                 instruction & 0xFFF
             } else {
-                // Bit 4 selects register-specified shift amounts, whose
-                // timing/address corner cases are intentionally not guessed.
-                if instruction & (1 << 4) != 0 {
-                    return None;
-                }
                 let rm = self.read_operand_register((instruction & 0xF) as usize, address);
-                let amount = (instruction >> 7) & 0x1F;
-                match (instruction >> 5) & 3 {
-                    0 => rm.wrapping_shl(amount),
-                    1 => {
-                        if amount == 0 {
-                            0
-                        } else {
-                            rm >> amount
-                        }
-                    }
-                    2 => {
-                        if amount == 0 {
-                            if rm & 0x8000_0000 != 0 {
-                                u32::MAX
+                let shift_type = (instruction >> 5) & 3;
+                if instruction & (1 << 4) != 0 {
+                    // Register-specified shifts use Rs[7:0]. A zero shift
+                    // leaves Rm unchanged for all four shift types.
+                    let rs = self.read_operand_register(((instruction >> 8) & 0xF) as usize, address);
+                    let amount = rs & 0xFF;
+                    match shift_type {
+                        0 => match amount {
+                            0 => rm,
+                            1..=31 => rm << amount,
+                            _ => 0,
+                        },
+                        1 => match amount {
+                            0 => rm,
+                            1..=31 => rm >> amount,
+                            _ => 0,
+                        },
+                        2 => match amount {
+                            0 => rm,
+                            1..=31 => ((rm as i32) >> amount) as u32,
+                            _ if rm & 0x8000_0000 != 0 => u32::MAX,
+                            _ => 0,
+                        },
+                        _ => {
+                            if amount == 0 {
+                                rm
                             } else {
-                                0
+                                rm.rotate_right(amount & 31)
                             }
-                        } else {
-                            ((rm as i32) >> amount) as u32
                         }
                     }
-                    _ => {
-                        if amount == 0 {
-                            (u32::from(self.flags.carry) << 31) | (rm >> 1)
-                        } else {
-                            rm.rotate_right(amount)
+                } else {
+                    let amount = (instruction >> 7) & 0x1F;
+                    match shift_type {
+                        0 => rm.wrapping_shl(amount),
+                        1 => {
+                            if amount == 0 {
+                                0
+                            } else {
+                                rm >> amount
+                            }
+                        }
+                        2 => {
+                            if amount == 0 {
+                                if rm & 0x8000_0000 != 0 {
+                                    u32::MAX
+                                } else {
+                                    0
+                                }
+                            } else {
+                                ((rm as i32) >> amount) as u32
+                            }
+                        }
+                        _ => {
+                            if amount == 0 {
+                                (u32::from(self.flags.carry) << 31) | (rm >> 1)
+                            } else {
+                                rm.rotate_right(amount)
+                            }
                         }
                     }
                 }
@@ -4245,6 +4273,42 @@ mod tests {
 
         assert!(rom_cycles > ram_cycles);
         assert_eq!(ram_cycles, 3);
+    }
+
+    #[test]
+    fn arm_register_specified_shift_gamepak_load_adds_waitcnt_latency() {
+        // LDR r0, [r1, r2, LSL r3], with r2=1 and r3=2.
+        let mut rom_bus = bus_with_program(&[0xE791_0312, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(1, 0x07FF_FFFC);
+        rom_cpu.set_register(2, 1);
+        rom_cpu.set_register(3, 2);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[0xE791_0312, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(1, 0x0300_0100);
+        ram_cpu.set_register(2, 1);
+        ram_cpu.set_register(3, 2);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+    }
+
+    #[test]
+    fn failed_arm_condition_does_not_charge_data_wait_states() {
+        // LDREQ r0, [r1, r2, LSL #2]; Z is clear after reset, so no data bus access.
+        let mut bus = bus_with_program(&[0x0791_0102, 0xE1A0_0000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(1, 0x0800_0100);
+        cpu.set_register(2, 1);
+
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(outcome, StepOutcome::ConditionFailed { .. }));
+        assert_eq!(cycles, 1);
     }
 
     #[test]
