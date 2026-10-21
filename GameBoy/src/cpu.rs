@@ -347,8 +347,7 @@ impl Cpu {
             // Thumb PUSH/POP and LDM/STM transfer registers in ascending
             // address order. Their first bus access is non-sequential.
             if raw & 0xF600 == 0xB400 {
-                let count = (raw & 0x00FF).count_ones() as usize
-                    + usize::from(raw & 0x0100 != 0);
+                let count = (raw & 0x00FF).count_ones() as usize + usize::from(raw & 0x0100 != 0);
                 if count == 0 {
                     return None;
                 }
@@ -457,7 +456,11 @@ impl Cpu {
             } else {
                 base
             };
-            return Some((effective, if instruction & (1 << 22) != 0 { 1 } else { 4 }, 1));
+            return Some((
+                effective,
+                if instruction & (1 << 22) != 0 { 1 } else { 4 },
+                1,
+            ));
         }
 
         // ARM immediate-offset halfword and signed transfers.
