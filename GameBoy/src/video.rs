@@ -75,6 +75,47 @@ impl VideoFrame {
         Some(bytes)
     }
 
+    /// Converts the frame to tightly packed BGRA8888 bytes in row-major order.
+    ///
+    /// This is useful for common desktop surfaces that expect blue first.
+    /// The output order is B, G, R, A with opaque alpha; malformed frames
+    /// return None.
+    pub fn to_bgra8888(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let byte_count = self.pixels.len().checked_mul(4)?;
+        let mut bytes = Vec::with_capacity(byte_count);
+        for &pixel in &self.pixels {
+            bytes.push(pixel as u8);
+            bytes.push((pixel >> 8) as u8);
+            bytes.push((pixel >> 16) as u8);
+            bytes.push(0xFF);
+        }
+        Some(bytes)
+    }
+
+    /// Converts the frame to little-endian RGB565 pixel bytes.
+    ///
+    /// Each source channel is truncated to 5 red, 6 green, and 5 blue bits.
+    /// Pixels are emitted least-significant byte first; malformed frames
+    /// return None.
+    pub fn to_rgb565_le(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let byte_count = self.pixels.len().checked_mul(2)?;
+        let mut bytes = Vec::with_capacity(byte_count);
+        for &pixel in &self.pixels {
+            let red = (pixel >> 19) & 0x1F;
+            let green = (pixel >> 10) & 0x3F;
+            let blue = (pixel >> 3) & 0x1F;
+            let packed = ((red << 11) | (green << 5) | blue) as u16;
+            bytes.extend_from_slice(&packed.to_le_bytes());
+        }
+        Some(bytes)
+    }
+
     /// Returns whether the dimensions exactly match the backing pixel buffer.
     ///
     /// The check uses checked multiplication so malformed public frame values
@@ -1436,6 +1477,18 @@ mod tests {
         };
         assert_eq!(malformed.to_rgb888(), None);
         assert_eq!(malformed.to_rgba8888(), None);
+    }
+
+    #[test]
+    fn video_frame_exports_bgra8888_and_rgb565_little_endian() {
+        let frame = VideoFrame {
+            width: 1,
+            height: 1,
+            pixels: vec![0xFF12_3456],
+        };
+        assert_eq!(frame.to_bgra8888(), Some(vec![0x56, 0x34, 0x12, 0xFF]));
+        // 0x12_3456 -> R=2, G=12, B=10 at RGB565 precision -> 0x119A.
+        assert_eq!(frame.to_rgb565_le(), Some(vec![0x9A, 0x11]));
     }
 
     fn bus() -> MemoryBus {
