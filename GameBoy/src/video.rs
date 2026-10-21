@@ -189,7 +189,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 mosaic_enabled,
                 mosaic_width,
                 mosaic_height,
-                display_control & (1 << 13) != 0,
+                bg2_control & (1 << 13) != 0,
             );
             frame.pixels.fill(apply_brightness_effect(
                 rgb555(bus.read16(PALETTE_BASE)),
