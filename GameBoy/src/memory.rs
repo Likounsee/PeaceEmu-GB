@@ -1097,7 +1097,7 @@ impl MemoryBus {
             let shift = (address - 0x0400_0204) * 8;
             let byte_mask = 0xFF_u16 << shift;
             self.wait_control =
-                ((self.wait_control & !byte_mask) | ((value as u16) << shift & byte_mask)) & 0x7FFB;
+                ((self.wait_control & !byte_mask) | ((value as u16) << shift & byte_mask)) & 0x7FFF;
             return;
         }
         // IME exposes only bit 0.
@@ -1592,23 +1592,22 @@ mod tests {
 
         bus.write16(0x0400_0204, 0x7FFD);
         assert_eq!(bus.gamepak_wait_control(), bus.read16(0x0400_0204));
-        assert_eq!(bus.gamepak_wait_control(), 0x7FFB);
+        assert_eq!(bus.gamepak_wait_control(), 0x7FFD);
     }
 
     #[test]
     fn waitcnt_masks_reserved_bits_and_supports_byte_writes() {
         let mut bus = MemoryBus::new(cartridge());
 
-        // WAITCNT has writable timing/PHI/prefetch fields; reserved bits 2 and 15
-        // must be cleared while the valid high-byte controls are preserved.
+        // WAITCNT exposes timing/PHI/prefetch fields; bit 15 is reserved in this model.
         bus.write16(0x0400_0204, 0xFFFF);
-        assert_eq!(bus.read16(0x0400_0204), 0x7FFB);
+        assert_eq!(bus.read16(0x0400_0204), 0x7FFF);
 
         bus.write16(0x0400_0204, 0);
         bus.write8(0x0400_0204, 0xA5);
         bus.write8(0x0400_0205, 0x7F);
-        assert_eq!(bus.read16(0x0400_0204), 0x7FA1);
-        assert_eq!(bus.read8(0x0400_0204), 0xA1);
+        assert_eq!(bus.read16(0x0400_0204), 0x7FA5);
+        assert_eq!(bus.read8(0x0400_0204), 0xA5);
         assert_eq!(bus.read8(0x0400_0205), 0x7F);
     }
 
@@ -2356,6 +2355,7 @@ mod tests {
         // Set fastest non-sequential/sequence timings for all three ROM windows
         // and the three fast SRAM encodings.
         bus.write16(0x0400_0204, 0x7FFF);
+        assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
         assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(8));
         assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(1));
         assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, true), Some(1));
