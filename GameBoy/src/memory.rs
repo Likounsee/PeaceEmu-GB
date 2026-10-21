@@ -2226,6 +2226,7 @@ mod tests {
         bus.write16(0x0400_00B8, 0);
         assert_eq!(bus.dma_count_register(0), Some(0));
         assert_eq!(bus.dma_transfer_count(0), Some(0x4000));
+        bus.write16(0x0400_00D8, 0);
         assert_eq!(bus.dma_transfer_count(3), Some(0x1_0000));
         bus.write16(0x0400_00B8, 12);
         assert_eq!(bus.dma_transfer_count(0), Some(12));
