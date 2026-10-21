@@ -134,6 +134,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     // the 1 KiB once rather than rereading attributes on every priority pass.
     let oam_snapshot: [u8; 1024] =
         std::array::from_fn(|index| bus.read8(0x0700_0000 + index as u32));
+    let allowed_lines = object_scanline_mask(&oam_snapshot);
 
     // Bitmap modes use BG2 as their framebuffer plane. If BG2 is disabled,
     // show the backdrop color instead; OBJ pixels can still appear over it.
@@ -148,6 +149,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &obj_palette,
                 &mut obj_tile_cache,
                 &oam_snapshot,
+                &allowed_lines,
                 &mut frame,
             );
         }
@@ -160,6 +162,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
             display_control,
             &mut obj_tile_cache,
             &oam_snapshot,
+            &allowed_lines,
             &mut frame,
         ),
         3 => {
@@ -280,6 +283,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &obj_palette,
                 &mut obj_tile_cache,
                 &oam_snapshot,
+                &allowed_lines,
                 &mut frame,
             );
         }
@@ -295,6 +299,7 @@ fn render_text_backgrounds(
     display_control: u16,
     obj_tile_cache: &mut [Option<[u8; 64]>],
     oam_snapshot: &[u8; 1024],
+    allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
     frame: &mut VideoFrame,
 ) {
     let palette = palette_snapshot(bus);
@@ -571,36 +576,10 @@ fn read_oam16(snapshot: &[u8; 1024], address: u32) -> u16 {
     u16::from_le_bytes([snapshot[offset], snapshot[(offset + 1) & 0x3FF]])
 }
 
-/// Draws regular (non-affine) OBJ sprites for the requested priority.
-/// OBJ is composited after backgrounds of the same priority; lower OAM indices
-/// win ties, so entries are visited from 127 down to 0.
-fn render_regular_objects(
-    bus: &MemoryBus,
-    display_control: u16,
-    priority: u16,
-    palette: &[u32; 256],
-    tile_cache: &mut [Option<[u8; 64]>],
-    oam_snapshot: &[u8; 1024],
-    frame: &mut VideoFrame,
-) {
-    if display_control & (1 << 12) == 0 {
-        return;
-    }
+/// Selects the first 32 eligible OAM entries intersecting each visible scanline.
+/// The result is computed once per frame and shared across OBJ priority passes.
+fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 128] {
     const OAM_BASE: u32 = 0x0700_0000;
-    let mode = display_control & 7;
-    // OBJ tile indices remain relative to 0x06010000 in every display mode.
-    // Bitmap modes reserve the first 16 KiB of OBJ VRAM, so indices below 512
-    // are unavailable there; adding 0x06014000 as a new base would double-offset
-    // valid bitmap-mode tile indices.
-    let obj_vram_base: u32 = 0x0601_0000;
-    let one_dimensional = display_control & (1 << 6) != 0;
-    let mosaic = bus.read16(0x0400_004C);
-    let object_mosaic_width = u32::from(((mosaic >> 8) & 0xF) + 1);
-    let object_mosaic_height = u32::from(((mosaic >> 12) & 0xF) + 1);
-
-    // The GBA can evaluate at most 32 OBJ entries on each scanline.
-    // Select eligible entries in OAM order before drawing back-to-front, so
-    // lower OAM indices keep their hardware priority when the line is crowded.
     let mut allowed_lines = [[false; SCREEN_HEIGHT]; 128];
     let mut objects_per_line = [0_u8; SCREEN_HEIGHT];
     for index in 0..128_u32 {
@@ -652,6 +631,38 @@ fn render_regular_objects(
             }
         }
     }
+
+    allowed_lines
+}
+
+/// Draws regular (non-affine) OBJ sprites for the requested priority.
+/// OBJ is composited after backgrounds of the same priority; lower OAM indices
+/// win ties, so entries are visited from 127 down to 0.
+fn render_regular_objects(
+    bus: &MemoryBus,
+    display_control: u16,
+    priority: u16,
+    palette: &[u32; 256],
+    tile_cache: &mut [Option<[u8; 64]>],
+    oam_snapshot: &[u8; 1024],
+    allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
+    frame: &mut VideoFrame,
+) {
+    if display_control & (1 << 12) == 0 {
+        return;
+    }
+    const OAM_BASE: u32 = 0x0700_0000;
+    let mode = display_control & 7;
+    // OBJ tile indices remain relative to 0x06010000 in every display mode.
+    // Bitmap modes reserve the first 16 KiB of OBJ VRAM, so indices below 512
+    // are unavailable there; adding 0x06014000 as a new base would double-offset
+    // valid bitmap-mode tile indices.
+    let obj_vram_base: u32 = 0x0601_0000;
+    let one_dimensional = display_control & (1 << 6) != 0;
+    let mosaic = bus.read16(0x0400_004C);
+    let object_mosaic_width = u32::from(((mosaic >> 8) & 0xF) + 1);
+    let object_mosaic_height = u32::from(((mosaic >> 12) & 0xF) + 1);
+
 
     for index in (0..128_u32).rev() {
         let base = OAM_BASE + index * 8;
