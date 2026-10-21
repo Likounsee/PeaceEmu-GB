@@ -5,6 +5,35 @@ use crate::{render_bitmap_frame, Cpu, CpuError, GbaButton, GbaCartridge, MemoryB
 /// Initial entry point for a GBA cartridge in the Game Pak ROM window.
 pub const CARTRIDGE_ENTRY_POINT: u32 = 0x0800_0000;
 
+/// Immutable debugger snapshot of CPU, execution counters, video timing, and IRQ state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MachineSnapshot {
+    /// Snapshot of modeled ARM7TDMI registers and flags.
+    pub cpu: crate::CpuSnapshot,
+    /// Number of successfully executed instructions since construction or CPU reset.
+    pub instructions_executed: u64,
+    /// Approximate cycles elapsed since construction or CPU reset.
+    pub cycles_elapsed: u64,
+    /// Current video scanline (0–227).
+    pub video_scanline: u16,
+    /// Cycles elapsed within the current scanline.
+    pub video_cycles_into_scanline: u16,
+    /// Whether the PPU is currently in VBlank.
+    pub video_in_vblank: bool,
+    /// Whether the PPU is currently in HBlank.
+    pub video_in_hblank: bool,
+    /// Interrupt enable (IE) mask.
+    pub interrupt_enable: u16,
+    /// Latched interrupt request (IF) flags.
+    pub interrupt_requests: u16,
+    /// Enabled pending interrupt sources (IE & IF), independent of IME.
+    pub pending_interrupts: u16,
+    /// Lowest-numbered pending source index, if any.
+    pub pending_interrupt_source: Option<u8>,
+    /// Whether IME, IE, and IF jointly indicate an IRQ ready for service.
+    pub interrupt_pending: bool,
+}
+
 /// A runnable, partially implemented Game Boy Advance machine.
 ///
 /// This facade centralizes CPU stepping and approximate peripheral timing. It
@@ -850,6 +879,27 @@ impl GbaMachine {
         render_bitmap_frame(&self.bus)
     }
 
+    /// Captures a consistent, read-only snapshot of CPU, timing, video, and IRQ state.
+    ///
+    /// This is intended for debuggers, frontends, tests, and telemetry. Timing
+    /// counters remain approximate and the snapshot does not advance emulation.
+    pub fn diagnostic_snapshot(&self) -> MachineSnapshot {
+        MachineSnapshot {
+            cpu: self.cpu.snapshot(),
+            instructions_executed: self.instructions_executed,
+            cycles_elapsed: self.cycles_elapsed,
+            video_scanline: self.bus.video_scanline(),
+            video_cycles_into_scanline: self.bus.video_cycles_into_scanline(),
+            video_in_vblank: self.bus.video_in_vblank(),
+            video_in_hblank: self.bus.video_in_hblank(),
+            interrupt_enable: self.bus.interrupt_enable_mask(),
+            interrupt_requests: self.bus.interrupt_request_flags(),
+            pending_interrupts: self.bus.pending_interrupts(),
+            pending_interrupt_source: self.bus.pending_interrupt_source(),
+            interrupt_pending: self.bus.interrupt_pending(),
+        }
+    }
+
     /// Returns the number of successfully executed instructions since construction.
     pub fn instructions_executed(&self) -> u64 {
         self.instructions_executed
@@ -1395,6 +1445,32 @@ mod tests {
             None
         );
         assert_eq!(machine.gamepak_access_cycles(0x0200_0000, false), None);
+    }
+
+    #[test]
+    fn machine_diagnostic_snapshot_combines_cpu_video_counters_and_irq_state() {
+        let mut machine = GbaMachine::new(cartridge());
+        let initial = machine.diagnostic_snapshot();
+        assert_eq!(initial.cpu.pc, CARTRIDGE_ENTRY_POINT);
+        assert_eq!(initial.instructions_executed, 0);
+        assert_eq!(initial.cycles_elapsed, 0);
+        assert_eq!(initial.video_scanline, machine.video_scanline());
+        assert_eq!(initial.interrupt_enable, 0);
+        assert_eq!(initial.interrupt_requests, 0);
+        assert_eq!(initial.pending_interrupts, 0);
+        assert_eq!(initial.pending_interrupt_source, None);
+        assert!(!initial.interrupt_pending());
+
+        machine.bus_mut().write16(0x0400_0200, 1 << 2);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        machine.request_interrupt(1 << 2);
+        let pending = machine.diagnostic_snapshot();
+        assert_eq!(pending.interrupt_enable, 1 << 2);
+        assert_eq!(pending.interrupt_requests, 1 << 2);
+        assert_eq!(pending.pending_interrupts, 1 << 2);
+        assert_eq!(pending.pending_interrupt_source, Some(2));
+        assert!(pending.interrupt_pending());
+        assert_eq!(pending.cpu.pc, machine.cpu().register(15).unwrap());
     }
 
     #[test]
