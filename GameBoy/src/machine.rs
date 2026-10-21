@@ -284,6 +284,11 @@ impl GbaMachine {
         Ok(max_steps)
     }
 
+    /// Returns the active-high mask of physically pressed keypad buttons.
+    pub fn keys_pressed(&self) -> u16 {
+        self.bus.keys_pressed()
+    }
+
     /// Sets the active-low keypad input through a pressed-key bitmask.
     ///
     /// Bits 0..9 correspond to A, B, Select, Start, Right, Left, Up, Down, R, L.
