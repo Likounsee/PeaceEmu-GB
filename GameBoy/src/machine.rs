@@ -215,6 +215,30 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Executes until the lifetime instruction counter reaches `target_count`, or the step limit.
+    ///
+    /// Returns the number of instructions executed by this call. If the target has
+    /// already been reached, returns `Some(0)`; if the step limit expires first,
+    /// returns `None`. The target is an absolute machine counter, not a relative
+    /// number of additional instructions. CPU errors are propagated and progress
+    /// completed before the error is retained.
+    pub fn run_until_instruction_count(
+        &mut self,
+        target_count: u64,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if self.instructions_executed >= target_count {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.instructions_executed >= target_count {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Executes up to the requested number of instructions, returning estimated total cycles.
     ///
     /// If an unsupported instruction is encountered, execution stops with that
@@ -1144,6 +1168,17 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 8);
         assert_eq!(machine.cycles_elapsed(), cycles);
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 32));
+    }
+
+    #[test]
+    fn instruction_count_runner_uses_absolute_counter_and_honors_limits() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_instruction_count(0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_instruction_count(3, 2).unwrap(), None);
+        assert_eq!(machine.instructions_executed(), 2);
+        assert_eq!(machine.run_until_instruction_count(3, 1).unwrap(), Some(1));
+        assert_eq!(machine.instructions_executed(), 3);
+        assert_eq!(machine.run_until_instruction_count(2, 0).unwrap(), Some(0));
     }
 
     #[test]
