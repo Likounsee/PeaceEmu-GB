@@ -33,8 +33,10 @@ impl SaveType {
             flash_64k |= tail.starts_with(b"FLASH512_V") || tail.starts_with(b"FLASH_V");
             eeprom |= tail.starts_with(b"EEPROM_V");
             sram |= tail.starts_with(b"SRAM_V");
-            if flash_128k && flash_64k && eeprom && sram {
-                break;
+            // This is the highest-priority signature, so no later bytes
+            // can change the selected device.
+            if flash_128k {
+                return Some(Self::Flash128K);
             }
         }
 
