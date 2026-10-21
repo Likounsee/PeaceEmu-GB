@@ -67,8 +67,11 @@ fn start(rom_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         let rgba = frame.to_rgba8888().expect("valid framebuffer");
         let bgra = frame.to_bgra8888().expect("valid framebuffer");
         let rgb565 = frame.to_rgb565_le().expect("valid framebuffer");
+        let rgb565_be = frame.to_rgb565_be().expect("valid framebuffer");
+        let bgr = frame.to_bgr888().expect("valid framebuffer");
         println!("RGB bytes: {}, RGBA bytes: {}", rgb.len(), rgba.len());
-        println!("BGRA bytes: {}, RGB565 bytes: {}", bgra.len(), rgb565.len());
+        println!("BGRA bytes: {}, BGR bytes: {}", bgra.len(), bgr.len());
+        println!("RGB565 LE bytes: {}, BE bytes: {}", rgb565.len(), rgb565_be.len());
     }
     Ok(())
 }
