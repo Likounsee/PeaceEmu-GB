@@ -182,7 +182,13 @@ impl Cpu {
 
     /// Captures the current modeled state for debugging or save-state tooling.
     pub fn snapshot(&self) -> CpuSnapshot {
-        CpuSnapshot { registers: self.registers, flags: self.flags, cpsr: self.cpsr_flags(), thumb: self.thumb, pc: self.registers[15] }
+        CpuSnapshot {
+            registers: self.registers,
+            flags: self.flags,
+            cpsr: self.cpsr_flags(),
+            thumb: self.thumb,
+            pc: self.registers[15],
+        }
     }
 
     /// Evaluates an ARM condition code against the current flags.
@@ -1934,7 +1940,6 @@ mod tests {
         assert!(!cpu.condition_passed_for(0xF));
         assert!(!cpu.condition_passed_for(0x10));
     }
-
 
     use super::*;
     use crate::GbaCartridge;
