@@ -431,6 +431,25 @@ impl GbaMachine {
         Ok(max_steps)
     }
 
+    /// Executes until the PPU wraps from the end of a frame to scanline zero.
+    ///
+    /// Unlike waiting for scanline zero, this always waits for the *next* frame
+    /// boundary, even if called while already on scanline zero. Returns the number
+    /// of instructions executed, or `None` if the step limit expires first.
+    /// The instruction that crosses the boundary is counted in the result.
+    pub fn run_until_next_frame(&mut self, max_steps: usize) -> Result<Option<usize>, CpuError> {
+        let mut previous_scanline = self.bus.video_scanline();
+        for executed in 0..max_steps {
+            self.step()?;
+            let scanline = self.bus.video_scanline();
+            if scanline < previous_scanline {
+                return Ok(Some(executed + 1));
+            }
+            previous_scanline = scanline;
+        }
+        Ok(None)
+    }
+
     /// Executes until the PPU reaches the next occurrence of a scanline.
     ///
     /// Unlike [`run_until_scanline`](Self::run_until_scanline), this waits for the
