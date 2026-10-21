@@ -4337,7 +4337,7 @@ mod tests {
     #[test]
     fn arm_register_specified_shift_transfer_rejects_pc_shift_amount() {
         // LDR r0, [r1, r2, LSL pc] is an unpredictable address form.
-        let instruction = 0xE791_F112;
+        let instruction = 0xE791_0F12;
         let mut bus = bus_with_program(&[instruction]);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
