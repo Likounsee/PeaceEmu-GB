@@ -3534,7 +3534,6 @@ mod tests {
         assert_eq!(bus.gamepak_wait_control(), 0x7FFF);
     }
 
-
     #[test]
     fn keypad_input_is_active_low_and_irq_latches_on_new_match() {
         let mut bus = MemoryBus::new(cartridge());
@@ -3559,7 +3558,10 @@ mod tests {
         );
 
         bus.set_button_pressed(GbaButton::A, false);
-        assert_eq!(bus.read16(0x0400_0130) & GbaButton::A.mask(), GbaButton::A.mask());
+        assert_eq!(
+            bus.read16(0x0400_0130) & GbaButton::A.mask(),
+            GbaButton::A.mask()
+        );
         assert!(!bus.keypad_irq_requested());
         bus.set_button_pressed(GbaButton::A, true);
         assert_eq!(bus.interrupt_request_flags() & keypad_irq, keypad_irq);
@@ -3602,5 +3604,4 @@ mod tests {
         assert_eq!(bus.audio_fifo_status(0).unwrap().capacity, 32);
         assert_eq!(bus.audio_fifo_len(1), Some(0));
     }
-
 }
