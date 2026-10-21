@@ -3945,7 +3945,6 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(1), Some(0));
     }
 
-
     #[test]
     fn dispstat_vcount_irq_latches_only_on_match_rising_edge() {
         let mut bus = MemoryBus::new(cartridge());
