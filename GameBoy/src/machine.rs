@@ -1487,7 +1487,7 @@ mod tests {
         assert_eq!(initial.interrupt_requests, 0);
         assert_eq!(initial.pending_interrupts, 0);
         assert_eq!(initial.pending_interrupt_source, None);
-        assert!(!initial.interrupt_pending());
+        assert!(!initial.interrupt_pending);
         assert_eq!(initial.timer_cycles_until_overflow[0], None);
         assert_eq!(initial.dma_enabled, [Some(false); 4]);
         assert_eq!(initial.audio_fifo_lengths, [Some(0); 2]);
@@ -1501,7 +1501,7 @@ mod tests {
         assert_eq!(pending.interrupt_requests, 1 << 2);
         assert_eq!(pending.pending_interrupts, 1 << 2);
         assert_eq!(pending.pending_interrupt_source, Some(2));
-        assert!(pending.interrupt_pending());
+        assert!(pending.interrupt_pending);
         assert_eq!(pending.cpu.pc, machine.cpu().register(15).unwrap());
     }
 
