@@ -301,9 +301,9 @@ impl Cpu {
             .unwrap_or(fetch_width as u32 / 2);
         let base_fetch_cycles = u32::from(fetch_width / 2);
         let wait_penalty = fetch_cycles.saturating_sub(base_fetch_cycles);
-        // Scalar loads/stores also pay excess Game Pak latency. The instruction
-        // estimate already budgets one nominal data-access cycle, so only the
-        // excess is added here. Multi-transfer and DMA bus contention remain
+        // Scalar loads/stores and supported multiple transfers also pay excess
+        // Game Pak latency. The instruction estimate already budgets nominal
+        // data cycles, so only excess latency is added. DMA contention remains
         // separate follow-up work.
         let data_wait_penalty = if matches!(outcome, StepOutcome::ConditionFailed { .. }) {
             0
@@ -333,9 +333,9 @@ impl Cpu {
 
     /// Predicts the effective address and width for supported scalar memory
     /// instructions so WAITCNT can contribute excess data-access latency.
-    /// Register-offset ARM scalar transfers are intentionally left out until their
-    /// shifter semantics can be modeled precisely. Multi-register transfers use
-    /// sequential burst estimates for supported Game Pak ranges.
+    /// Register-offset ARM transfers with immediate shifts use the ARM7TDMI
+    /// barrel-shifter rules needed for address generation. Register-specified
+    /// shifts and some uncommon transfer encodings remain outside this estimate.
     fn gamepak_data_access(
         &self,
         instruction: u32,
@@ -440,12 +440,40 @@ impl Cpu {
             return Some((start, 4, count));
         }
 
-        // ARM immediate-offset single data transfer. Register-shifted offsets
-        // need the full barrel-shifter carry/shift semantics and are not guessed.
-        if instruction & 0x0C00_0000 == 0x0400_0000 && instruction & (1 << 25) == 0 {
+        // ARM single data transfer, with either an immediate offset or a
+        // register offset using an immediate barrel-shifter amount.
+        if instruction & 0x0C00_0000 == 0x0400_0000 {
             let rn = ((instruction >> 16) & 0xF) as usize;
             let base = self.read_operand_register(rn, address);
-            let offset = instruction & 0xFFF;
+            let offset = if instruction & (1 << 25) == 0 {
+                instruction & 0xFFF
+            } else {
+                // Bit 4 selects register-specified shift amounts, whose
+                // timing/address corner cases are intentionally not guessed.
+                if instruction & (1 << 4) != 0 {
+                    return None;
+                }
+                let rm = self.read_operand_register((instruction & 0xF) as usize, address);
+                let amount = (instruction >> 7) & 0x1F;
+                match (instruction >> 5) & 3 {
+                    0 => rm.wrapping_shl(amount),
+                    1 => if amount == 0 { 0 } else { rm >> amount },
+                    2 => {
+                        if amount == 0 {
+                            if rm & 0x8000_0000 != 0 { u32::MAX } else { 0 }
+                        } else {
+                            ((rm as i32) >> amount) as u32
+                        }
+                    }
+                    _ => {
+                        if amount == 0 {
+                            (u32::from(self.flags.carry) << 31) | (rm >> 1)
+                        } else {
+                            rm.rotate_right(amount)
+                        }
+                    }
+                }
+            };
             let adjusted = if instruction & (1 << 23) != 0 {
                 base.wrapping_add(offset)
             } else {
@@ -463,15 +491,22 @@ impl Cpu {
             ));
         }
 
-        // ARM immediate-offset halfword and signed transfers.
-        if instruction & 0x0E00_0090 == 0x0000_0090
-            && instruction & (1 << 22) != 0
-            && (instruction >> 5) & 3 != 0
-        {
+        // ARM halfword and signed transfers support immediate or unshifted
+        // register offsets. The operation field determines byte/halfword width.
+        if instruction & 0x0E00_0090 == 0x0000_0090 && (instruction >> 5) & 3 != 0 {
             let operation = (instruction >> 5) & 3;
             let rn = ((instruction >> 16) & 0xF) as usize;
             let base = self.read_operand_register(rn, address);
-            let offset = ((instruction >> 4) & 0xF0) | (instruction & 0xF);
+            let offset = if instruction & (1 << 22) != 0 {
+                ((instruction >> 4) & 0xF0) | (instruction & 0xF)
+            } else {
+                // Register-offset halfword/signed transfers use Rm directly;
+                // the encoding's unused bits must be zero.
+                if instruction & 0xF00 != 0 {
+                    return None;
+                }
+                self.read_operand_register((instruction & 0xF) as usize, address)
+            };
             let adjusted = if instruction & (1 << 23) != 0 {
                 base.wrapping_add(offset)
             } else {
@@ -4179,6 +4214,48 @@ mod tests {
             ram_cycles, 3,
             "Thumb IWRAM data reads keep the base estimate"
         );
+    }
+
+    #[test]
+    fn arm_register_offset_gamepak_load_adds_waitcnt_latency() {
+        // LDR r0, [r1, r2, LSL #2]
+        let mut rom_bus = bus_with_program(&[0xE791_0102, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(1, 0x0800_0100);
+        rom_cpu.set_register(2, 1);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[0xE791_0102, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(1, 0x0300_0100);
+        ram_cpu.set_register(2, 1);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+        assert_eq!(ram_cycles, 3);
+    }
+
+    #[test]
+    fn arm_register_offset_halfword_gamepak_load_adds_waitcnt_latency() {
+        // LDRH r0, [r1, r2]
+        let mut rom_bus = bus_with_program(&[0xE191_00B2, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(1, 0x0800_0100);
+        rom_cpu.set_register(2, 2);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[0xE191_00B2, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(1, 0x0300_0100);
+        ram_cpu.set_register(2, 2);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+        assert_eq!(ram_cycles, 3);
     }
 
     #[test]
