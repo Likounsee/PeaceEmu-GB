@@ -595,6 +595,22 @@ mod tests {
     }
 
     #[test]
+    fn run_frame_returns_a_rendered_frame_at_the_next_vblank_entry() {
+        let mut machine = GbaMachine::new(cartridge());
+        // Position the PPU one cycle before VBlank without spending thousands
+        // of CPU instructions to reach the boundary.
+        machine.bus_mut().advance_cycles(160 * 1232 - 1);
+        assert!(!machine.bus().video_in_vblank());
+
+        let frame = machine.run_frame(4).unwrap().unwrap();
+
+        assert!(machine.bus().video_in_vblank());
+        assert_eq!(frame.width, crate::SCREEN_WIDTH);
+        assert_eq!(frame.height, crate::SCREEN_HEIGHT);
+        assert!(frame.is_well_formed());
+    }
+
+    #[test]
     fn machine_exposes_the_current_direct_sound_stereo_mix() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0084, 0x0080);
