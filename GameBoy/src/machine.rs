@@ -752,6 +752,11 @@ impl GbaMachine {
         self.cpu.snapshot()
     }
 
+    /// Returns the loaded cartridge ROM image size in bytes.
+    pub fn cartridge_rom_size_bytes(&self) -> usize {
+        self.bus.cartridge_rom_size_bytes()
+    }
+
     /// Returns the title declared in the loaded cartridge header.
     pub fn cartridge_title(&self) -> &str {
         self.bus.cartridge_title()
@@ -1307,6 +1312,7 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
         assert_eq!(machine.diagnostic_snapshot().gamepak_wait_control, 0);
+        assert_eq!(machine.cartridge_rom_size_bytes(), GBA_HEADER_SIZE);
         assert_eq!(machine.cartridge_title(), "TEST GAME");
         assert_eq!(machine.cartridge_game_code(), "TGME");
         assert_eq!(machine.cartridge_maker_code(), "01");
