@@ -246,7 +246,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let address =
                         VRAM_BASE + page_offset + (source_y * SCREEN_WIDTH + source_x) as u32;
                     let index = usize::from(bus.read8(address));
-                    if window_allows_layer(bus, x, y, 2) {
+                    if windows.allows(x, y, 2) {
                         frame.pixels[y * SCREEN_WIDTH + x] =
                             apply_brightness_effect(palette[index], bitmap_effect);
                     }
@@ -490,7 +490,7 @@ fn render_affine_background(
             });
             let pixel_offset = ((source_y & 7) * 8 + (source_x & 7)) as usize;
             let palette_index = u32::from(pixels[pixel_offset]);
-            if palette_index != 0 && window_allows_layer(bus, x, y, bg as u16) {
+            if palette_index != 0 && windows.allows(x, y, bg as u16) {
                 frame.pixels[y * SCREEN_WIDTH + x] =
                     apply_brightness_effect(palette[palette_index as usize], brightness_effect);
             }
