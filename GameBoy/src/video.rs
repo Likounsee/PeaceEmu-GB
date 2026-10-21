@@ -1487,8 +1487,8 @@ mod tests {
             pixels: vec![0xFF12_3456],
         };
         assert_eq!(frame.to_bgra8888(), Some(vec![0x56, 0x34, 0x12, 0xFF]));
-        // 0x12_3456 -> R=2, G=12, B=10 at RGB565 precision -> 0x119A.
-        assert_eq!(frame.to_rgb565_le(), Some(vec![0x9A, 0x11]));
+        // 0x12_3456 -> R=2, G=13, B=10 at RGB565 precision -> 0x11AA.
+        assert_eq!(frame.to_rgb565_le(), Some(vec![0xAA, 0x11]));
     }
 
     fn bus() -> MemoryBus {
