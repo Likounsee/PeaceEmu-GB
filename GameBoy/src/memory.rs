@@ -3333,7 +3333,10 @@ mod tests {
                 (1 << 10, 0x0C00_0000, 8),
             ] {
                 if other_flag != flag {
-                    assert_eq!(bus.gamepak_access_cycles(other_base, true), Some(other_default));
+                    assert_eq!(
+                        bus.gamepak_access_cycles(other_base, true),
+                        Some(other_default)
+                    );
                 }
             }
         }
