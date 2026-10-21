@@ -79,6 +79,28 @@ impl GbaCartridge {
         &self.maker_code
     }
 
+    /// Returns the cartridge header's fixed byte at offset 0xB2.
+    ///
+    /// Retail GBA ROMs normally store 0x96 here. This is exposed for frontend
+    /// diagnostics and is not used as a hard rejection criterion, since homebrew
+    /// and modified images may intentionally differ.
+    pub fn header_fixed_value(&self) -> u8 {
+        self.rom[0xB2]
+    }
+
+    /// Returns the GBA software revision byte from header offset 0xBC.
+    pub fn software_version(&self) -> u8 {
+        self.rom[0xBC]
+    }
+
+    /// Returns the stored complement checksum byte from header offset 0xBD.
+    ///
+    /// Parsing already verifies this value against the title, game code, maker
+    /// code, and intervening header bytes.
+    pub fn header_checksum(&self) -> u8 {
+        self.rom[0xBD]
+    }
+
     /// Returns the ROM image size in bytes.
     pub fn len(&self) -> usize {
         self.rom.len()
@@ -192,6 +214,9 @@ mod tests {
         assert_eq!(cartridge.title(), "TEST GAME");
         assert_eq!(cartridge.game_code(), "TGME");
         assert_eq!(cartridge.maker_code(), "01");
+        assert_eq!(cartridge.header_fixed_value(), 0);
+        assert_eq!(cartridge.software_version(), 0);
+        assert_eq!(cartridge.header_checksum(), cartridge.rom()[0xBD]);
         assert_eq!(cartridge.len(), GBA_HEADER_SIZE);
     }
 
