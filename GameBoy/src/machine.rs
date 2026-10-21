@@ -610,6 +610,19 @@ impl GbaMachine {
         &self.bus
     }
 
+    /// Returns the configured Game Pak wait-state register (WAITCNT).
+    pub fn gamepak_wait_control(&self) -> u16 {
+        self.bus.gamepak_wait_control()
+    }
+
+    /// Returns configured Game Pak access duration for an address and access type.
+    ///
+    /// This is a timing query only: CPU stepping does not yet apply these wait states.
+    /// Returns None for addresses outside Game Pak ROM and SRAM regions.
+    pub fn gamepak_access_cycles(&self, address: u32, sequential: bool) -> Option<u32> {
+        self.bus.gamepak_access_cycles(address, sequential)
+    }
+
     /// Returns mutable access to the memory bus for input, save data, and test setup.
     pub fn bus_mut(&mut self) -> &mut MemoryBus {
         &mut self.bus
@@ -1108,6 +1121,21 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 8);
         assert_eq!(machine.cycles_elapsed(), cycles);
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 32));
+    }
+
+    #[test]
+    fn machine_exposes_waitstate_queries_and_detached_cpu_snapshots() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.gamepak_wait_control(), 0);
+        assert_eq!(machine.gamepak_access_cycles(0x0800_0000, false), Some(4));
+        assert_eq!(machine.gamepak_access_cycles(0x0800_0000, true), Some(2));
+        assert_eq!(machine.gamepak_access_cycles(0x0200_0000, false), None);
+
+        let snapshot = machine.cpu_snapshot();
+        assert_eq!(snapshot.pc, CARTRIDGE_ENTRY_POINT);
+        machine.run_steps(1).unwrap();
+        assert_eq!(snapshot.pc, CARTRIDGE_ENTRY_POINT);
+        assert_eq!(machine.cpu_snapshot().pc, CARTRIDGE_ENTRY_POINT + 4);
     }
 
     #[test]
