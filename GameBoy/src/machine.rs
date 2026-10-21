@@ -400,6 +400,37 @@ impl GbaMachine {
         self.bus.audio_fifo_status(fifo)
     }
 
+    /// Executes until a Direct Sound FIFO reaches its refill threshold or the
+    /// instruction limit is exhausted.
+    ///
+    /// FIFO A is index 0 and FIFO B is index 1. The threshold is 16 queued bytes
+    /// or fewer. Returns the number of executed instructions, `Some(0)` if
+    /// the FIFO is already at the threshold, and `None` for an invalid FIFO
+    /// index or when no threshold is reached within `max_steps`. This waits
+    /// for the FIFO state; it does not guarantee that DMA is configured to refill it.
+    pub fn run_until_audio_fifo_refill(
+        &mut self,
+        fifo: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        let Some(status) = self.bus.audio_fifo_status(fifo) else {
+            return Ok(None);
+        };
+        if status.refill_threshold_reached {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            let Some(status) = self.bus.audio_fifo_status(fifo) else {
+                return Ok(None);
+            };
+            if status.refill_threshold_reached {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
     /// The mix reflects SOUNDCNT_H volume and left/right routing. It is a sample
@@ -548,6 +579,22 @@ mod tests {
         assert_eq!(machine.instructions_executed(), 8);
         assert_eq!(machine.cycles_elapsed(), cycles);
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT + 32));
+    }
+
+    #[test]
+    fn audio_fifo_refill_runner_handles_ready_invalid_and_step_limit_states() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_audio_fifo_refill(0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_refill(2, 10).unwrap(), None);
+
+        // Populate FIFO A above its refill threshold, then verify a bounded
+        // runner does not claim a refill if no timer consumes the queue.
+        for _ in 0..5 {
+            machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
+        }
+        assert_eq!(machine.bus().audio_fifo_status(0).unwrap().queued_bytes, 20);
+        machine.cpu.set_register(15, 0x0200_0000);
+        assert_eq!(machine.run_until_audio_fifo_refill(0, 2).unwrap(), None);
     }
 
     #[test]
