@@ -116,6 +116,44 @@ impl VideoFrame {
         Some(bytes)
     }
 
+    /// Converts the frame to tightly packed BGR888 bytes in row-major order.
+    ///
+    /// Alpha is omitted and each pixel is emitted blue, green, red. Malformed
+    /// frames return None rather than returning a truncated buffer.
+    pub fn to_bgr888(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let byte_count = self.pixels.len().checked_mul(3)?;
+        let mut bytes = Vec::with_capacity(byte_count);
+        for &pixel in &self.pixels {
+            bytes.push((pixel & 0xFF) as u8);
+            bytes.push(((pixel >> 8) & 0xFF) as u8);
+            bytes.push(((pixel >> 16) & 0xFF) as u8);
+        }
+        Some(bytes)
+    }
+
+    /// Converts the frame to big-endian RGB565 pixel bytes.
+    ///
+    /// Channel precision matches the little-endian conversion; only the byte
+    /// order differs. Malformed frames return None.
+    pub fn to_rgb565_be(&self) -> Option<Vec<u8>> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let byte_count = self.pixels.len().checked_mul(2)?;
+        let mut bytes = Vec::with_capacity(byte_count);
+        for &pixel in &self.pixels {
+            let red = (pixel >> 19) & 0x1F;
+            let green = (pixel >> 10) & 0x3F;
+            let blue = (pixel >> 3) & 0x1F;
+            let packed = ((red << 11) | (green << 5) | blue) as u16;
+            bytes.extend_from_slice(&packed.to_be_bytes());
+        }
+        Some(bytes)
+    }
+
     /// Returns whether the dimensions exactly match the backing pixel buffer.
     ///
     /// The check uses checked multiplication so malformed public frame values
@@ -1480,6 +1518,8 @@ mod tests {
         };
         assert_eq!(malformed.to_rgb888(), None);
         assert_eq!(malformed.to_rgba8888(), None);
+        assert_eq!(malformed.to_bgr888(), None);
+        assert_eq!(malformed.to_rgb565_be(), None);
     }
 
     #[test]
@@ -1492,6 +1532,8 @@ mod tests {
         assert_eq!(frame.to_bgra8888(), Some(vec![0x56, 0x34, 0x12, 0xFF]));
         // 0x12_3456 -> R=2, G=13, B=10 at RGB565 precision -> 0x11AA.
         assert_eq!(frame.to_rgb565_le(), Some(vec![0xAA, 0x11]));
+        assert_eq!(frame.to_rgb565_be(), Some(vec![0x11, 0xAA]));
+        assert_eq!(frame.to_bgr888(), Some(vec![0x56, 0x34, 0x12]));
     }
 
     fn bus() -> MemoryBus {
