@@ -230,7 +230,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut frame,
                 rgb555(bus.read16(PALETTE_BASE)),
                 bitmap_brightness_effect(bus, display_control, 5),
-                windows,
+                &windows,
             );
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
@@ -403,7 +403,7 @@ fn render_text_backgrounds(
         frame,
         palette[0],
         bitmap_brightness_effect(bus, display_control, 5),
-        windows.clone(),
+        windows,
     );
     for priority in (0..=3).rev() {
         // On equal priorities BG0 wins over BG1, then BG2, then BG3.
