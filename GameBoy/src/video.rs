@@ -650,11 +650,11 @@ fn window_allows_layer(bus: &MemoryBus, x: usize, y: usize, layer: u16) -> bool 
     let win1h = bus.read16(0x0400_0042);
     let win1v = bus.read16(0x0400_0046);
     let in_win0 = win0_enabled
-        && inside(x, usize::from(win0h >> 8), usize::from(win0h & 0xFF))
-        && inside(y, usize::from(win0v >> 8), usize::from(win0v & 0xFF));
+        && inside(x, usize::from(win0h & 0xFF), usize::from(win0h >> 8))
+        && inside(y, usize::from(win0v & 0xFF), usize::from(win0v >> 8));
     let in_win1 = win1_enabled
-        && inside(x, usize::from(win1h >> 8), usize::from(win1h & 0xFF))
-        && inside(y, usize::from(win1v >> 8), usize::from(win1v & 0xFF));
+        && inside(x, usize::from(win1h & 0xFF), usize::from(win1h >> 8))
+        && inside(y, usize::from(win1v & 0xFF), usize::from(win1v >> 8));
 
     let window_control = if in_win0 {
         bus.read16(0x0400_0048) & 0x003F
@@ -2303,8 +2303,8 @@ mod tests {
         bus.write16(VRAM_BASE, 1);
         bus.write8(VRAM_BASE + 32, 1);
         bus.write16(PALETTE_BASE + 2, 0x001F); // Red BG0.
-        bus.write16(0x0400_0040, 8); // WIN0 horizontal range [0,8).
-        bus.write16(0x0400_0044, 1); // WIN0 vertical range [0,1).
+        bus.write16(0x0400_0040, 8 << 8); // WIN0 horizontal range [0,8).
+        bus.write16(0x0400_0044, 1 << 8); // WIN0 vertical range [0,1).
         bus.write16(0x0400_0048, 0); // WIN0 hides all layers.
         bus.write16(0x0400_004A, (1 << 0) | (1 << 5)); // Outside: BG0 and color effects.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
@@ -2320,8 +2320,8 @@ mod tests {
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 14)); // BG2 and WIN1.
         bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
         bus.write16(VRAM_BASE, 0x001F); // Red bitmap pixel.
-        bus.write16(0x0400_0042, 4); // WIN1 horizontal range [0,4).
-        bus.write16(0x0400_0046, 1); // WIN1 vertical range [0,1).
+        bus.write16(0x0400_0042, 4 << 8); // WIN1 horizontal range [0,4).
+        bus.write16(0x0400_0046, 1 << 8); // WIN1 vertical range [0,1).
         bus.write16(0x0400_0048, 1 << 8); // WIN1 allows BG0 but not BG2.
         bus.write16(0x0400_004A, 1 << 2); // Outside allows BG2.
 
@@ -2342,8 +2342,8 @@ mod tests {
         bus.write16(0x0700_0000, 0);
         bus.write16(0x0700_0002, 0);
         bus.write16(0x0700_0004, 0);
-        bus.write16(0x0400_0040, 4);
-        bus.write16(0x0400_0044, 1);
+        bus.write16(0x0400_0040, 4 << 8);
+        bus.write16(0x0400_0044, 1 << 8);
         bus.write16(0x0400_0048, 1 << 5); // Backdrop visible; OBJ hidden.
         bus.write16(0x0400_004A, (1 << 4) | (1 << 5)); // Outside: OBJ and backdrop.
 
