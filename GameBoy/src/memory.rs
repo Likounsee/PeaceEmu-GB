@@ -2802,12 +2802,30 @@ mod tests {
         assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, true), Some(8));
         assert_eq!(bus.gamepak_access_cycles(0x0E00_0000, true), Some(4));
         assert_eq!(bus.gamepak_access_cycles(0x0200_0000, false), None);
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 1), Some(4));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 2), Some(4));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(6));
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3), None);
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 2), None);
-        assert_eq!(bus.gamepak_access_cycles_for_width(0x0FFF_FFFF, false, 4), None);
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 1),
+            Some(4)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 2),
+            Some(4)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+            Some(6)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 3),
+            None
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 2),
+            None
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0FFF_FFFF, false, 4),
+            None
+        );
 
         // Exercise the slowest non-sequential ROM and fastest sequential timings;
         // SRAM independently selects its encoded wait duration.
