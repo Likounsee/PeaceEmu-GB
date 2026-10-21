@@ -3950,26 +3950,25 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         let vcount_irq = 1 << 2;
 
-        // The compare value matches the initial scanline, so enabling the
-        // IRQ while the match flag is already high must not synthesize an edge.
+        // Line zero does not match the configured line-one compare value.
         bus.write16(0x0400_0004, (1 << 8) | (1 << 5));
+        assert_eq!(bus.video_scanline(), 0);
         assert_eq!(bus.read16(0x0400_0004) & (1 << 2), 0);
         assert_eq!(bus.interrupt_request_flags() & vcount_irq, 0);
 
-        // VCOUNT is read-only, and DISPSTAT status bits cannot be forced by writes.
-        bus.write16(0x0400_0006, 1);
-        bus.write16(0x0400_0004, (1 << 2) | (1 << 5));
+        // VCOUNT is read-only; reaching line one creates the match rising edge.
+        bus.write16(0x0400_0006, 0);
         assert_eq!(bus.read16(0x0400_0006), 0);
-        assert_eq!(bus.read16(0x0400_0004) & (1 << 2), 0);
-
-        // Matching the current line through the compare field creates exactly
-        // one IRQ edge; rewriting the same match does not relatch it.
-        bus.write16(0x0400_0004, (1 << 5));
+        bus.advance_cycles(1232);
+        assert_eq!(bus.video_scanline(), 1);
         assert_eq!(bus.read16(0x0400_0004) & (1 << 2), 1 << 2);
         assert_eq!(bus.interrupt_request_flags() & vcount_irq, vcount_irq);
+
+        // Acknowledging IF while the match flag remains high must not relatch it.
         bus.acknowledge_interrupts(vcount_irq);
-        bus.write16(0x0400_0004, (1 << 5));
+        bus.advance_cycles(1);
         assert_eq!(bus.interrupt_request_flags() & vcount_irq, 0);
+        assert_eq!(bus.read16(0x0400_0004) & (1 << 2), 1 << 2);
     }
 
     #[test]
