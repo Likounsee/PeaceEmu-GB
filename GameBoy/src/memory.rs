@@ -2096,10 +2096,10 @@ mod tests {
         bus.write32(0x0200_0004, 0x8877_6655);
         bus.write32(0x0200_0008, 0xCCBB_AA99);
         bus.write32(0x0200_000C, 0x00FF_EEDD);
-        bus.write32(0x0400_00B0, 0x0200_0000); // DMA1 source.
-        bus.write32(0x0400_00B4, 0x0400_00A3); // Low bits are ignored by the bus.
-        bus.write16(0x0400_00B8, 1);
-        bus.write16(0x0400_00BA, 0xB640); // Enable, repeat, word, FIFO timing.
+        bus.write32(0x0400_00BC, 0x0200_0000); // DMA1 source.
+        bus.write32(0x0400_00C0, 0x0400_00A3); // Low bits are ignored by the bus.
+        bus.write16(0x0400_00C4, 1);
+        bus.write16(0x0400_00C6, 0xB640); // Enable, repeat, word, FIFO timing.
 
         // Overflow timer 0 immediately to issue a Direct Sound FIFO request.
         bus.write16(0x0400_0100, 0xFFFF); // Timer 0 reload.
@@ -2107,7 +2107,7 @@ mod tests {
         bus.advance_cycles(1);
 
         assert_eq!(bus.audio_fifo_len(0), Some(16));
-        assert_eq!(bus.read32(0x0400_00B0), 0x0200_0010);
+        assert_eq!(bus.read32(0x0400_00BC), 0x0200_0010);
     }
 
     #[test]
