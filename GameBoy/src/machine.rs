@@ -1270,6 +1270,17 @@ mod tests {
         assert_eq!(machine.timer_cascade_enabled(0), Some(true));
         assert_eq!(machine.timer_prescaler_divisor(0), Some(64));
         assert_eq!(machine.timer_prescaler_phase(0), Some(0));
+
+        for (selector, divisor) in [(0_u16, 1_u16), (1, 64), (2, 256), (3, 1024)] {
+            machine
+                .bus_mut()
+                .write16(0x0400_0102, 0x0080 | selector);
+            assert_eq!(machine.timer_prescaler_divisor(0), Some(divisor));
+            assert_eq!(
+                machine.timer_prescaler_phase(0),
+                machine.bus().timer_prescaler_phase(0)
+            );
+        }
     }
 
     #[test]
