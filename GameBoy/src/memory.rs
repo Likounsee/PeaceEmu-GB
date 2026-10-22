@@ -4875,7 +4875,7 @@ mod tests {
         assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
- 
+
     #[test]
     fn keyinput_unused_bits_read_high_for_byte_and_halfword_accesses() {
         let mut bus = MemoryBus::new(cartridge());
