@@ -1763,7 +1763,7 @@ impl Cpu {
                 let stride = self.registers[3].max(2);
                 for index in 0..count {
                     let src = source.wrapping_add(index * 8);
-                    let dst = destination.wrapping_add(index * stride);
+                    let dst = destination.wrapping_add(index * 2);
                     let scale_x = bus.read16(src) as i16 as f64 / 256.0;
                     let scale_y = bus.read16(src.wrapping_add(2)) as i16 as f64 / 256.0;
                     let theta = bus.read16(src.wrapping_add(4));
@@ -2744,10 +2744,10 @@ mod tests {
         assert_eq!(bus.read16(destination + 2) as i16, 0);
         assert_eq!(bus.read16(destination + 4) as i16, 0);
         assert_eq!(bus.read16(destination + 6) as i16, 256);
-        assert_eq!(bus.read16(destination + 8) as i16, 0);
+        assert_eq!(bus.read16(destination + 2) as i16, 0);
         assert_eq!(bus.read16(destination + 10) as i16, -128);
-        assert_eq!(bus.read16(destination + 12) as i16, 512);
-        assert_eq!(bus.read16(destination + 14) as i16, 0);
+        assert_eq!(bus.read16(destination + 18) as i16, 512);
+        assert_eq!(bus.read16(destination + 26) as i16, 0);
     }
 
     #[test]
