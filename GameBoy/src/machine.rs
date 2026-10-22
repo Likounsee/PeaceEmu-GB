@@ -1433,8 +1433,8 @@ mod tests {
         assert_eq!(machine.cpu().flags(), snapshot.flags);
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
-        assert_eq!(machine.bus().interrupt_enable(), 1 << 3);
-        assert_eq!(machine.bus().interrupt_requests() & (1 << 3), 1 << 3);
+        assert_eq!(machine.bus().interrupt_enable_mask(), 1 << 3);
+        assert_eq!(machine.bus().interrupt_request_flags() & (1 << 3), 1 << 3);
     }
 
     #[test]
