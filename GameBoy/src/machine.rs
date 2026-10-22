@@ -2418,6 +2418,11 @@ mod tests {
         assert_eq!(pending.pending_interrupt_source, Some(2));
         assert!(pending.interrupt_pending);
         assert_eq!(pending.cpu.pc, machine.cpu().register(15).unwrap());
+
+        machine.bus_mut().write16(0x0400_0208, 1);
+        let master_enabled = machine.diagnostic_snapshot();
+        assert!(master_enabled.interrupt_master_enabled);
+        assert!(master_enabled.interrupt_pending);
         machine.bus_mut().write32(0x0400_00B0, 0x0200_1234);
         machine.bus_mut().write32(0x0400_00B4, 0x0300_5678);
         machine.bus_mut().write16(0x0400_00B8, 7);
