@@ -1148,8 +1148,11 @@ impl MemoryBus {
         let step = if word { 4_u32 } else { 2_u32 };
         let source_mode = (control >> 7) & 3;
         let destination_mode = (control >> 5) & 3;
-        let mut src = source & !(step - 1);
-        let mut dst = destination & !(step - 1);
+        // Apply the physical 28-bit address mask before the first bus
+        // access as well as during progression. This keeps execution correct
+        // even if state was restored from an older or externally crafted save.
+        let mut src = source & 0x0FFF_FFFF & !(step - 1);
+        let mut dst = destination & 0x0FFF_FFFF & !(step - 1);
 
         // EEPROM command width is selected by the halfword DMA length. The
         // following read-data DMA is 68 halfwords and keeps this selection.
@@ -2603,6 +2606,21 @@ mod tests {
         assert_eq!(bus.dma_source_address(0), Some(0x0200_0000));
         assert_eq!(bus.dma_destination_address(0), Some(0x0300_0006));
         assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
+    fn immediate_dma_masks_reserved_address_bits_before_first_access() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0000, 0xBEEF);
+        // Reserved high address nibbles must not select an unmapped region.
+        bus.write32(0x0400_00B0, 0x1200_0000);
+        bus.write32(0x0400_00B4, 0x1300_0000);
+        bus.write16(0x0400_00B8, 1);
+        bus.write16(0x0400_00BA, 0x8000);
+
+        assert_eq!(bus.read16(0x0300_0000), 0xBEEF);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0002));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0002));
     }
 
     #[test]
