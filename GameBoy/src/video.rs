@@ -1353,6 +1353,23 @@ fn render_regular_objects(
     let mosaic = bus.read16(0x0400_004C);
     let object_mosaic_width = u32::from(((mosaic >> 8) & 0xF) + 1);
     let object_mosaic_height = u32::from(((mosaic >> 12) & 0xF) + 1);
+    // These registers cannot change during a snapshot render. Decode them once
+    // instead of issuing MMIO reads for every semi-transparent OBJ pixel.
+    let tiled_alpha_blend = if mode < 3 {
+        let control = bus.read16(0x0400_0050);
+        if (control >> 6) & 3 == 1 {
+            let coefficients = bus.read16(0x0400_0052);
+            Some((
+                control,
+                (coefficients & 0x1F).min(16),
+                ((coefficients >> 8) & 0x1F).min(16),
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     for index in (0..128_u32).rev() {
         let base = OAM_BASE + index * 8;
@@ -1561,18 +1578,16 @@ fn render_regular_objects(
                             } else {
                                 source_color
                             }
-                        } else if let Some(layers) = layer_buffer.as_deref() {
+                        } else if let (Some(layers), Some((control, eva, evb))) =
+                            (layer_buffer.as_deref(), tiled_alpha_blend)
+                        {
                             let target_layer = layers[destination];
-                            let control = bus.read16(0x0400_0050);
                             let target_mask = if target_layer == 5 {
                                 control & (1 << 13) != 0
                             } else {
                                 control & (1 << (8 + target_layer)) != 0
                             };
-                            if (control >> 6) & 3 == 1 && target_mask {
-                                let coefficients = bus.read16(0x0400_0052);
-                                let eva = (coefficients & 0x1F).min(16);
-                                let evb = ((coefficients >> 8) & 0x1F).min(16);
+                            if target_mask {
                                 blend_argb555(source_color, frame.pixels[destination], eva, evb)
                             } else {
                                 source_color
@@ -2110,6 +2125,23 @@ mod tests {
         assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
         // A transparent OBJ pixel leaves the backdrop untouched.
         assert_eq!(frame.pixel(4, 4), Some(0xFF00_00FF));
+    }
+
+    #[test]
+    fn semi_transparent_obj_clamps_tiled_alpha_coefficients_to_sixteen() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12); // OBJ enabled, mode 0
+        bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // OBJ palette index 1: red
+        bus.write16(0x0601_0000, 0x1111);
+        bus.write16(0x0700_0000, 1 << 10);
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 13));
+        bus.write16(0x0400_0052, (31 << 8) | 31); // Both coefficients clamp to 16.
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
     }
 
     #[test]
