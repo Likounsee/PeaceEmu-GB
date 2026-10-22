@@ -1749,7 +1749,10 @@ impl Cpu {
                 let header = bus.read32(source);
                 let expected_tag = if wide { 0x81 } else { 0x80 };
                 if header as u8 != expected_tag {
-                    return Err(CpuError::UnsupportedInstruction { address, instruction });
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
                 }
                 let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
                 let mut cursor = source.wrapping_add(4);
@@ -2625,7 +2628,8 @@ mod tests {
         cpu.reset(0x0200_0100);
         cpu.set_register(0, 0x0200_0010);
         cpu.set_register(1, 0x0300_0000);
-        cpu.execute_swi(0x0200_0100, 0xEF00_0016, 0x16, false, &mut bus).unwrap();
+        cpu.execute_swi(0x0200_0100, 0xEF00_0016, 0x16, false, &mut bus)
+            .unwrap();
         assert_eq!(bus.read8(0x0300_0000), 250);
         assert_eq!(bus.read8(0x0300_0001), 4);
         assert_eq!(bus.read8(0x0300_0002), 9);
@@ -2642,7 +2646,8 @@ mod tests {
         cpu.reset(0x0200_0100);
         cpu.set_register(0, 0x0200_0010);
         cpu.set_register(1, 0x0300_0000);
-        cpu.execute_swi(0x0200_0100, 0xEF00_0017, 0x17, false, &mut bus).unwrap();
+        cpu.execute_swi(0x0200_0100, 0xEF00_0017, 0x17, false, &mut bus)
+            .unwrap();
         assert_eq!(bus.read16(0x0300_0000), 0xFFFE);
         assert_eq!(bus.read16(0x0300_0002), 3);
     }
