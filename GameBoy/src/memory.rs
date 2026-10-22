@@ -1395,9 +1395,13 @@ impl MemoryBus {
         // DMA source/destination registers are 28-bit addresses. Byte stores
         // to the most-significant byte must not preserve the reserved high nibble.
         if (0x0400_00B0..=0x0400_00DF).contains(&address) {
+            let channel = (address - 0x0400_00B0) / 12;
             let register_offset = (address - 0x0400_00B0) % 12;
             if register_offset == 3 || register_offset == 7 {
                 value &= 0x0F;
+            } else if register_offset == 9 && channel != 3 {
+                // DMA0–DMA2 have 14-bit counts; DMA3 has a 16-bit count.
+                value &= 0x3F;
             }
         }
         // DMA control's high byte contains the enable bit; support STRB writes.
@@ -1610,6 +1614,13 @@ impl MemoryBus {
             if register_offset == 0 || register_offset == 4 {
                 let io_offset = (aligned_dma_address - 0x0400_0000) as usize;
                 self.io[io_offset..io_offset + 2].copy_from_slice(&value.to_le_bytes());
+                return;
+            }
+            if register_offset == 8 {
+                let channel = (aligned_dma_address - 0x0400_00B0) / 12;
+                let count = if channel == 3 { value } else { value & 0x3FFF };
+                let io_offset = (aligned_dma_address - 0x0400_0000) as usize;
+                self.io[io_offset..io_offset + 2].copy_from_slice(&count.to_le_bytes());
                 return;
             }
         }
