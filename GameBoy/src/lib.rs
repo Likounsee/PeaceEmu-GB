@@ -27,5 +27,5 @@ pub mod machine;
 /// Initial bitmap-mode renderer for the Game Boy Advance display.
 pub mod video;
 
-pub use machine::{GbaMachine, MachineSnapshot, CARTRIDGE_ENTRY_POINT};
+pub use machine::{GbaMachine, GbaSaveState, MachineSnapshot, CARTRIDGE_ENTRY_POINT};
 pub use video::{render_bitmap_frame, VideoFrame, SCREEN_HEIGHT, SCREEN_WIDTH};
