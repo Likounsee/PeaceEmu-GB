@@ -2804,19 +2804,19 @@ mod tests {
         cpu.set_register(0, 0);
         cpu.execute_swi(0x0200_0200, 0xEF00_0009, 0x09, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), 0);
+        assert_eq!(cpu.register(0).unwrap(), 0);
 
         cpu.set_register(0, 0);
         cpu.set_register(1, 0x4000);
         cpu.execute_swi(0x0200_0204, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0) as i32, 6434);
+        assert_eq!(cpu.register(0).unwrap() as i32, 6434);
 
         cpu.set_register(0, 0xC000);
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0208, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0) as i32, 12868);
+        assert_eq!(cpu.register(0).unwrap() as i32, 12868);
     }
 
     #[test]
