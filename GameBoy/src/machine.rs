@@ -1402,6 +1402,29 @@ mod tests {
     }
 
     #[test]
+    fn diagnostic_snapshot_separates_pending_irq_from_master_enable() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0200, 1 << 3);
+        machine.bus_mut().request_interrupt(1 << 3);
+
+        let disabled = machine.diagnostic_snapshot();
+        assert_eq!(disabled.interrupt_enable, 1 << 3);
+        assert_eq!(disabled.interrupt_requests & (1 << 3), 1 << 3);
+        assert_eq!(disabled.pending_interrupts, 1 << 3);
+        assert_eq!(disabled.pending_interrupt_source, Some(3));
+        assert!(!disabled.interrupt_master_enabled);
+        assert!(!disabled.interrupt_pending);
+
+        machine.bus_mut().write16(0x0400_0208, 1);
+        let enabled = machine.diagnostic_snapshot();
+        assert!(enabled.interrupt_master_enabled);
+        assert!(enabled.interrupt_pending);
+        assert_eq!(enabled.pending_interrupt_source, Some(3));
+        assert_eq!(enabled.instructions_executed, 0);
+        assert_eq!(enabled.cycles_elapsed, 0);
+    }
+
+    #[test]
     fn machine_starts_at_rom_and_exposes_diagnostic_state() {
         let machine = GbaMachine::new(cartridge());
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
