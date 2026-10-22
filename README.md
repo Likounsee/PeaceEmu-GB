@@ -116,7 +116,7 @@ DMA inspection is available through `dma_control(channel)`, `dma_source_address(
 
 ## Project status
 
-The main priorities are improving hardware accuracy and expanding integration between the CPU, memory bus, DMA, video, interrupts, and save devices. Timing is still approximate: instruction fetches, selected scalar data accesses, supported multiple-transfer bursts, and ARM single-data-transfer register offsets with immediate or register-specified shifts apply partial WAITCNT latency, but uncommon halfword/signed-transfer encodings, DMA stalls, complete exception handling, full audio output, and comprehensive game compatibility are not claimed.
+The main priorities are improving hardware accuracy and expanding integration between the CPU, memory bus, DMA, video, interrupts, and save devices. Timing is still approximate: instruction fetches, selected scalar data accesses, supported multiple-transfer bursts, and ARM single-data-transfer register offsets with immediate or register-specified shifts apply partial WAITCNT latency, including ARM halfword/signed transfers with immediate or unshifted-register offsets; DMA stalls, complete exception handling, full audio output, and comprehensive game compatibility are not claimed.
 
 Please report reproducible issues with the Rust version, operating system, command run, expected behavior, and actual behavior. Do not upload commercial ROMs or copyrighted game assets to issues.
 
