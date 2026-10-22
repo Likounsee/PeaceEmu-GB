@@ -4784,7 +4784,7 @@ mod tests {
         // Acknowledge, then prove an already-satisfied condition does not relatch
         // on an unrelated state change while the AND condition stays true.
         bus.acknowledge_interrupts(1 << 12);
-        bus.set_button_pressed(GbaButton::START, true);
+        bus.set_button_pressed(GbaButton::Start, true);
         assert_eq!(bus.interrupt_request_flags() & (1 << 12), 0);
 
         // Dropping one selected key breaks the condition; pressing it again is a
