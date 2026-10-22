@@ -2891,6 +2891,23 @@ mod tests {
     }
 
     #[test]
+    fn opaque_tiled_obj_does_not_receive_alpha_blending() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12); // Mode 0, OBJ enabled.
+        bus.write16(PALETTE_BASE, 0x03E0); // Green backdrop.
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
+        bus.write16(0x0601_0000, 0x1111);
+        bus.write16(0x0700_0000, 0); // Normal opaque OBJ, not semi-transparent.
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 13)); // Alpha mode; backdrop target 2.
+        bus.write16(0x0400_0052, 8 | (8 << 8));
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
     fn tiled_obj_brightness_requires_obj_first_target_selection() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 1 << 12); // Mode 0, OBJ enabled.
