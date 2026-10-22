@@ -4573,6 +4573,31 @@ mod tests {
     }
 
     #[test]
+    fn arm_immediate_signed_and_halfword_transfers_charge_gamepak_waitcnt() {
+        // LDRSH r0, [r1, #4]; LDRSB r0, [r1, #4]; STRH r0, [r1, #4].
+        for instruction in [0xE1D1_00F4, 0xE1D1_00D4, 0xE1C1_00B4] {
+            let mut rom_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+            let mut rom_cpu = Cpu::new();
+            rom_cpu.reset(0x0200_0000);
+            rom_cpu.set_register(1, 0x0800_0100);
+            rom_cpu.set_register(0, 0x1234_5678);
+            let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+            let mut ram_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+            let mut ram_cpu = Cpu::new();
+            ram_cpu.reset(0x0200_0000);
+            ram_cpu.set_register(1, 0x0300_0100);
+            ram_cpu.set_register(0, 0x1234_5678);
+            let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+            assert!(
+                rom_cycles > ram_cycles,
+                "instruction 0x{instruction:08X} should pay Game Pak wait states"
+            );
+        }
+    }
+
+    #[test]
     fn arm_multiple_gamepak_transfer_models_sequential_data_wait_states() {
         let mut rom_bus = bus_with_program(&[0xE8B1_0005, 0xE1A0_0000]); // LDMIA r1!, {r0, r2}
         let mut rom_cpu = Cpu::new();
