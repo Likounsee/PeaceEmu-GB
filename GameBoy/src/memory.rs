@@ -2498,6 +2498,50 @@ mod tests {
     }
 
     #[test]
+    fn immediate_dma_decrement_source_and_fixed_destination_follow_address_modes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0000, 0x3333);
+        bus.write16(0x0200_0002, 0x2222);
+        bus.write16(0x0200_0004, 0x1111);
+        bus.write32(0x0400_00B0, 0x0200_0004);
+        bus.write32(0x0400_00B4, 0x0300_0000);
+        bus.write16(0x0400_00B8, 3);
+        // Source decrement, destination fixed, immediate halfword transfer.
+        bus.write16(0x0400_00BA, 0x80C0);
+
+        assert_eq!(bus.read16(0x0300_0000), 0x3333);
+        assert_eq!(bus.dma_source_address(0), Some(0x01FF_FFFE));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+        assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
+    fn immediate_dma3_zero_count_expands_to_65536_halfwords() {
+        let mut bus = MemoryBus::new(cartridge());
+        let source = 0x0200_0000;
+        let destination = 0x0202_0000;
+        let byte_length = 0x1_0000_u32 * 2;
+        bus.write16(source, 0x1357);
+        bus.write16(source + byte_length - 2, 0x2468);
+        bus.write32(0x0400_00D4, source);
+        bus.write32(0x0400_00D8, destination);
+        bus.write16(0x0400_00DC, 0); // DMA3 zero count means 0x10000 halfwords.
+        bus.write16(0x0400_00DE, 0x8000);
+
+        assert_eq!(bus.read16(destination), 0x1357);
+        assert_eq!(bus.read16(destination + byte_length - 2), 0x2468);
+        assert_eq!(
+            bus.dma_source_address(3),
+            Some(source + byte_length)
+        );
+        assert_eq!(
+            bus.dma_destination_address(3),
+            Some(destination + byte_length)
+        );
+        assert_eq!(bus.dma_enabled(3), Some(false));
+    }
+
+    #[test]
     fn immediate_dma_supports_word_transfers_and_fixed_destination() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write32(0x0200_0000, 0x1234_5678);
