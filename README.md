@@ -114,6 +114,8 @@ DMA inspection is available through `dma_control(channel)`, `dma_source_address(
 
 `GbaMachine::run_until_timer_overflow(timer, max_steps)` can synchronize a bounded run to an enabled non-cascade timer's estimated overflow. It returns `None` for unsupported timer modes or when the instruction limit expires, and may overshoot by the last instruction. Timer inspection is available through `timer_counter(index)`, `timer_reload_value(index)`, and `timer_enabled(index)`. `timer_cycles_until_overflow(index)` estimates the remaining CPU cycles for enabled non-cascade timers and accounts for the active prescaler phase; it returns `None` when the timer is disabled or uses cascade mode. Direct Sound FIFO users can call `audio_fifo_bytes_until_refill(fifo)` on either `MemoryBus` or `GbaMachine` to check how many bytes remain before the 16-byte refill threshold.
 
+Machine-level regressions also verify that an unsupported instruction at the cartridge entry point leaves the PC and successful-instruction/cycle counters unchanged, and that bounded instruction execution returns the same cycle total accumulated by the machine.
+
 ## Project status
 
 The main priorities are improving hardware accuracy and expanding integration between the CPU, memory bus, DMA, video, interrupts, and save devices. Timing is still approximate: instruction fetches, selected scalar data accesses, supported multiple-transfer bursts, and ARM single-data-transfer register offsets with immediate or register-specified shifts apply partial WAITCNT latency, including ARM halfword/signed transfers with immediate or unshifted-register offsets and Thumb LDSH odd-address byte timing; DMA stalls, complete exception handling, full audio output, and comprehensive game compatibility are not claimed.
