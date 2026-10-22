@@ -4961,4 +4961,39 @@ mod tests {
         assert_eq!(cpu.register(15), Some(0x0200_0004));
         assert_eq!(cpu.flags(), before_flags);
     }
+
+    #[test]
+    fn arm_condition_codes_cover_all_flag_combinations_and_reserved_nv() {
+        let cases = [
+            (
+                ConditionFlags { negative: false, zero: false, carry: false, overflow: false },
+                [false, true, false, true, false, true, false, true, false, true, true, false, true, false, true, false],
+            ),
+            (
+                ConditionFlags { negative: false, zero: true, carry: true, overflow: false },
+                [true, false, true, false, false, true, false, true, false, true, true, false, false, true, true, false],
+            ),
+            (
+                ConditionFlags { negative: true, zero: false, carry: true, overflow: true },
+                [false, true, true, false, true, false, true, false, true, false, true, false, true, false, true, false],
+            ),
+            (
+                ConditionFlags { negative: true, zero: false, carry: false, overflow: false },
+                [false, true, false, true, true, false, false, true, false, true, false, true, false, true, true, false],
+            ),
+        ];
+        let mut cpu = Cpu::new();
+        for (flags, expected) in cases {
+            cpu.set_condition_flags(flags);
+            for (condition, expected_pass) in expected.into_iter().enumerate() {
+                assert_eq!(
+                    cpu.condition_passed_for(condition as u8),
+                    expected_pass,
+                    "condition code {condition:#x} with flags {flags:?}",
+                );
+            }
+        }
+        assert!(!cpu.condition_passed_for(0x10));
+        assert!(!cpu.condition_passed_for(u8::MAX));
+    }
 }
