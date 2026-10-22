@@ -4156,6 +4156,43 @@ mod tests {
     }
 
     #[test]
+    fn hblank_dma_services_all_four_channels_on_the_same_boundary() {
+        let mut bus = MemoryBus::new(cartridge());
+        let expected = [0x1020_u16, 0x3040, 0x5060, 0x7080];
+
+        for (channel, value) in expected.iter().copied().enumerate() {
+            let source = 0x0200_0100 + channel as u32 * 2;
+            let destination = 0x0300_0100 + channel as u32 * 2;
+            let base = 0x0400_00B0 + channel as u32 * 12;
+            bus.write16(source, value);
+            bus.write32(base, source);
+            bus.write32(base + 4, destination);
+            bus.write16(base + 8, 1);
+            // Enable a one-halfword DMA on HBlank for each of DMA0–DMA3.
+            bus.write16(base + 10, 0xA000);
+        }
+
+        // No transfer occurs before the first visible scanline's HBlank.
+        for channel in 0..4 {
+            let destination = 0x0300_0100 + channel * 2;
+            assert_eq!(bus.read16(destination), 0);
+        }
+
+        bus.advance_cycles(959);
+        for channel in 0..4 {
+            let destination = 0x0300_0100 + channel * 2;
+            assert_eq!(bus.read16(destination), 0);
+        }
+
+        bus.advance_cycles(1);
+        for (channel, value) in expected.iter().copied().enumerate() {
+            let destination = 0x0300_0100 + channel as u32 * 2;
+            assert_eq!(bus.read16(destination), value, "DMA channel {channel}");
+            assert_eq!(bus.dma_enabled(channel), Some(false));
+        }
+    }
+
+    #[test]
     fn repeated_hblank_dma_reloads_destination_and_advances_source() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0200_0000, 0x1234);
