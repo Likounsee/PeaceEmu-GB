@@ -25,6 +25,8 @@ pub enum StepOutcome {
         /// Raw 32-bit instruction word.
         instruction: u32,
     },
+    /// The CPU is halted and is waiting for an enabled interrupt request.
+    Halted,
     /// An instruction was skipped because its condition failed.
     ConditionFailed {
         /// Address of the skipped instruction.
@@ -102,6 +104,8 @@ pub struct Cpu {
     registers: [u32; 16],
     flags: ConditionFlags,
     thumb: bool,
+    /// True after BIOS Halt (SWI 0x02) until an enabled interrupt is pending.
+    halted: bool,
     /// Expected address of the next sequential instruction fetch and its state.
     last_fetch_next: Option<(u32, bool)>,
 }
@@ -121,6 +125,7 @@ impl Cpu {
             registers: [0; 16],
             flags: ConditionFlags::default(),
             thumb: false,
+            halted: false,
             last_fetch_next: None,
         }
     }
@@ -131,6 +136,7 @@ impl Cpu {
         self.registers[15] = entry_point & !3;
         self.flags = ConditionFlags::default();
         self.thumb = false;
+        self.halted = false;
         self.last_fetch_next = None;
     }
 
@@ -178,6 +184,11 @@ impl Cpu {
             value
         };
         true
+    }
+
+    /// Returns whether BIOS Halt has stopped instruction execution.
+    pub fn is_halted(&self) -> bool {
+        self.halted
     }
 
     /// Returns whether the CPU is currently executing Thumb instructions.
@@ -237,6 +248,7 @@ impl Cpu {
             snapshot.pc & !3
         };
         self.flags = snapshot.flags;
+        self.halted = false;
         self.last_fetch_next = None;
     }
 
@@ -257,6 +269,16 @@ impl Cpu {
         &mut self,
         bus: &mut MemoryBus,
     ) -> Result<(StepOutcome, u32), CpuError> {
+        if self.halted {
+            if bus.pending_interrupts() == 0 {
+                bus.advance_cycles(1);
+                return Ok((StepOutcome::Halted, 1));
+            }
+            // HALT wakes on an enabled IE/IF source even if IME is clear.
+            // Full IRQ exception entry and vectoring are separate work.
+            self.halted = false;
+            self.last_fetch_next = None;
+        }
         let address = self.registers[15];
         let was_thumb = self.thumb;
         let fetch_width = if was_thumb { 2 } else { 4 };
@@ -1621,6 +1643,10 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
+            // Halt: stop fetching instructions until an enabled interrupt is requested.
+            0x02 => {
+                self.halted = true;
+            }
             // RegisterRamReset: clear the selected memory regions by BIOS flag.
             0x01 => {
                 let flags = self.registers[0];
@@ -2905,6 +2931,31 @@ mod tests {
         cpu.execute_swi(0x0200_0208, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
         assert_eq!(cpu.register(0).unwrap() as i32, 12868);
+    }
+
+    #[test]
+    fn bios_halt_stops_instruction_fetch_until_enabled_interrupt_is_pending() {
+        let mut bus = bus_with_program(&[0xEF00_0002, 0xE3A0_0007]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+
+        let (halt, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(halt, StepOutcome::Executed { .. }));
+        assert!(cpu.is_halted());
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+
+        let pc = cpu.register(15).unwrap();
+        let (idle, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(idle, StepOutcome::Halted);
+        assert_eq!(cycles, 1);
+        assert_eq!(cpu.register(15), Some(pc));
+
+        bus.write16(0x0400_0200, 1 << 0); // Enable VBlank IRQ.
+        bus.request_interrupt(1 << 0);
+        let (resumed, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(resumed, StepOutcome::Executed { .. }));
+        assert!(!cpu.is_halted());
+        assert_eq!(cpu.register(0), Some(7));
     }
 
     #[test]
