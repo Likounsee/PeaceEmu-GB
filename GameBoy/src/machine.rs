@@ -2602,7 +2602,7 @@ mod tests {
         machine.bus_mut().write32(0x0400_00D4, 0x0200_0100);
         machine.bus_mut().write32(0x0400_00D8, 0x0300_0100);
         machine.bus_mut().write16(0x0400_00DC, 1);
-        machine.bus_mut().write16(0x0400_00DE, 0x9800);
+        machine.bus_mut().write16(0x0400_00DE, 0x9000);
 
         assert!(!machine.request_game_pak_dma());
         assert_eq!(machine.bus().read16(0x0300_0100), 0);
