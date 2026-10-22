@@ -1391,7 +1391,15 @@ impl MemoryBus {
     }
 
     /// Writes one byte to writable memory. Cartridge ROM and BIOS writes are ignored.
-    pub fn write8(&mut self, address: u32, value: u8) {
+    pub fn write8(&mut self, address: u32, mut value: u8) {
+        // DMA source/destination registers are 28-bit addresses. Byte stores
+        // to the most-significant byte must not preserve the reserved high nibble.
+        if (0x0400_00B0..=0x0400_00DF).contains(&address) {
+            let register_offset = (address - 0x0400_00B0) % 12;
+            if register_offset == 3 || register_offset == 7 {
+                value &= 0x0F;
+            }
+        }
         // DMA control's high byte contains the enable bit; support STRB writes.
         if (0x0400_00B0..=0x0400_00DF).contains(&address) {
             let offset = address - 0x0400_0000;
@@ -1587,6 +1595,23 @@ impl MemoryBus {
         if (0x0400_00BA..=0x0400_00DF).contains(&address) && (address - 0x0400_00B0) % 12 == 10 {
             self.write_dma_control(((address - 0x0400_00B0) / 12) as usize, value);
             return;
+        }
+        // DMA source/destination registers hold 28-bit addresses. Mask the
+        // reserved top nibble on halfword writes too, including STRH updates.
+        let aligned_dma_address = address & !1;
+        if (0x0400_00B0..=0x0400_00DF).contains(&aligned_dma_address) {
+            let register_offset = (aligned_dma_address - 0x0400_00B0) % 12;
+            if register_offset == 2 || register_offset == 6 {
+                let io_offset = (aligned_dma_address - 0x0400_0000) as usize;
+                let masked = (value & 0x0FFF).to_le_bytes();
+                self.io[io_offset..io_offset + 2].copy_from_slice(&masked);
+                return;
+            }
+            if register_offset == 0 || register_offset == 4 {
+                let io_offset = (aligned_dma_address - 0x0400_0000) as usize;
+                self.io[io_offset..io_offset + 2].copy_from_slice(&value.to_le_bytes());
+                return;
+            }
         }
         if (0x0400_0004..=0x0400_0005).contains(&address) {
             let old_match = self.dispstat & (1 << 2) != 0;
