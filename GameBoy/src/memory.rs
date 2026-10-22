@@ -4811,4 +4811,25 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0130) & 0x03FF, !(0b11) & 0x03FF);
     }
 
+
+    #[test]
+    fn sound_fifo_dma_source_wraps_at_the_gba_28_bit_address_boundary() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, 1 << 8); // FIFO A uses timer 0.
+        bus.write32(0x0400_00BC, 0x0FFF_FFF0);
+        bus.write32(0x0400_00C0, 0x0400_00A0);
+        bus.write16(0x0400_00C4, 4);
+        bus.write16(0x0400_00C6, 0xB640);
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+
+        bus.advance_cycles(1);
+
+        assert_eq!(bus.audio_fifo_len(0), Some(16));
+        assert_eq!(bus.dma_source_address(1), Some(0));
+        assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
+        assert_eq!(bus.dma_enabled(1), Some(true));
+    }
+
 }
