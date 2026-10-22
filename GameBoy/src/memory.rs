@@ -4425,10 +4425,10 @@ mod tests {
         // FIFO A selects timer 1, so a timer-0 overflow must not consume or refill it.
         bus.write16(0x0400_0082, (1 << 8) | (1 << 10));
         // DMA1: incrementing EWRAM source, fixed FIFO-A destination, word/repeat/FIFO timing.
-        bus.write32(0x0400_00B4, 0x0400_00A0);
-        bus.write32(0x0400_00B0, 0x0200_0000);
-        bus.write16(0x0400_00B8, 4);
-        bus.write16(0x0400_00BA, 0xB640);
+        bus.write32(0x0400_00C0, 0x0400_00A0);
+        bus.write32(0x0400_00BC, 0x0200_0000);
+        bus.write16(0x0400_00C4, 4);
+        bus.write16(0x0400_00C6, 0xB640);
 
         bus.write16(0x0400_0100, 0xFFFF);
         bus.write16(0x0400_0102, 0x0080); // Timer 0 enabled, divisor 1.
