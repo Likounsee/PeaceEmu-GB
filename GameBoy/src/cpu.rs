@@ -826,6 +826,13 @@ impl Cpu {
     /// Thumb execution is supported, but exceptions, banked registers, and SPSRs
     /// are not modeled yet.
     pub fn step(&mut self, bus: &mut MemoryBus) -> Result<StepOutcome, CpuError> {
+        if self.halted {
+            if bus.pending_interrupts() == 0 {
+                return Ok(StepOutcome::Halted);
+            }
+            self.halted = false;
+            self.last_fetch_next = None;
+        }
         // Unsupported instructions are reported to the caller rather than
         // vectored through an emulated exception. Restore the small CPU state
         // snapshot on failure so debuggers can inspect or retry the faulting
