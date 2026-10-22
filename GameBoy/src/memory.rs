@@ -608,7 +608,9 @@ impl MemoryBus {
     /// one halfword access, while a word consumes the requested first access
     /// plus a sequential second halfword. SRAM uses an 8-bit bus, so wider
     /// accesses consume one SRAM wait-state duration per byte. This helper
-    /// reports bus duration only; the CPU currently applies its excess latency to instruction fetches, but not to data accesses or DMA stalls.
+    /// reports bus duration only. The CPU applies excess latency to instruction
+    /// fetches and selected scalar/multiple data accesses; DMA stalls and full bus
+    /// contention remain outside the timing model.
     /// Unsupported widths and addresses outside the Game Pak window return None.
     pub fn gamepak_access_cycles_for_width(
         &self,
