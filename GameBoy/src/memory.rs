@@ -4317,6 +4317,43 @@ mod tests {
     }
 
     #[test]
+    fn palette_byte_writes_replicate_and_follow_palette_mirrors() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        bus.write8(0x0500_0003, 0x5A);
+
+        assert_eq!(bus.read16(0x0500_0002), 0x5A5A);
+        assert_eq!(bus.read8(0x0500_0002), 0x5A);
+        assert_eq!(bus.read8(0x0500_0003), 0x5A);
+        assert_eq!(bus.read16(0x0500_0402), 0x5A5A);
+        assert_eq!(bus.read16(0x050F_FC02), 0x5A5A);
+    }
+
+    #[test]
+    fn oam_byte_writes_are_ignored_but_halfword_writes_work() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0700_0000, 0x1234);
+
+        bus.write8(0x0700_0000, 0xAA);
+        bus.write8(0x0700_0001, 0xBB);
+
+        assert_eq!(bus.read16(0x0700_0000), 0x1234);
+        bus.write16(0x0700_0002, 0xCAFE);
+        assert_eq!(bus.read16(0x0700_0002), 0xCAFE);
+        assert_eq!(bus.read16(0x0700_0402), 0xCAFE);
+    }
+
+    #[test]
+    fn vram_mirror_gap_aliases_the_last_physical_32_kibibytes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0601_0000, 0xABCD);
+
+        assert_eq!(bus.read16(0x0601_8000), 0xABCD);
+        assert_eq!(bus.read16(0x0601_FFFE), bus.read16(0x0601_7FFE));
+        assert_eq!(bus.read16(0x0602_0000), bus.read16(0x0600_0000));
+    }
+
+    #[test]
     fn vram_byte_write_replicates_after_hardware_mirroring() {
         let mut bus = MemoryBus::new(cartridge());
 
