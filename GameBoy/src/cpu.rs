@@ -2773,6 +2773,53 @@ mod tests {
     }
 
     #[test]
+    fn bios_affine_services_leave_destination_untouched_for_zero_count() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        for offset in (0..32).step_by(2) {
+            bus.write16(destination + offset, 0xA55A);
+        }
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 0);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000E, 0x0E, false, &mut bus)
+            .unwrap();
+        cpu.set_register(3, 8);
+        cpu.execute_swi(0x0200_0204, 0xEF00_000F, 0x0F, false, &mut bus)
+            .unwrap();
+        for offset in (0..32).step_by(2) {
+            assert_eq!(bus.read16(destination + offset), 0xA55A);
+        }
+    }
+
+    #[test]
+    fn bios_arctan_returns_zero_for_zero_and_expected_axis_angles() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+
+        cpu.set_register(0, 0);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0009, 0x09, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), 0);
+
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 0x4000);
+        cpu.execute_swi(0x0200_0204, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0) as i32, 6434);
+
+        cpu.set_register(0, 0xC000);
+        cpu.set_register(1, 0);
+        cpu.execute_swi(0x0200_0208, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0) as i32, 12868);
+    }
+
+    #[test]
     fn bios_register_ram_reset_clears_only_selected_regions() {
         let mut bus = bus_with_program(&[]);
         bus.write8(0x0200_0000, 0xA5);
