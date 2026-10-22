@@ -15,8 +15,8 @@ fn cartridge() -> GbaCartridge {
 fn timer_overflow_reloads_counter_and_latches_irq() {
     let mut bus = MemoryBus::new(cartridge());
     bus.write16(0x0400_0100, 0xFFFF); // TM0 reload
-    bus.write16(0x0400_0102, 0x00C0); // IRQ enabled, timer disabled
-    bus.write16(0x0400_0102, 0x00C0 | 0x0080); // enable
+    bus.write16(0x0400_0102, 0x0040); // IRQ enabled, timer disabled
+    bus.write16(0x0400_0102, 0x00C0); // enable
     bus.advance_cycles(1);
 
     assert_eq!(bus.timer_counter(0), Some(0xFFFF));
