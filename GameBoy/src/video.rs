@@ -300,6 +300,19 @@ impl VideoFrame {
         Some(Self { width: self.width, height: self.height, pixels })
     }
 
+    /// Rotates the frame 180 degrees without resampling pixels.
+    ///
+    /// Dimensions are unchanged. Malformed frames return None and the source
+    /// frame is never modified.
+    pub fn rotated_180(&self) -> Option<Self> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let mut pixels = self.pixels.clone();
+        pixels.reverse();
+        Some(Self { width: self.width, height: self.height, pixels })
+    }
+
     /// Rotates the frame 90 degrees clockwise without resampling pixels.
     ///
     /// The resulting dimensions are height × width. Malformed frames return
@@ -3079,12 +3092,15 @@ mod tests {
 
         assert_eq!(clockwise.rotated_counter_clockwise().unwrap(), frame);
         assert_eq!(counter_clockwise.rotated_clockwise().unwrap(), frame);
+        assert_eq!(frame.rotated_180().unwrap().pixels, vec![6, 5, 4, 3, 2, 1]);
+        assert_eq!(frame.rotated_180().unwrap().rotated_180().unwrap(), frame);
         assert_eq!(frame.pixels, vec![1, 2, 3, 4, 5, 6]);
     }
 
     #[test]
     fn frame_rotations_reject_inconsistent_pixel_buffers() {
         let malformed = VideoFrame { width: 3, height: 2, pixels: vec![1, 2, 3] };
+        assert!(malformed.rotated_180().is_none());
         assert!(malformed.rotated_clockwise().is_none());
         assert!(malformed.rotated_counter_clockwise().is_none());
     }
