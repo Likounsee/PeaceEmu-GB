@@ -38,6 +38,10 @@ jobs:
       - name: Run tests
         run: cargo test --manifest-path GameBoy/Cargo.toml --all-targets
 
+      - name: Run release-mode tests
+        if: runner.os == 'Linux'
+        run: cargo test --release --manifest-path GameBoy/Cargo.toml --all-targets
+
   msrv:
     name: Minimum supported Rust (1.78)
     runs-on: ubuntu-latest
