@@ -406,6 +406,16 @@ impl Cpu {
             return None;
         }
 
+        // SWP/SWPB issue a read and a write against the same address.
+        // Count both bus phases so external Game Pak wait states are included
+        // even though writes to the ROM window do not modify cartridge data.
+        if instruction & 0x0FB0_0FF0 == 0x0100_0090 {
+            let rn = ((instruction >> 16) & 0xF) as usize;
+            let data_address = self.read_operand_register(rn, address);
+            let width = if instruction & (1 << 22) != 0 { 1 } else { 4 };
+            return Some((data_address, width, 2));
+        }
+
         // ARM LDM/STM burst: the core transfers the selected registers from
         // the lowest address upward, regardless of increment/decrement mode.
         if instruction & 0x0E00_0000 == 0x0800_0000 {
@@ -4272,6 +4282,46 @@ mod tests {
             ram_cycles, 3,
             "Thumb IWRAM data reads keep the base estimate"
         );
+    }
+
+    #[test]
+    fn arm_gamepak_word_swap_adds_read_modify_write_wait_states() {
+        let instruction = 0xE102_1093; // SWP r1, r3, [r2]
+        let mut rom_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(2, 0x0800_0100);
+        rom_cpu.set_register(3, 0x1234_5678);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(2, 0x0300_0100);
+        ram_cpu.set_register(3, 0x1234_5678);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+    }
+
+    #[test]
+    fn arm_gamepak_swap_byte_adds_read_modify_write_wait_states() {
+        let instruction = 0xE142_4095; // SWPB r4, r5, [r2]
+        let mut rom_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(2, 0x0800_0100);
+        rom_cpu.set_register(5, 0x5A);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(2, 0x0300_0100);
+        ram_cpu.set_register(5, 0x5A);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
     }
 
     #[test]
