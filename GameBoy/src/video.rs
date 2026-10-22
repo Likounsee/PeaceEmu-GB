@@ -2113,6 +2113,27 @@ mod tests {
     }
 
     #[test]
+    fn semi_transparent_obj_only_blends_when_underlying_bg_is_target_two() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, (1 << 8) | (1 << 12)); // BG0 + OBJ enabled
+        bus.write16(VRAM_BASE, 1); // BG0 map selects tile 1
+        bus.write8(VRAM_BASE + 32, 0x22); // tile pixels use palette index 2
+        bus.write16(PALETTE_BASE + 4, 0x03E0); // BG palette index 2: green
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // OBJ palette index 1: red
+        bus.write16(0x0601_0000, 0x1111); // opaque OBJ pixels at (0,0)
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 8)); // BG0 is target 2
+        bus.write16(0x0400_0052, (8 << 8) | 8); // EVA=8, EVB=8
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_7B00));
+        // This pixel is backdrop, not BG0, so it must not use BG0's target bit.
+        assert_eq!(frame.pixel(4, 4), Some(0xFF00_0000));
+    }
+
+    #[test]
     fn affine_background_mosaic_repeats_source_pixels_and_rows() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 2 | (1 << 10)); // Mode 2, BG2 enabled
