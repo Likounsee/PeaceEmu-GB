@@ -4685,7 +4685,6 @@ mod tests {
         bus.advance_cycles(1);
         assert_eq!(bus.timer_counter(0), Some(0xFFFF));
     }
-}
 
 
     #[test]
@@ -4739,3 +4738,5 @@ mod tests {
         assert_eq!(bus.dma_source_address(1), Some(0x0200_0000));
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
+
+}
