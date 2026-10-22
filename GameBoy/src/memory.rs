@@ -1176,6 +1176,11 @@ impl MemoryBus {
             };
         }
 
+        // The programmed DMA address registers expose only bits 0..27.
+        // Mask the post-transfer values too: address increments/decrements can
+        // otherwise leak reserved bits into subsequent register reads.
+        src &= 0x0FFF_FFFF;
+        dst &= 0x0FFF_FFFF;
         self.io[source_offset..source_offset + 4].copy_from_slice(&src.to_le_bytes());
         let timing = (control >> 12) & 3;
         let repeat = control & (1 << 9) != 0 && timing != 0;
@@ -1185,7 +1190,7 @@ impl MemoryBus {
             destination & !(step - 1)
         } else {
             dst
-        };
+        } & 0x0FFF_FFFF;
         self.io[destination_offset..destination_offset + 4]
             .copy_from_slice(&next_destination.to_le_bytes());
 
