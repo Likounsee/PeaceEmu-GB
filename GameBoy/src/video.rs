@@ -2891,6 +2891,38 @@ mod tests {
     }
 
     #[test]
+    fn tiled_obj_brightness_requires_obj_first_target_selection() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12); // Mode 0, OBJ enabled.
+        bus.write16(PALETTE_BASE + 0x202, 0x0001); // Very dark red OBJ.
+        bus.write16(0x0601_0000, 0x1111); // OBJ tile 0, color index 1.
+        bus.write16(0x0700_0000, 0); // Normal opaque OBJ.
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (2 << 6) | (1 << 4)); // Brighten; OBJ is first target.
+        bus.write16(0x0400_0054, 16);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn tiled_obj_brightness_does_not_apply_when_obj_is_not_first_target() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12); // Mode 0, OBJ enabled.
+        bus.write16(PALETTE_BASE + 0x202, 0x0001); // Very dark red OBJ.
+        bus.write16(0x0601_0000, 0x1111);
+        bus.write16(0x0700_0000, 0);
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (2 << 6) | (1 << 3)); // Brighten, but only BG3 is target 1.
+        bus.write16(0x0400_0054, 16);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(rgb555(0x0001)));
+    }
+
+    #[test]
     fn semi_transparent_obj_ignores_brightness_when_alpha_is_not_enabled() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12)); // Mode 3, BG2 and OBJ.
