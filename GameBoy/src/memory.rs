@@ -2606,6 +2606,21 @@ mod tests {
     }
 
     #[test]
+    fn immediate_dma_wraps_source_and_destination_registers_at_28_bits() {
+        let mut bus = MemoryBus::new(cartridge());
+        // The address bus is 28-bit: two halfword increments from the top
+        // aligned address wrap back to 0x00000002.
+        bus.write32(0x0400_00B0, 0x0FFF_FFFE);
+        bus.write32(0x0400_00B4, 0x0FFF_FFFE);
+        bus.write16(0x0400_00B8, 2);
+        bus.write16(0x0400_00BA, 0x8000);
+
+        assert_eq!(bus.dma_source_address(0), Some(2));
+        assert_eq!(bus.dma_destination_address(0), Some(2));
+        assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
     fn immediate_dma_decrementing_destination_updates_final_address() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0200_0000, 0x1234);
