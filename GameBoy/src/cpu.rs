@@ -579,7 +579,14 @@ impl Cpu {
             } else {
                 base
             };
-            return Some((effective, if operation == 2 { 1 } else { 2 }, 1));
+            // Signed halfword loads at odd addresses execute as signed
+            // byte loads on ARM7TDMI, so charge the byte-wide bus duration.
+            let width = if operation == 2 || (operation == 3 && effective & 1 != 0) {
+                1
+            } else {
+                2
+            };
+            return Some((effective, width, 1));
         }
         None
     }
@@ -4603,6 +4610,31 @@ mod tests {
             odd_cycles < even_cycles,
             "odd LDSH should use byte-wide SRAM timing: odd={odd_cycles}, even={even_cycles}"
         );
+    }
+
+    #[test]
+    fn arm_odd_address_signed_halfword_load_uses_byte_wide_sram_timing() {
+        // LDRSH r0, [r1] uses a byte bus access when r1 is odd.
+        for instruction in [0xE1D1_00F0, 0xE191_00F2] {
+            let mut odd_bus = bus_with_program(&[instruction]);
+            let mut odd_cpu = Cpu::new();
+            odd_cpu.reset(0x0200_0000);
+            odd_cpu.set_register(1, 0x0E00_0101);
+            odd_cpu.set_register(2, 0);
+            let (_, odd_cycles) = odd_cpu.step_with_cycles(&mut odd_bus).unwrap();
+
+            let mut even_bus = bus_with_program(&[instruction]);
+            let mut even_cpu = Cpu::new();
+            even_cpu.reset(0x0200_0000);
+            even_cpu.set_register(1, 0x0E00_0100);
+            even_cpu.set_register(2, 0);
+            let (_, even_cycles) = even_cpu.step_with_cycles(&mut even_bus).unwrap();
+
+            assert!(
+                odd_cycles < even_cycles,
+                "odd LDRSH 0x{instruction:08X} should use byte-wide SRAM timing: odd={odd_cycles}, even={even_cycles}"
+            );
+        }
     }
 
     #[test]
