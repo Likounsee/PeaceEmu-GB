@@ -3200,4 +3200,20 @@ mod tests {
         assert_eq!(machine.cycles_elapsed(), cycles);
         assert!(cycles > 0);
     }
+
+    #[test]
+    fn machine_timer_reconfiguration_is_visible_without_advancing_cycles() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0100, 0xFFFE);
+        machine.bus_mut().write16(0x0400_0102, 0x0081);
+        machine.bus_mut().advance_cycles(17);
+        let before = machine.diagnostic_snapshot();
+        assert_eq!(before.timer_prescaler_phase[0], 17);
+
+        machine.bus_mut().write16(0x0400_0102, 0x0001);
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.timer_prescaler_phase[0], 0);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+    }
 }
