@@ -4823,4 +4823,59 @@ mod tests {
         let (_, edited_pc_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(edited_pc_cycles, first_cycles);
     }
+
+
+    #[test]
+    fn arm_adds_reports_signed_overflow_and_preserves_unaffected_flags() {
+        let mut bus = bus_with_program(&[
+            0xE290_0001, // ADDS r0, r0, #1
+            0xE290_0001, // ADDS r0, r0, #1
+        ]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0x7FFF_FFFF);
+        cpu.flags = ConditionFlags {
+            negative: false,
+            zero: false,
+            carry: true,
+            overflow: false,
+        };
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(0x8000_0000));
+        assert_eq!(
+            cpu.flags(),
+            ConditionFlags {
+                negative: true,
+                zero: false,
+                carry: false,
+                overflow: true,
+            }
+        );
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(0x8000_0001));
+        assert!(cpu.flags().negative);
+        assert!(!cpu.flags().overflow);
+    }
+
+    #[test]
+    fn thumb_bl_pair_updates_link_register_and_redirects_pc() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0200_0000, 0xF000); // BL high displacement = 0
+        bus.write16(0x0200_0002, 0xF800); // BL low displacement = 0
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_execution_state(true);
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(14), Some(0x0200_0004));
+        assert_eq!(cpu.register(15), Some(0x0200_0002));
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(14), Some(0x0200_0005));
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert!(cpu.is_thumb());
+    }
+
 }
