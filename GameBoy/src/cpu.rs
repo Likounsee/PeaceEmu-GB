@@ -1963,6 +1963,9 @@ impl Cpu {
             }
         };
         let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
+        if output_size == 0 {
+            return Ok(Vec::new());
+        }
         let symbol_count = output_size.saturating_mul(8 / symbol_bits);
         let tree_size = usize::from(bus.read8(source.wrapping_add(4))).saturating_add(1) * 2;
         let tree_start = source.wrapping_add(5);
@@ -1978,7 +1981,8 @@ impl Cpu {
 
         for symbol_index in 0..symbol_count {
             let mut node_address = tree_start;
-            loop {
+            let mut decoded = false;
+            for _ in 0..=tree_size / 2 {
                 let node = bus.read8(node_address);
                 let bit = (payload_word >> 31) as u8;
                 payload_word <<= 1;
@@ -2000,13 +2004,18 @@ impl Cpu {
                     if symbol_bits == 8 {
                         output.push(symbol);
                     } else if symbol_index & 1 == 0 {
-                        output.push(symbol << 4);
+                        // GBA stores the first 4-bit symbol in the low nibble.
+                        output.push(symbol & 0x0F);
                     } else if let Some(byte) = output.last_mut() {
-                        *byte |= symbol & 0x0F;
+                        *byte |= (symbol & 0x0F) << 4;
                     }
+                    decoded = true;
                     break;
                 }
                 node_address = child_address;
+            }
+            if !decoded {
+                return Err(CpuError::UnsupportedInstruction { address, instruction });
             }
         }
         output.truncate(output_size);
@@ -3233,7 +3242,7 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
             .unwrap();
 
-        assert_eq!(bus.read8(destination), 0x3C);
+        assert_eq!(bus.read8(destination), 0xC3);
     }
 
     #[test]
