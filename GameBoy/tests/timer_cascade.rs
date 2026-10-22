@@ -231,3 +231,78 @@ fn waitcnt_width_timing_accounts_for_rom_sequential_access_and_bank_boundaries()
     assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(1));
     assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(5));
 }
+
+
+#[test]
+fn interrupt_controller_byte_writes_preserve_ie_if_and_ime_semantics() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    bus.write8(0x0400_0200, 0x05);
+    bus.write8(0x0400_0201, 0x40); // reserved IE bits are discarded
+    assert_eq!(bus.read16(0x0400_0200), 0x0005);
+
+    bus.write16(0x0400_0202, (1 << 0) | (1 << 12) | (1 << 14));
+    assert_eq!(bus.interrupt_request_flags(), (1 << 0) | (1 << 12));
+
+    bus.write8(0x0400_0202, 1);
+    assert_eq!(bus.interrupt_request_flags(), 1 << 12); // IF is write-one-to-clear
+    bus.write8(0x0400_0203, 0);
+    assert_eq!(bus.interrupt_request_flags(), 1 << 12); // zero does not acknowledge
+
+    bus.write8(0x0400_0208, 0xFF);
+    bus.write8(0x0400_0209, 0xFF); // IME upper byte is read-only/reserved
+    assert_eq!(bus.read16(0x0400_0208), 1);
+}
+
+#[test]
+fn waitcnt_byte_writes_mask_reserved_bit_and_update_each_waitstate_bank() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    bus.write8(0x0400_0204, 0xFF);
+    bus.write8(0x0400_0205, 0xFF);
+    assert_eq!(bus.read16(0x0400_0204), 0x7FFF); // bit 15 is reserved
+
+    // ROM0 wait-state setting 01 => 3 cycles; ROM1 setting 10 => 2 cycles.
+    bus.write16(0x0400_0204, (1 << 2) | (2 << 5));
+    assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(3));
+    assert_eq!(bus.gamepak_access_cycles(0x0A00_0000, false), Some(2));
+    assert_eq!(bus.gamepak_access_cycles(0x0C00_0000, false), Some(4));
+}
+
+#[test]
+fn gamepak_burst_restarts_nonsequential_waitstate_at_rom_bank_boundary() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0400_0204, 2 << 5); // ROM1 non-sequential = 2 cycles
+
+    assert_eq!(
+        bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 2, 2),
+        Some(6) // ROM0: 4 cycles, ROM1: 2 cycles; no sequential carry-over
+    );
+    assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0), Some(0));
+    assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
+    assert_eq!(
+        bus.gamepak_sequence_cycles(0xFFFF_FFFE, false, 2, 2),
+        None
+    );
+}
+
+#[test]
+fn timer_byte_control_writes_clear_phase_and_restart_from_reload() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0400_0100, 0xFFFC);
+    bus.write8(0x0400_0103, 0x00); // upper control byte: disabled
+    bus.write8(0x0400_0102, 0x81); // /64 and enable
+    bus.advance_cycles(17);
+    assert_eq!(bus.timer_prescaler_phase(0), Some(17));
+
+    bus.write8(0x0400_0103, 0x00); // disable via byte write
+    assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+    bus.write8(0x0400_0103, 0x00);
+    bus.write8(0x0400_0102, 0x81);
+    assert_eq!(bus.timer_counter(0), Some(0xFFFC));
+    assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+    bus.advance_cycles(63);
+    assert_eq!(bus.timer_counter(0), Some(0xFFFC));
+    bus.advance_cycles(1);
+    assert_eq!(bus.timer_counter(0), Some(0xFFFD));
+}
