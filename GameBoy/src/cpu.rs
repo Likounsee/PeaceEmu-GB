@@ -4824,7 +4824,6 @@ mod tests {
         assert_eq!(edited_pc_cycles, first_cycles);
     }
 
-
     #[test]
     fn arm_adds_reports_signed_overflow_and_preserves_unaffected_flags() {
         let mut bus = bus_with_program(&[
@@ -4877,5 +4876,4 @@ mod tests {
         assert_eq!(cpu.register(15), Some(0x0200_0004));
         assert!(cpu.is_thumb());
     }
-
 }
