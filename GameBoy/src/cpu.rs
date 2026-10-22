@@ -378,12 +378,16 @@ impl Cpu {
                 let operation = (raw >> 9) & 7;
                 let base = self.registers[usize::from((raw >> 3) & 7)];
                 let offset = self.registers[usize::from((raw >> 6) & 7)];
+                let effective = base.wrapping_add(offset);
+                // LDSH at an odd address is executed as a signed byte load
+                // on ARM7TDMI, so its external bus access is byte-wide too.
                 let width = match operation {
                     0 | 4 => 4,
-                    1 | 5 | 7 => 2,
+                    1 | 5 => 2,
+                    7 if effective & 1 == 0 => 2,
                     _ => 1,
                 };
-                return Some((base.wrapping_add(offset), width, 1));
+                return Some((effective, width, 1));
             }
             // Immediate-offset word/byte transfer.
             if raw & 0xE000 == 0x6000 {
@@ -4572,6 +4576,33 @@ mod tests {
 
         assert!(rom_cycles > ram_cycles);
         assert_eq!(ram_cycles, 3);
+    }
+
+    #[test]
+    fn thumb_odd_address_signed_halfword_load_uses_byte_wide_gamepak_timing() {
+        // LDSH r0, [r1, r2] uses a byte bus access for odd addresses and a
+        // halfword access for even addresses on ARM7TDMI.
+        let instruction = 0x0000_5E88_u32; // LDSH r0, [r1, r2]
+        let mut odd_bus = bus_with_program(&[instruction]);
+        let mut odd_cpu = Cpu::new();
+        odd_cpu.reset(0x0200_0000);
+        odd_cpu.set_execution_state(true);
+        odd_cpu.set_register(1, 0x0E00_0101);
+        odd_cpu.set_register(2, 0);
+        let (_, odd_cycles) = odd_cpu.step_with_cycles(&mut odd_bus).unwrap();
+
+        let mut even_bus = bus_with_program(&[instruction]);
+        let mut even_cpu = Cpu::new();
+        even_cpu.reset(0x0200_0000);
+        even_cpu.set_execution_state(true);
+        even_cpu.set_register(1, 0x0E00_0100);
+        even_cpu.set_register(2, 0);
+        let (_, even_cycles) = even_cpu.step_with_cycles(&mut even_bus).unwrap();
+
+        assert!(
+            odd_cycles < even_cycles,
+            "odd LDSH should use byte-wide SRAM timing: odd={odd_cycles}, even={even_cycles}"
+        );
     }
 
     #[test]
