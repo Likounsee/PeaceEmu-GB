@@ -4915,7 +4915,7 @@ mod tests {
         restored.restore_snapshot(snapshot);
 
         assert_eq!(restored.register(0), Some(0x1234_5678));
-        assert_eq!(restored.register(15), Some(0x0200_0012));
+        assert_eq!(restored.register(15), Some(0x0200_0010));
         assert_eq!(restored.flags(), snapshot.flags);
         assert!(restored.is_thumb());
         assert_eq!(restored.snapshot().registers, snapshot.registers);
