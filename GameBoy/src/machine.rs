@@ -182,8 +182,10 @@ impl GbaMachine {
     /// On an unsupported instruction, the CPU returns an error and this call
     /// does not increment the successful-instruction counter.
     pub fn step(&mut self) -> Result<u32, CpuError> {
-        let (_, cycles) = self.cpu.step_with_cycles(&mut self.bus)?;
-        self.instructions_executed = self.instructions_executed.saturating_add(1);
+        let (outcome, cycles) = self.cpu.step_with_cycles(&mut self.bus)?;
+        if !matches!(outcome, crate::StepOutcome::Halted) {
+            self.instructions_executed = self.instructions_executed.saturating_add(1);
+        }
         self.cycles_elapsed = self.cycles_elapsed.saturating_add(u64::from(cycles));
         Ok(cycles)
     }
