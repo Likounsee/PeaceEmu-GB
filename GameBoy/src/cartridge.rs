@@ -120,6 +120,19 @@ impl GbaCartridge {
         self.save_type
     }
 
+    /// Overrides signature-based save-device detection before creating a machine.
+    ///
+    /// Useful for homebrew, ROM hacks, and dumps whose backup-device marker is
+    /// missing or stale. The selected device is initialized when the cartridge
+    /// is passed to `MemoryBus::new` or `GbaMachine::new`; changing this value
+    /// does not migrate or preserve save data from another device type.
+    ///
+    /// Pass `None` to explicitly disable a detected backup device.
+    pub fn with_save_type(mut self, save_type: Option<crate::save::SaveType>) -> Self {
+        self.save_type = save_type;
+        self
+    }
+
     pub(crate) fn read_rom_byte(&self, offset: usize) -> u8 {
         // Game Pak ROM address lines mirror at the next power-of-two window.
         // A non-power-of-two dump leaves the unpopulated tail of that window
@@ -250,6 +263,18 @@ mod tests {
     #[test]
     fn unknown_save_type_is_not_guessed() {
         let cartridge = GbaCartridge::parse(&valid_rom(GBA_HEADER_SIZE)).unwrap();
+        assert_eq!(cartridge.save_type(), None);
+    }
+
+    #[test]
+    fn save_type_can_be_overridden_for_unsigned_or_misidentified_roms() {
+        let cartridge = GbaCartridge::parse(&valid_rom(GBA_HEADER_SIZE)).unwrap();
+        let forced = cartridge.clone().with_save_type(Some(crate::SaveType::Flash128K));
+        assert_eq!(forced.save_type(), Some(crate::SaveType::Flash128K));
+
+        let disabled = forced.with_save_type(None);
+        assert_eq!(disabled.save_type(), None);
+        // The original parsed cartridge remains unchanged.
         assert_eq!(cartridge.save_type(), None);
     }
 
