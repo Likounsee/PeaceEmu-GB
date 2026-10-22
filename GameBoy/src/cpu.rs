@@ -1640,6 +1640,65 @@ impl Cpu {
                 self.registers[1] = remainder as u32;
                 self.registers[3] = quotient.wrapping_abs() as u32;
             }
+            // BitUnPack: unpack packed source fields and add the configured data offset.
+            0x10 => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let info = self.registers[2];
+                let source_len = usize::from(bus.read16(info));
+                let source_width = bus.read8(info.wrapping_add(2));
+                let destination_width = bus.read8(info.wrapping_add(3));
+                let offset_word = bus.read32(info.wrapping_add(4));
+                if source_width == 0
+                    || source_width > 8
+                    || destination_width == 0
+                    || destination_width > 32
+                    || destination_width < source_width
+                {
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
+                }
+                let source_bits = source_len.saturating_mul(8);
+                let element_count = source_bits / usize::from(source_width);
+                let output_bits = element_count.saturating_mul(usize::from(destination_width));
+                let word_count = output_bits.saturating_add(31) / 32;
+                let mut words = vec![0_u32; word_count];
+                let source_mask = (1_u32 << source_width) - 1;
+                let destination_mask = if destination_width == 32 {
+                    u32::MAX
+                } else {
+                    (1_u32 << destination_width) - 1
+                };
+                let data_offset = offset_word & 0x7FFF_FFFF;
+                for index in 0..element_count {
+                    let bit = index * usize::from(source_width);
+                    let mut packed = 0_u32;
+                    for source_bit in 0..usize::from(source_width) {
+                        let input_bit = bit + source_bit;
+                        let byte = bus.read8(source.wrapping_add((input_bit / 8) as u32));
+                        packed |= u32::from((byte >> (input_bit % 8)) & 1) << source_bit;
+                    }
+                    let mut value = packed & source_mask;
+                    // Bit 31 of data_offset requests that zero-valued inputs remain zero.
+                    if value != 0 || offset_word & 0x8000_0000 == 0 {
+                        value = value.wrapping_add(data_offset);
+                    }
+                    value &= destination_mask;
+                    let output_bit = index * usize::from(destination_width);
+                    let word_index = output_bit / 32;
+                    let shift = output_bit % 32;
+                    let shifted = u64::from(value) << shift;
+                    words[word_index] |= shifted as u32;
+                    if shift + usize::from(destination_width) > 32 {
+                        words[word_index + 1] |= (shifted >> 32) as u32;
+                    }
+                }
+                for (index, word) in words.into_iter().enumerate() {
+                    bus.write32(destination.wrapping_add((index as u32) * 4), word);
+                }
+            }
             // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
             // This is a compatibility value; it does not claim to emulate BIOS ROM.
             0x0D => {
@@ -2516,6 +2575,42 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bit_unpack_handles_packed_nibbles_and_offset_zero_flag() {
+        let mut bus = bus_with_program(&[]);
+        // Two source bytes, 4-bit source fields, 8-bit output fields, offset 0x10.
+        bus.write8(0x0200_0000, 0x21);
+        bus.write8(0x0200_0001, 0x03);
+        bus.write16(0x0200_0010, 2);
+        bus.write8(0x0200_0012, 4);
+        bus.write8(0x0200_0013, 8);
+        bus.write32(0x0200_0014, 0x8000_0010);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0x0200_0000);
+        cpu.set_register(1, 0x0300_0000);
+        cpu.set_register(2, 0x0200_0010);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0010, 0x10, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read32(0x0300_0000), 0x0012_0011);
+        assert_eq!(cpu.register(15), Some(0x0200_0104));
+    }
+
+    #[test]
+    fn bit_unpack_rejects_invalid_field_widths_without_writing_output() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0200_0010, 1);
+        bus.write8(0x0200_0012, 0);
+        bus.write8(0x0200_0013, 8);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0x0200_0000);
+        cpu.set_register(1, 0x0300_0000);
+        cpu.set_register(2, 0x0200_0010);
+        assert!(cpu.execute_swi(0x0200_0100, 0xEF00_0010, 0x10, false, &mut bus).is_err());
+        assert_eq!(bus.read32(0x0300_0000), 0);
+    }
+
     #[test]
     fn snapshot_is_detached_and_consistent() {
         let mut cpu = Cpu::new();
