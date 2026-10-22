@@ -1629,7 +1629,10 @@ impl Cpu {
                 let numerator = self.registers[0] as i32;
                 let denominator = self.registers[1] as i32;
                 if denominator == 0 {
-                    return Err(CpuError::UnsupportedInstruction { address, instruction });
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
                 }
                 let quotient = numerator.checked_div(denominator).unwrap_or(i32::MIN);
                 let remainder = numerator.checked_rem(denominator).unwrap_or(0);
@@ -1689,7 +1692,12 @@ impl Cpu {
                     bus.write32(destination.wrapping_add(index * 4), value);
                 }
             }
-            _ => return Err(CpuError::UnsupportedInstruction { address, instruction }),
+            _ => {
+                return Err(CpuError::UnsupportedInstruction {
+                    address,
+                    instruction,
+                })
+            }
         }
         // HLE returns directly to the instruction following SWI. The real BIOS
         // uses SVC mode and SPSR banking; that exception machinery is not modeled.
