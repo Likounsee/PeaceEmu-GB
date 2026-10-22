@@ -2612,9 +2612,10 @@ mod tests {
     fn immediate_dma_masks_reserved_address_bits_before_first_access() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0200_0000, 0xBEEF);
-        // Reserved high address nibbles must not select an unmapped region.
-        bus.write32(0x0400_00B0, 0x1200_0000);
-        bus.write32(0x0400_00B4, 0x1300_0000);
+        // Simulate a state-restored/corrupted backing image that predates
+        // the MMIO write masks. DMA must still mask addresses before reading.
+        bus.io[0xB0..0xB4].copy_from_slice(&0x1200_0000_u32.to_le_bytes());
+        bus.io[0xB4..0xB8].copy_from_slice(&0x1300_0000_u32.to_le_bytes());
         bus.write16(0x0400_00B8, 1);
         bus.write16(0x0400_00BA, 0x8000);
 
