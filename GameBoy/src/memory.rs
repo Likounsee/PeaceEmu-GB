@@ -4737,4 +4737,74 @@ mod tests {
         assert_eq!(bus.dma_source_address(1), Some(0x0200_0000));
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
+
+    #[test]
+    fn sound_fifo_dma_refills_only_after_crossing_the_sixteen_byte_threshold() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, 1 << 8); // FIFO A uses timer 0.
+        for word in [0x0302_0100, 0x0706_0504, 0x0B0A_0908, 0x0F0E_0D0C, 0x1312_1110] {
+            bus.write32(0x0400_00A0, word);
+        }
+        assert_eq!(bus.audio_fifo_len(0), Some(20));
+
+        // Configure DMA1 for a valid four-word FIFO-A refill.
+        bus.write32(0x0200_0000, 0x4433_2211);
+        bus.write32(0x0400_00BC, 0x0200_0000);
+        bus.write32(0x0400_00C0, 0x0400_00A0);
+        bus.write16(0x0400_00C4, 4);
+        bus.write16(0x0400_00C6, 0xB640);
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+
+        for expected_len in [19, 18, 17] {
+            bus.advance_cycles(1);
+            assert_eq!(bus.audio_fifo_len(0), Some(expected_len));
+            assert_eq!(bus.dma_source_address(1), Some(0x0200_0000));
+        }
+
+        // The fourth sample leaves 16 bytes, triggering exactly one 16-byte refill.
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(32));
+        assert_eq!(bus.dma_source_address(1), Some(0x0200_0010));
+        assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
+    }
+
+    #[test]
+    fn keypad_and_mode_requests_irq_only_when_all_selected_keys_become_pressed() {
+        let mut bus = MemoryBus::new(cartridge());
+        // Select A and B, enable keypad IRQ, and require both keys (AND mode).
+        bus.write16(0x0400_0132, (1 << 14) | (1 << 15) | 0b11);
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 0);
+
+        bus.set_button_pressed(GbaButton::B, true);
+        assert_ne!(bus.interrupt_request_flags() & (1 << 12), 0);
+
+        // Acknowledge, then prove an already-satisfied condition does not relatch
+        // on an unrelated state change while the AND condition stays true.
+        bus.acknowledge_interrupts(1 << 12);
+        bus.set_button_pressed(GbaButton::START, true);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 0);
+
+        // Dropping one selected key breaks the condition; pressing it again is a
+        // new rising edge and must request the IRQ again.
+        bus.set_button_pressed(GbaButton::A, false);
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_ne!(bus.interrupt_request_flags() & (1 << 12), 0);
+    }
+
+    #[test]
+    fn keypad_or_mode_ignores_unselected_keys_and_keyinput_is_active_low() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0132, (1 << 14) | (1 << 0)); // IRQ on A only.
+        bus.set_button_pressed(GbaButton::B, true);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 12), 0);
+        assert_eq!(bus.read16(0x0400_0130) & 0x03FF, !(1 << 1) & 0x03FF);
+
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_ne!(bus.interrupt_request_flags() & (1 << 12), 0);
+        assert_eq!(bus.read16(0x0400_0130) & 0x03FF, !(0b11) & 0x03FF);
+    }
+
 }
