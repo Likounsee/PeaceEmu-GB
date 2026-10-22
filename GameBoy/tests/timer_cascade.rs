@@ -115,3 +115,20 @@ fn dma_address_registers_mask_reserved_high_bits_for_word_and_byte_writes() {
     assert_eq!(bus.dma_source_address(0), Some(0x0FFF_DEF0));
     assert_eq!(bus.dma_destination_address(0), Some(0x0321_4560));
 }
+
+#[test]
+fn dma_count_registers_mask_reserved_bits_by_channel_and_access_width() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    // DMA0–DMA2 have 14-bit count registers; DMA3 retains all 16 bits.
+    bus.write16(0x0400_00B8, 0xFFFF);
+    bus.write16(0x0400_00E8, 0xFFFF);
+    assert_eq!(bus.read16(0x0400_00B8), 0x3FFF);
+    assert_eq!(bus.read16(0x0400_00E8), 0xFFFF);
+
+    // Byte writes to the high count byte must apply the same channel mask.
+    bus.write8(0x0400_00B9, 0xFF);
+    bus.write8(0x0400_00E9, 0xFF);
+    assert_eq!(bus.read16(0x0400_00B8), 0x3FFF);
+    assert_eq!(bus.read16(0x0400_00E8), 0xFFFF);
+}
