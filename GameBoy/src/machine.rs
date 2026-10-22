@@ -2417,9 +2417,12 @@ mod tests {
         assert_eq!(dma.dma_destination_addresses[0], Some(0x0300_5678));
         assert_eq!(dma.dma_count_registers[0], Some(7));
         assert_eq!(dma.dma_transfer_counts[0], Some(7));
-        machine.bus_mut().write16(0x0400_00BA, (1 << 15) | (2 << 5) | (1 << 7) | (1 << 9) | (1 << 10));
+        machine.bus_mut().write16(
+            0x0400_00BA,
+            (1 << 15) | (2 << 12) | (2 << 5) | (1 << 7) | (1 << 9) | (1 << 10),
+        );
         let configured_dma = machine.diagnostic_snapshot();
-        assert_eq!(configured_dma.dma_controls[0], Some(0x83A0));
+        assert_eq!(configured_dma.dma_controls[0], Some(0xA6C0));
         assert_eq!(configured_dma.dma_source_controls[0], Some(1));
         assert_eq!(configured_dma.dma_destination_controls[0], Some(2));
 
