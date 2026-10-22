@@ -2152,11 +2152,11 @@ mod tests {
 
         // Upper-byte writes can set IRQ/AND controls but reserved bits stay zero.
         bus.write8(0x0400_0133, 0xFF);
-        assert_eq!(bus.read16(0x0400_0132), 0xC003);
+        assert_eq!(bus.read16(0x0400_0132), 0xC303);
 
         // Replacing the low byte must preserve the upper-byte controls.
         bus.write8(0x0400_0132, 0x01);
-        assert_eq!(bus.read16(0x0400_0132), 0xC001);
+        assert_eq!(bus.read16(0x0400_0132), 0xC301);
 
         bus.write8(0x0400_0133, 0x00);
         assert_eq!(bus.read16(0x0400_0132), 0x0001);
