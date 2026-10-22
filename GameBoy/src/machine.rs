@@ -3247,6 +3247,8 @@ mod tests {
         machine.bus_mut().write16(0x0400_0102, 0x0080);
         machine.bus_mut().advance_cycles(1);
         machine.request_interrupt(1 << 4);
+        machine.set_button_pressed(crate::GbaButton::A, true);
+        machine.bus_mut().write32(0x0400_00A0, 0x807F_01FF);
         machine.cpu_mut().set_register(0, 0x1234_5678);
         machine.cpu_mut().set_register(15, CARTRIDGE_ENTRY_POINT);
         let checkpoint = machine.save_state();
@@ -3255,7 +3257,8 @@ mod tests {
         machine.bus_mut().write32(0x0200_0100, 0xDEAD_BEEF);
         machine.bus_mut().write16(0x0400_0100, 0x4321);
         machine.acknowledge_interrupts(1 << 4);
-        machine.set_button_pressed(crate::GbaButton::A, true);
+        machine.set_button_pressed(crate::GbaButton::A, false);
+        machine.bus_mut().write32(0x0400_00A0, 0);
         machine.cpu_mut().set_register(0, 0);
         machine.run_for_instructions(3).unwrap();
         machine.bus_mut().advance_cycles(2000);
@@ -3266,10 +3269,25 @@ mod tests {
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
         assert_eq!(machine.interrupt_request_flags() & (1 << 4), 1 << 4);
         assert_eq!(machine.timer_counter(0), Some(0xFFFF));
-        assert_eq!(machine.instructions_executed(), checkpoint_diagnostics.instructions_executed);
-        assert_eq!(machine.cycles_elapsed(), checkpoint_diagnostics.cycles_elapsed);
-        assert_eq!(machine.diagnostic_snapshot().video_scanline, checkpoint_diagnostics.video_scanline);
-        assert_eq!(machine.diagnostic_snapshot().video_cycles_into_scanline, checkpoint_diagnostics.video_cycles_into_scanline);
+        assert!(machine.is_button_pressed(crate::GbaButton::A));
+        assert_eq!(machine.audio_fifo_len(0), Some(4));
+        assert_eq!(
+            machine.instructions_executed(),
+            checkpoint_diagnostics.instructions_executed
+        );
+        assert_eq!(
+            machine.cycles_elapsed(),
+            checkpoint_diagnostics.cycles_elapsed
+        );
+        let restored_diagnostics = machine.diagnostic_snapshot();
+        assert_eq!(
+            restored_diagnostics.video_scanline,
+            checkpoint_diagnostics.video_scanline
+        );
+        assert_eq!(
+            restored_diagnostics.video_cycles_into_scanline,
+            checkpoint_diagnostics.video_cycles_into_scanline
+        );
 
         // Checkpoints are reusable rather than consumed by a restore.
         machine.bus_mut().write32(0x0200_0100, 0);
