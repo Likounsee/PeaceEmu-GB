@@ -4161,6 +4161,29 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_instruction_restores_cpu_registers_flags_and_execution_state() {
+        let mut bus = bus_with_program(&[0xF000_0000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0x1234_5678);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: true,
+            zero: false,
+            carry: true,
+            overflow: false,
+        });
+        cpu.set_execution_state(true);
+        cpu.set_register(15, 0x0200_0000);
+        let before = cpu.snapshot();
+
+        assert!(matches!(
+            cpu.step(&mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(cpu.snapshot(), before);
+    }
+
+    #[test]
     fn unsupported_instruction_is_reported() {
         let mut bus = bus_with_program(&[0xF000_0000]);
         let mut cpu = Cpu::new();
