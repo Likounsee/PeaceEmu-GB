@@ -838,7 +838,9 @@ impl Cpu {
             });
         }
 
-        if instruction & 0x0FBF_0FFF == 0x010F_0000 {
+        if instruction & 0x0F00_0000 == 0x0F00_0000 {
+            self.execute_swi(address, instruction, instruction & 0x00FF_FFFF, false, bus)?;
+        } else if instruction & 0x0FBF_0FFF == 0x010F_0000 {
             self.execute_mrs(address, instruction)?;
         } else if instruction & 0x0FB0_FFF0 == 0x0120_F000
             || instruction & 0x0FB0_F000 == 0x0320_F000
@@ -1028,6 +1030,8 @@ impl Cpu {
         } else if raw & 0xF800 == 0xE000 {
             let displacement = (((u32::from(raw & 0x07FF)) << 21) as i32 >> 20) as u32;
             self.registers[15] = address.wrapping_add(4).wrapping_add(displacement) & !1;
+        } else if raw & 0xFF00 == 0xDF00 {
+            self.execute_swi(address, instruction, u32::from(raw & 0x00FF), true, bus)?;
         } else if raw & 0xF000 == 0xD000 {
             let condition = u32::from((raw >> 8) & 0xF);
             if condition >= 0xE {
@@ -1601,6 +1605,99 @@ impl Cpu {
         cpsr |= u32::from(self.flags.overflow) << 28;
         cpsr |= u32::from(self.thumb) << 5;
         self.registers[rd] = cpsr;
+        Ok(())
+    }
+
+    /// Handles a small high-value subset of GBA BIOS software interrupts in HLE.
+    ///
+    /// This deliberately implements common arithmetic and memory-copy services
+    /// without pretending to provide BIOS exception banking or a full BIOS ROM.
+    fn execute_swi(
+        &mut self,
+        address: u32,
+        instruction: u32,
+        swi: u32,
+        thumb: bool,
+        bus: &mut MemoryBus,
+    ) -> Result<(), CpuError> {
+        match swi {
+            // Div: signed R0 / R1 -> quotient R0, remainder R1, |quotient| R3.
+            0x06 | 0x07 => {
+                if swi == 0x07 {
+                    self.registers.swap(0, 1);
+                }
+                let numerator = self.registers[0] as i32;
+                let denominator = self.registers[1] as i32;
+                if denominator == 0 {
+                    return Err(CpuError::UnsupportedInstruction { address, instruction });
+                }
+                let quotient = numerator.checked_div(denominator).unwrap_or(i32::MIN);
+                let remainder = numerator.checked_rem(denominator).unwrap_or(0);
+                self.registers[0] = quotient as u32;
+                self.registers[1] = remainder as u32;
+                self.registers[3] = quotient.wrapping_abs() as u32;
+            }
+            // Sqrt: unsigned integer square root.
+            0x08 => {
+                let value = u64::from(self.registers[0]);
+                let mut root = value;
+                let mut next = (root + 1) >> 1;
+                while next < root {
+                    root = next;
+                    next = (root + value / root) >> 1;
+                }
+                self.registers[0] = root as u32;
+            }
+            // CpuSet: 16-bit or 32-bit copy/fill. Source bit 24 selects fill.
+            0x0B => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let control = self.registers[2];
+                let count = control & 0x001F_FFFF;
+                let fill = control & (1 << 24) != 0;
+                let word = control & (1 << 26) != 0;
+                if word {
+                    let mut value = bus.read32(source & !3);
+                    for index in 0..count {
+                        if !fill || index == 0 {
+                            value = bus.read32(source.wrapping_add(index * 4) & !3);
+                        }
+                        bus.write32(destination.wrapping_add(index * 4) & !3, value);
+                    }
+                } else {
+                    let mut value = bus.read16(source & !1);
+                    for index in 0..count {
+                        if !fill || index == 0 {
+                            value = bus.read16(source.wrapping_add(index * 2) & !1);
+                        }
+                        bus.write16(destination.wrapping_add(index * 2) & !1, value);
+                    }
+                }
+            }
+            // CpuFastSet copies/fills words in groups of eight; count rounds up.
+            0x0C => {
+                let source = self.registers[0] & !3;
+                let destination = self.registers[1] & !3;
+                let control = self.registers[2];
+                let count = (control & 0x001F_FFFF).saturating_add(7) & !7;
+                let fill = control & (1 << 24) != 0;
+                let mut value = bus.read32(source);
+                for index in 0..count {
+                    if !fill || index == 0 {
+                        value = bus.read32(source.wrapping_add(index * 4));
+                    }
+                    bus.write32(destination.wrapping_add(index * 4), value);
+                }
+            }
+            _ => return Err(CpuError::UnsupportedInstruction { address, instruction }),
+        }
+        // HLE returns directly to the instruction following SWI. The real BIOS
+        // uses SVC mode and SPSR banking; that exception machinery is not modeled.
+        if thumb {
+            self.registers[15] = address.wrapping_add(2) & !1;
+        } else {
+            self.registers[15] = address.wrapping_add(4) & !3;
+        }
         Ok(())
     }
 
@@ -2389,6 +2486,59 @@ mod tests {
         assert_eq!(error.address(), 0x0200_0000);
         assert_eq!(error.instruction(), 0xDE00);
         assert_eq!(cpu.register(15), Some(0x0200_0000));
+    }
+
+    #[test]
+    fn bios_hle_div_and_sqrt_cover_signed_and_unsigned_edges() {
+        let mut bus = bus_with_program(&[0xEF00_0006, 0xEF00_0008]);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, (-17_i32) as u32);
+        cpu.set_register(1, 5);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some((-3_i32) as u32));
+        assert_eq!(cpu.register(1), Some((-2_i32) as u32));
+        assert_eq!(cpu.register(3), Some(3));
+        cpu.set_register(0, 0xFFFF_FFFF);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(65_535));
+    }
+
+    #[test]
+    fn bios_hle_cpuset_copies_and_fills_memory() {
+        let mut bus = bus_with_program(&[0xEF00_000B, 0xEF00_000B]);
+        bus.write32(0x0200_0100, 0x1234_5678);
+        bus.write32(0x0200_0104, 0x9ABC_DEF0);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.set_register(2, (1 << 26) | 2);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read32(0x0200_0200), 0x1234_5678);
+        assert_eq!(bus.read32(0x0200_0204), 0x9ABC_DEF0);
+
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0300);
+        cpu.set_register(2, (1 << 26) | (1 << 24) | 3);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read32(0x0200_0300), 0x1234_5678);
+        assert_eq!(bus.read32(0x0200_0304), 0x1234_5678);
+        assert_eq!(bus.read32(0x0200_0308), 0x1234_5678);
+    }
+
+    #[test]
+    fn thumb_bios_hle_swi_returns_to_next_halfword() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0200_0000, 0xDF08);
+        let mut cpu = Cpu::new();
+        cpu.thumb = true;
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 144);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(12));
+        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert!(cpu.thumb);
     }
 
     #[test]
