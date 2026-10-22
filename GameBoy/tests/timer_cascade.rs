@@ -148,3 +148,27 @@ fn dma_increment_wraps_programmed_address_registers_to_28_bits() {
     assert_eq!(bus.interrupt_request_flags() & (1 << 8), 1 << 8);
     assert_eq!(bus.dma_enabled(0), Some(false));
 }
+
+#[test]
+fn repeated_hblank_dma_advances_source_and_reloads_destination() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0200_0000, 0xCAFE);
+    bus.write16(0x0200_0002, 0xBEEF);
+    bus.write32(0x0400_00B0, 0x0200_0000);
+    bus.write32(0x0400_00B4, 0x0300_0000);
+    bus.write16(0x0400_00B8, 1);
+    // Enable, HBlank timing, repeat, destination increment/reload.
+    bus.write16(0x0400_00BA, 0xA260);
+
+    bus.advance_cycles(960);
+    assert_eq!(bus.read16(0x0300_0000), 0xCAFE);
+    assert_eq!(bus.dma_source_address(0), Some(0x0200_0002));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+    assert_eq!(bus.dma_enabled(0), Some(true));
+
+    bus.advance_cycles(1232);
+    assert_eq!(bus.read16(0x0300_0000), 0xBEEF);
+    assert_eq!(bus.dma_source_address(0), Some(0x0200_0004));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+    assert_eq!(bus.dma_enabled(0), Some(true));
+}
