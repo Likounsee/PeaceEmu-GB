@@ -2415,7 +2415,8 @@ mod tests {
         assert_eq!(pending.interrupt_requests, 1 << 2);
         assert_eq!(pending.pending_interrupts, 1 << 2);
         assert_eq!(pending.pending_interrupt_source, Some(2));
-        assert!(pending.interrupt_pending);
+        // IF & IE indicate a pending source, but IME is still disabled.
+        assert!(!pending.interrupt_pending);
         assert_eq!(pending.cpu.pc, machine.cpu().register(15).unwrap());
 
         machine.bus_mut().write16(0x0400_0208, 1);
