@@ -269,7 +269,9 @@ mod tests {
     #[test]
     fn save_type_can_be_overridden_for_unsigned_or_misidentified_roms() {
         let cartridge = GbaCartridge::parse(&valid_rom(GBA_HEADER_SIZE)).unwrap();
-        let forced = cartridge.clone().with_save_type(Some(crate::SaveType::Flash128K));
+        let forced = cartridge
+            .clone()
+            .with_save_type(Some(crate::SaveType::Flash128K));
         assert_eq!(forced.save_type(), Some(crate::SaveType::Flash128K));
 
         let disabled = forced.with_save_type(None);
