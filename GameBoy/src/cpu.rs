@@ -2674,7 +2674,7 @@ mod tests {
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some((-12_868_i32) as u32));
+        assert_eq!(cpu.register(0), Some(12_868));
     }
 
     #[test]
