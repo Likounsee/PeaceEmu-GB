@@ -285,7 +285,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn sanitizes_non_printable_header_metadata_without_rejecting_rom() {
         let mut rom = valid_rom(GBA_HEADER_SIZE);
@@ -313,5 +312,4 @@ mod tests {
             Err(CartridgeError::InvalidHeaderChecksum { .. })
         ));
     }
-
 }
