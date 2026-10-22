@@ -4275,6 +4275,50 @@ mod tests {
     }
 
     #[test]
+    fn arm_gamepak_word_load_costs_more_than_byte_load() {
+        let mut byte_bus = bus_with_program(&[0xE5D1_0000, 0xE1A0_0000]); // LDRB r0, [r1]
+        let mut byte_cpu = Cpu::new();
+        byte_cpu.reset(0x0200_0000);
+        byte_cpu.set_register(1, 0x0800_0100);
+        byte_bus.write16(0x0400_0204, 0);
+        let (_, byte_cycles) = byte_cpu.step_with_cycles(&mut byte_bus).unwrap();
+
+        let mut word_bus = bus_with_program(&[0xE591_0000, 0xE1A0_0000]); // LDR r0, [r1]
+        let mut word_cpu = Cpu::new();
+        word_cpu.reset(0x0200_0000);
+        word_cpu.set_register(1, 0x0800_0100);
+        word_bus.write16(0x0400_0204, 0);
+        let (_, word_cycles) = word_cpu.step_with_cycles(&mut word_bus).unwrap();
+
+        assert!(
+            word_cycles > byte_cycles,
+            "a Game Pak word load spans more 16-bit bus activity than a byte load"
+        );
+    }
+
+    #[test]
+    fn thumb_gamepak_byte_store_adds_waitcnt_latency() {
+        // STRB r0, [r1, #0] (Thumb encoding 0x7008).
+        let mut rom_bus = bus_with_program(&[0x7008]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_execution_state(true);
+        rom_cpu.set_register(0, 0x5A);
+        rom_cpu.set_register(1, 0x0800_0100);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[0x7008]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_execution_state(true);
+        ram_cpu.set_register(0, 0x5A);
+        ram_cpu.set_register(1, 0x0300_0100);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+    }
+
+    #[test]
     fn arm_register_offset_gamepak_load_adds_waitcnt_latency() {
         // LDR r0, [r1, r2, LSL #2]
         let mut rom_bus = bus_with_program(&[0xE791_0102, 0xE1A0_0000]);
