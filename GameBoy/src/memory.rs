@@ -2539,6 +2539,42 @@ mod tests {
     }
 
     #[test]
+    fn immediate_dma_fixed_source_repeats_data_and_advances_destination() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0000, 0xCAFE);
+        bus.write32(0x0400_00B0, 0x0200_0000);
+        bus.write32(0x0400_00B4, 0x0300_0000);
+        bus.write16(0x0400_00B8, 3);
+        // Fixed source address, incrementing destination, immediate halfwords.
+        bus.write16(0x0400_00BA, 0x8100);
+
+        assert_eq!(bus.read16(0x0300_0000), 0xCAFE);
+        assert_eq!(bus.read16(0x0300_0002), 0xCAFE);
+        assert_eq!(bus.read16(0x0300_0004), 0xCAFE);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0000));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0006));
+        assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
+    fn immediate_dma_decrementing_destination_updates_final_address() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0000, 0x1234);
+        bus.write16(0x0200_0002, 0xABCD);
+        bus.write32(0x0400_00B0, 0x0200_0000);
+        bus.write32(0x0400_00B4, 0x0300_0002);
+        bus.write16(0x0400_00B8, 2);
+        // Decrement destination after each halfword.
+        bus.write16(0x0400_00BA, 0x8020);
+
+        assert_eq!(bus.read16(0x0300_0002), 0x1234);
+        assert_eq!(bus.read16(0x0300_0000), 0xABCD);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0004));
+        assert_eq!(bus.dma_destination_address(0), Some(0x02FF_FFFE));
+        assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
     fn immediate_dma_supports_word_transfers_and_fixed_destination() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write32(0x0200_0000, 0x1234_5678);
