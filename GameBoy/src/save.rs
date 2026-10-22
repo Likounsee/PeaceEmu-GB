@@ -765,4 +765,33 @@ mod flash_tests {
         flash.write(0x5555, 0x10);
         assert_eq!(flash.read(0x0123), 0x00);
     }
+    #[test]
+    fn flash128k_chip_erase_clears_both_banks_without_changing_selected_bank() {
+        let mut flash = FlashDevice::new(SaveType::Flash128K).unwrap();
+
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xA0);
+        flash.write(0x0100, 0x12);
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xB0);
+        flash.write(0, 1);
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xA0);
+        flash.write(0x0100, 0x34);
+        assert_eq!(flash.read(0x0100), 0x34);
+
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0x80);
+        flash.write(0x5555, 0xAA);
+        flash.write(0x2AAA, 0x55);
+        flash.write(0x5555, 0x10);
+
+        // Chip erase affects the entire physical array, including the inactive bank.
+        assert_eq!(flash.read(0x0100), 0xFF);
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xB0);
+        flash.write(0, 0);
+        assert_eq!(flash.read(0x0100), 0xFF);
+    }
+
 }
