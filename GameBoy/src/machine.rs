@@ -1457,6 +1457,27 @@ mod tests {
     }
 
     #[test]
+    fn halted_machine_advances_cycles_without_counting_idle_as_instructions() {
+        let mut rom = vec![0; GBA_HEADER_SIZE];
+        rom[0..4].copy_from_slice(&0xEF00_0002_u32.to_le_bytes()); // SWI Halt.
+        rom[0xA0..0xAC].copy_from_slice(b"HALT TEST   ");
+        rom[0xAC..0xB0].copy_from_slice(b"HLTE");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+
+        machine.step().unwrap();
+        assert_eq!(machine.instructions_executed(), 1);
+        let cycles_before_idle = machine.cycles_elapsed();
+        assert_eq!(machine.step().unwrap(), 1);
+        assert_eq!(machine.instructions_executed(), 1);
+        assert_eq!(machine.cycles_elapsed(), cycles_before_idle + 1);
+    }
+
+    #[test]
     fn machine_can_restore_cpu_snapshot_without_rewinding_peripherals_or_counters() {
         let mut machine = GbaMachine::new(cartridge());
         let mut snapshot = machine.cpu_snapshot();
