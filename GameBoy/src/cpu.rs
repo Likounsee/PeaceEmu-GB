@@ -2679,7 +2679,9 @@ mod tests {
         cpu.set_register(0, 0x0200_0000);
         cpu.set_register(1, 0x0300_0000);
         cpu.set_register(2, 0x0200_0010);
-        assert!(cpu.execute_swi(0x0200_0100, 0xEF00_0010, 0x10, false, &mut bus).is_err());
+        assert!(cpu
+            .execute_swi(0x0200_0100, 0xEF00_0010, 0x10, false, &mut bus)
+            .is_err());
         assert_eq!(bus.read32(0x0300_0000), 0);
     }
 
