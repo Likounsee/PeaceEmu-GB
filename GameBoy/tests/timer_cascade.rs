@@ -140,7 +140,7 @@ fn dma_increment_wraps_programmed_address_registers_to_28_bits() {
     bus.write32(0x0400_00B0, 0x0FFF_FFFE); // source increments past bit 27
     bus.write32(0x0400_00B4, 0x0200_0000);
     bus.write16(0x0400_00B8, 1);
-    bus.write16(0x0400_00BA, 0x8400); // enable + completion IRQ, immediate
+    bus.write16(0x0400_00BA, 0xC000); // enable + completion IRQ, immediate
 
     assert_eq!(bus.read16(0x0200_0000), 0);
     assert_eq!(bus.dma_source_address(0), Some(0));
