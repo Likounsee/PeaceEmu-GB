@@ -187,6 +187,9 @@ impl Cpu {
     }
 
     /// Returns whether BIOS Halt has stopped instruction execution.
+    ///
+    /// A debugger CPU snapshot does not preserve this wait state; full machine
+    /// save states do, because they clone the complete CPU.
     pub fn is_halted(&self) -> bool {
         self.halted
     }
