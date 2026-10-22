@@ -248,7 +248,9 @@ fn interrupt_controller_byte_writes_preserve_ie_if_and_ime_semantics() {
     bus.write8(0x0400_0201, 0x40); // reserved IE bits are discarded
     assert_eq!(bus.read16(0x0400_0200), 0x0005);
 
-    bus.write16(0x0400_0202, (1 << 0) | (1 << 12) | (1 << 14));
+    // IF is read/write-one-to-clear: hardware sources latch requests, rather than
+    // software setting them by writing ones to IF.
+    bus.request_interrupt((1 << 0) | (1 << 12) | (1 << 14));
     assert_eq!(bus.interrupt_request_flags(), (1 << 0) | (1 << 12));
 
     bus.write8(0x0400_0202, 1);
