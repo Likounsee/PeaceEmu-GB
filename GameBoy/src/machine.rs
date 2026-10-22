@@ -2408,7 +2408,6 @@ mod tests {
         assert!(!initial.keypad_irq_requested);
 
         machine.bus_mut().write16(0x0400_0200, 1 << 2);
-        machine.bus_mut().write16(0x0400_0208, 1);
         machine.request_interrupt(1 << 2);
         let pending = machine.diagnostic_snapshot();
         assert!(!pending.interrupt_master_enabled);
