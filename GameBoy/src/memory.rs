@@ -3662,8 +3662,8 @@ mod tests {
 
     #[test]
     fn manually_selected_flash128k_is_instantiated_and_bank_switches_work() {
-        let cartridge = cartridge_with_save_signature(b"")
-            .with_save_type(Some(crate::SaveType::Flash128K));
+        let cartridge =
+            cartridge_with_save_signature(b"").with_save_type(Some(crate::SaveType::Flash128K));
         let mut bus = MemoryBus::new(cartridge);
         assert_eq!(bus.cartridge_save_type(), Some(crate::SaveType::Flash128K));
         assert_eq!(bus.flash_data().map(<[u8]>::len), Some(128 * 1024));
