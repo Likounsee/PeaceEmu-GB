@@ -1186,11 +1186,11 @@ impl MemoryBus {
         let repeat = control & (1 << 9) != 0 && timing != 0;
         // Increment/reload only reloads the destination between repeated
         // timed transfers. An immediate transfer leaves the advanced address.
-        let next_destination = if destination_mode == 3 && repeat {
+        let next_destination = (if destination_mode == 3 && repeat {
             destination & !(step - 1)
         } else {
             dst
-        } & 0x0FFF_FFFF;
+        }) & 0x0FFF_FFFF;
         self.io[destination_offset..destination_offset + 4]
             .copy_from_slice(&next_destination.to_le_bytes());
 
