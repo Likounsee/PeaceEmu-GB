@@ -172,3 +172,62 @@ fn repeated_hblank_dma_advances_source_and_reloads_destination() {
     assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
     assert_eq!(bus.dma_enabled(0), Some(true));
 }
+
+
+#[test]
+fn vblank_dma_fires_at_line_160_and_video_deadline_tracks_frame_wrap() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0200_0000, 0xBEEF);
+    bus.write32(0x0400_00B0, 0x0200_0000);
+    bus.write32(0x0400_00B4, 0x0300_0000);
+    bus.write16(0x0400_00B8, 1);
+    bus.write16(0x0400_00BA, 0x9000); // enabled, VBlank timing
+
+    assert_eq!(bus.video_cycles_until_vblank(), 160 * 1232);
+    bus.advance_cycles(160 * 1232 - 1);
+    assert_eq!(bus.video_scanline(), 159);
+    assert_eq!(bus.video_cycles_until_vblank(), 1);
+    assert_eq!(bus.read16(0x0300_0000), 0);
+
+    bus.advance_cycles(1);
+    assert_eq!(bus.video_scanline(), 160);
+    assert!(bus.video_in_vblank());
+    assert_eq!(bus.read16(0x0300_0000), 0xBEEF);
+    assert_eq!(bus.dma_enabled(0), Some(false));
+    assert_eq!(bus.video_cycles_until_vblank(), 228 * 1232);
+}
+
+#[test]
+fn dispstat_byte_writes_configure_vcount_irq_without_writing_status_bits() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    bus.write8(0x0400_0004, 0x20); // enable VCOUNT-match IRQ
+    bus.write8(0x0400_0005, 0x01); // compare against scanline 1
+    assert_eq!(bus.read16(0x0400_0004) & 0xFF38, 0x0120);
+    assert_eq!(bus.interrupt_request_flags() & (1 << 2), 0);
+
+    bus.advance_cycles(1232);
+    assert_eq!(bus.video_scanline(), 1);
+    assert!(bus.video_vcount_match());
+    assert_eq!(bus.interrupt_request_flags() & (1 << 2), 1 << 2);
+
+    // VCOUNT is read-only even for byte writes.
+    bus.write8(0x0400_0006, 99);
+    assert_eq!(bus.video_scanline(), 1);
+    assert_eq!(bus.read16(0x0400_0006), 1);
+}
+
+#[test]
+fn waitcnt_width_timing_accounts_for_rom_sequential_access_and_bank_boundaries() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(6));
+    assert_eq!(bus.gamepak_access_cycles_for_width(0x0A00_0000, false, 4), Some(8));
+
+    // ROM0 sequential accesses become one cycle; the first non-sequential
+    // halfword remains four cycles, so a 32-bit word costs five cycles.
+    bus.write16(0x0400_0204, 1 << 4);
+    assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(4));
+    assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(1));
+    assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(5));
+}
