@@ -4172,7 +4172,7 @@ mod tests {
             carry: true,
             overflow: false,
         });
-        cpu.set_execution_state(true);
+        cpu.set_execution_state(false);
         cpu.set_register(15, 0x0200_0000);
         let before = cpu.snapshot();
 
