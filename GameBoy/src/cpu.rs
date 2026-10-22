@@ -4318,6 +4318,75 @@ mod tests {
     }
 
     #[test]
+    fn arm_register_shifted_gamepak_store_adds_waitcnt_latency() {
+        // STR r0, [r1, r2, LSL r3], where the shifted address reaches ROM.
+        let instruction = 0xE781_0312;
+        let mut rom_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(0, 0x1234_5678);
+        rom_cpu.set_register(1, 0x07FF_FFFC);
+        rom_cpu.set_register(2, 1);
+        rom_cpu.set_register(3, 2);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(0, 0x1234_5678);
+        ram_cpu.set_register(1, 0x0300_0100);
+        ram_cpu.set_register(2, 1);
+        ram_cpu.set_register(3, 2);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+    }
+
+    #[test]
+    fn arm_post_indexed_gamepak_load_uses_base_address_for_wait_states() {
+        // LDR r0, [r1], #4 accesses the original base, then updates r1.
+        let instruction = 0xE491_0004;
+        let mut rom_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(1, 0x0800_0100);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+        assert_eq!(rom_cpu.register(1), Some(0x0800_0104));
+
+        let mut ram_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(1, 0x0300_0100);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+        assert_eq!(ram_cpu.register(1), Some(0x0300_0104));
+
+        assert!(rom_cycles > ram_cycles);
+    }
+
+    #[test]
+    fn arm_gamepak_data_wait_states_follow_waitcnt_configuration() {
+        let instruction = 0xE591_0000; // LDR r0, [r1]
+        let mut fast_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut fast_cpu = Cpu::new();
+        fast_cpu.reset(0x0200_0000);
+        fast_cpu.set_register(1, 0x0800_0100);
+        fast_bus.write16(0x0400_0204, 0);
+        let (_, fast_cycles) = fast_cpu.step_with_cycles(&mut fast_bus).unwrap();
+
+        let mut slow_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
+        let mut slow_cpu = Cpu::new();
+        slow_cpu.reset(0x0200_0000);
+        slow_cpu.set_register(1, 0x0800_0100);
+        slow_bus.write16(0x0400_0204, 0x7FFF);
+        let (_, slow_cycles) = slow_cpu.step_with_cycles(&mut slow_bus).unwrap();
+
+        assert!(
+            slow_cycles > fast_cycles,
+            "larger WAITCNT wait states must increase CPU data-access cycles"
+        );
+    }
+
+    #[test]
     fn arm_gamepak_byte_store_adds_waitcnt_latency_even_when_rom_ignores_write() {
         // STRB r0, [r1]. Game Pak ROM ignores writes, but the bus access
         // still consumes the configured external-bus wait states.
