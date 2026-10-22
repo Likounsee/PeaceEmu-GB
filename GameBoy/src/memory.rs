@@ -2173,7 +2173,10 @@ mod tests {
         bus.write32(0x0400_0130, 0);
 
         assert_eq!(bus.read16(0x0400_0130), before);
-        assert_eq!(bus.keys_pressed(), GbaButton::A.mask() | GbaButton::Start.mask());
+        assert_eq!(
+            bus.keys_pressed(),
+            GbaButton::A.mask() | GbaButton::Start.mask()
+        );
     }
 
     #[test]
