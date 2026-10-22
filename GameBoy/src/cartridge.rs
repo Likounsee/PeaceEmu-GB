@@ -284,4 +284,34 @@ mod tests {
             })
         );
     }
+
+
+    #[test]
+    fn sanitizes_non_printable_header_metadata_without_rejecting_rom() {
+        let mut rom = valid_rom(GBA_HEADER_SIZE);
+        rom[0xA0..0xAC].fill(0);
+        rom[0xA0] = 0x01;
+        rom[0xA1] = b'A';
+        rom[0xA2] = 0x7F;
+        rom[0xA3] = b' ';
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+
+        let cartridge = GbaCartridge::parse(&rom).unwrap();
+        assert_eq!(cartridge.title(), "?A?");
+    }
+
+    #[test]
+    fn rejects_a_header_checksum_changed_after_rom_creation() {
+        let mut rom = valid_rom(GBA_HEADER_SIZE);
+        rom[0xBD] ^= 0x01;
+
+        assert!(matches!(
+            GbaCartridge::parse(&rom),
+            Err(CartridgeError::InvalidHeaderChecksum { .. })
+        ));
+    }
+
 }
