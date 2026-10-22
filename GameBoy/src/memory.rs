@@ -4098,21 +4098,16 @@ mod tests {
     }
 
     #[test]
-    fn ram_word_accesses_decode_each_byte_across_a_region_boundary() {
+    fn ram_word_accesses_align_down_before_decoding_the_region() {
         let mut bus = MemoryBus::new(cartridge());
 
-        // The last two bytes of IWRAM are followed by the beginning of the
-        // I/O window in the address map; the word access must not wrap back
-        // into IWRAM for its upper halfword.
-        bus.write16(0x03FF_FFFE, 0xCAFE);
-        bus.write16(0x0400_0000, 0x1234);
-        assert_eq!(bus.read32(0x03FF_FFFE), 0x1234_CAFE);
-
-        // Likewise, a word beginning at the end of EWRAM follows the actual
-        // address map byte-by-byte, rather than wrapping at 256 KiB.
-        bus.write16(0x0203_FFFE, 0xBEEF);
-        bus.write16(0x0204_0000, 0xCAFE);
-        assert_eq!(bus.read32(0x0203_FFFE), 0xCAFE_BEEF);
+        // Halfword/word accessors align to the access width before decoding.
+        // An unaligned word request at the end of a RAM window therefore
+        // reads the aligned word wholly inside that physical window.
+        bus.write32(0x03FF_FFFC, 0xCAFE_BABE);
+        assert_eq!(bus.read32(0x03FF_FFFE), 0xCAFE_BABE);
+        bus.write32(0x0203_FFFC, 0x1234_5678);
+        assert_eq!(bus.read32(0x0203_FFFE), 0x1234_5678);
     }
 
     #[test]
