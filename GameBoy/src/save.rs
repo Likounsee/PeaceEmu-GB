@@ -689,6 +689,63 @@ mod flash_tests {
     }
 
     #[test]
+    fn flash_aborted_sector_erase_does_not_modify_the_array() {
+        let mut flash = FlashDevice::new(SaveType::Flash64K).unwrap();
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xA0);
+        flash.write(0x1234, 0x00);
+        flash.write(0x2345, 0x00);
+
+        // Enter erase setup, then send an invalid second unlock address.
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0x80);
+        flash.write(0x5555, 0xAA);
+        flash.write(0x1234, 0x55);
+        flash.write(0x1234, 0x30);
+
+        assert_eq!(flash.read(0x1234), 0x00);
+        assert_eq!(flash.read(0x2345), 0x00);
+    }
+
+    #[test]
+    fn rejected_eeprom_load_preserves_capacity_and_persistent_bytes() {
+        let mut eeprom = EepromDevice::new();
+        eeprom.configure_transfer_length(82);
+        let address = 0x03FF_usize;
+        let value = 0xD1C2_B3A4_9586_7768_u64;
+        let mut command = vec![1, 1, 0];
+        command.extend((0..14).rev().map(|bit| ((address >> bit) & 1) as u8));
+        command.extend((0..64).rev().map(|bit| ((value >> bit) & 1) as u8));
+        command.push(0);
+        for bit in command {
+            eeprom.write_bit(u16::from(bit));
+        }
+
+        let before = eeprom.data().to_vec();
+        let error = eeprom.load_data(&[0x12; 513]).unwrap_err();
+        assert_eq!(error.expected, 8 * 1024);
+        assert_eq!(error.actual, 513);
+        assert_eq!(eeprom.capacity_bytes(), 8 * 1024);
+        assert_eq!(eeprom.data(), before.as_slice());
+    }
+
+    #[test]
+    fn flash_rejected_load_is_atomic_and_does_not_cancel_a_pending_command() {
+        let mut flash = FlashDevice::new(SaveType::Flash64K).unwrap();
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xA0);
+        flash.write(0x0100, 0x5A);
+
+        assert!(flash.load_data(&[0x00; 1024]).is_err());
+        // The active device remains usable and the previously programmed byte survives.
+        assert_eq!(flash.read(0x0100), 0x5A);
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xA0);
+        flash.write(0x0100, 0x0F);
+        assert_eq!(flash.read(0x0100), 0x0A);
+    }
+
+    #[test]
     fn flash_invalid_unlock_sequence_cannot_program_or_erase_data() {
         let mut flash = FlashDevice::new(SaveType::Flash64K).unwrap();
         unlock_flash(&mut flash);
