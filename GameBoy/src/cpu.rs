@@ -1955,7 +1955,12 @@ impl Cpu {
         let symbol_bits = match format {
             0x20 => 8_usize,
             0x24 => 4_usize,
-            _ => return Err(CpuError::UnsupportedInstruction { address, instruction }),
+            _ => {
+                return Err(CpuError::UnsupportedInstruction {
+                    address,
+                    instruction,
+                })
+            }
         };
         let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
         let symbol_count = output_size.saturating_mul(8 / symbol_bits);
@@ -1985,7 +1990,11 @@ impl Cpu {
                 }
                 let child_offset = u32::from(node & 0x3F) * 2 + 2 + u32::from(bit);
                 let child_address = node_address.wrapping_add(child_offset);
-                let is_leaf = if bit == 0 { node & 0x80 != 0 } else { node & 0x40 != 0 };
+                let is_leaf = if bit == 0 {
+                    node & 0x80 != 0
+                } else {
+                    node & 0x40 != 0
+                };
                 if is_leaf {
                     let symbol = bus.read8(child_address);
                     if symbol_bits == 8 {
@@ -3196,7 +3205,12 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
             .unwrap();
 
-        assert_eq!((0..4).map(|i| bus.read8(destination + i)).collect::<Vec<_>>(), b"ABAB");
+        assert_eq!(
+            (0..4)
+                .map(|i| bus.read8(destination + i))
+                .collect::<Vec<_>>(),
+            b"ABAB"
+        );
         assert_eq!(cpu.register(15), Some(0x0200_0204));
     }
 
