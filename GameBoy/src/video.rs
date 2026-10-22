@@ -282,7 +282,6 @@ impl VideoFrame {
         }
     }
 
-
     /// Returns a horizontally mirrored copy of this frame.
     ///
     /// Malformed public frame values return None; the source frame is never
@@ -297,7 +296,11 @@ impl VideoFrame {
             let end = start.checked_add(self.width)?;
             pixels.extend(self.pixels.get(start..end)?.iter().rev().copied());
         }
-        Some(Self { width: self.width, height: self.height, pixels })
+        Some(Self {
+            width: self.width,
+            height: self.height,
+            pixels,
+        })
     }
 
     /// Rotates the frame 180 degrees without resampling pixels.
@@ -310,7 +313,11 @@ impl VideoFrame {
         }
         let mut pixels = self.pixels.clone();
         pixels.reverse();
-        Some(Self { width: self.width, height: self.height, pixels })
+        Some(Self {
+            width: self.width,
+            height: self.height,
+            pixels,
+        })
     }
 
     /// Rotates the frame 90 degrees clockwise without resampling pixels.
@@ -327,11 +334,19 @@ impl VideoFrame {
             for x in 0..self.width {
                 let destination_x = self.height.checked_sub(1 + y)?;
                 let destination_y = x;
-                let destination = destination_y.checked_mul(self.height)?.checked_add(destination_x)?;
-                pixels[destination] = *self.pixels.get(y.checked_mul(self.width)?.checked_add(x)?)?;
+                let destination = destination_y
+                    .checked_mul(self.height)?
+                    .checked_add(destination_x)?;
+                pixels[destination] = *self
+                    .pixels
+                    .get(y.checked_mul(self.width)?.checked_add(x)?)?;
             }
         }
-        Some(Self { width: self.height, height: self.width, pixels })
+        Some(Self {
+            width: self.height,
+            height: self.width,
+            pixels,
+        })
     }
 
     /// Rotates the frame 90 degrees counter-clockwise without resampling.
@@ -348,11 +363,19 @@ impl VideoFrame {
             for x in 0..self.width {
                 let destination_x = y;
                 let destination_y = self.width.checked_sub(1 + x)?;
-                let destination = destination_y.checked_mul(self.height)?.checked_add(destination_x)?;
-                pixels[destination] = *self.pixels.get(y.checked_mul(self.width)?.checked_add(x)?)?;
+                let destination = destination_y
+                    .checked_mul(self.height)?
+                    .checked_add(destination_x)?;
+                pixels[destination] = *self
+                    .pixels
+                    .get(y.checked_mul(self.width)?.checked_add(x)?)?;
             }
         }
-        Some(Self { width: self.height, height: self.width, pixels })
+        Some(Self {
+            width: self.height,
+            height: self.width,
+            pixels,
+        })
     }
 
     /// Returns a vertically mirrored copy of this frame.
@@ -369,7 +392,11 @@ impl VideoFrame {
             let end = start.checked_add(self.width)?;
             pixels.extend_from_slice(self.pixels.get(start..end)?);
         }
-        Some(Self { width: self.width, height: self.height, pixels })
+        Some(Self {
+            width: self.width,
+            height: self.height,
+            pixels,
+        })
     }
 
     /// Resizes this frame using nearest-neighbor sampling.
@@ -378,7 +405,12 @@ impl VideoFrame {
     /// Sampling maps destination pixel centers to source pixel centers, and
     /// checked arithmetic rejects dimensions that would overflow allocation.
     pub fn resized_nearest(&self, width: usize, height: usize) -> Option<Self> {
-        if !self.is_well_formed() || self.width == 0 || self.height == 0 || width == 0 || height == 0 {
+        if !self.is_well_formed()
+            || self.width == 0
+            || self.height == 0
+            || width == 0
+            || height == 0
+        {
             return None;
         }
         let pixel_count = width.checked_mul(height)?;
@@ -395,7 +427,11 @@ impl VideoFrame {
                 pixels.push(*self.pixels.get(row_start.checked_add(source_x)?)?);
             }
         }
-        Some(Self { width, height, pixels })
+        Some(Self {
+            width,
+            height,
+            pixels,
+        })
     }
 }
 
@@ -3053,10 +3089,22 @@ mod tests {
         assert_eq!(
             frame.resized_nearest(4, 4).unwrap().pixels,
             vec![
-                0xFF00_0001, 0xFF00_0001, 0xFF00_0002, 0xFF00_0002,
-                0xFF00_0001, 0xFF00_0001, 0xFF00_0002, 0xFF00_0002,
-                0xFF00_0003, 0xFF00_0003, 0xFF00_0004, 0xFF00_0004,
-                0xFF00_0003, 0xFF00_0003, 0xFF00_0004, 0xFF00_0004,
+                0xFF00_0001,
+                0xFF00_0001,
+                0xFF00_0002,
+                0xFF00_0002,
+                0xFF00_0001,
+                0xFF00_0001,
+                0xFF00_0002,
+                0xFF00_0002,
+                0xFF00_0003,
+                0xFF00_0003,
+                0xFF00_0004,
+                0xFF00_0004,
+                0xFF00_0003,
+                0xFF00_0003,
+                0xFF00_0004,
+                0xFF00_0004,
             ]
         );
         assert_eq!(frame.pixels[0], 0xFF00_0001);
@@ -3064,15 +3112,26 @@ mod tests {
 
     #[test]
     fn frame_transforms_reject_malformed_and_zero_sized_frames() {
-        let malformed = VideoFrame { width: 2, height: 2, pixels: vec![0; 3] };
+        let malformed = VideoFrame {
+            width: 2,
+            height: 2,
+            pixels: vec![0; 3],
+        };
         assert!(malformed.flipped_horizontal().is_none());
         assert!(malformed.flipped_vertical().is_none());
         assert!(malformed.resized_nearest(3, 3).is_none());
 
-        let frame = VideoFrame { width: 1, height: 1, pixels: vec![0xFF12_3456] };
+        let frame = VideoFrame {
+            width: 1,
+            height: 1,
+            pixels: vec![0xFF12_3456],
+        };
         assert!(frame.resized_nearest(0, 1).is_none());
         assert!(frame.resized_nearest(1, 0).is_none());
-        assert_eq!(frame.resized_nearest(3, 2).unwrap().pixels, vec![0xFF12_3456; 6]);
+        assert_eq!(
+            frame.resized_nearest(3, 2).unwrap().pixels,
+            vec![0xFF12_3456; 6]
+        );
     }
 
     #[test]
@@ -3099,7 +3158,11 @@ mod tests {
 
     #[test]
     fn frame_rotations_reject_inconsistent_pixel_buffers() {
-        let malformed = VideoFrame { width: 3, height: 2, pixels: vec![1, 2, 3] };
+        let malformed = VideoFrame {
+            width: 3,
+            height: 2,
+            pixels: vec![1, 2, 3],
+        };
         assert!(malformed.rotated_180().is_none());
         assert!(malformed.rotated_clockwise().is_none());
         assert!(malformed.rotated_counter_clockwise().is_none());
