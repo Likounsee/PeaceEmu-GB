@@ -1098,6 +1098,25 @@ impl MemoryBus {
         }
     }
 
+    /// Signals one external Game Pak DRQ request to DMA3.
+    ///
+    /// Unlike VBlank/HBlank DMA, DRQ transfers are started by the cartridge
+    /// request line rather than the video scheduler. Returns `true` only when
+    /// DMA3 is enabled in DRQ mode and a transfer was accepted.
+    pub fn request_game_pak_dma(&mut self) -> bool {
+        let control_offset = 0xB0 + 3 * 12 + 10;
+        let control = u16::from_le_bytes([
+            self.io[control_offset],
+            self.io[control_offset + 1],
+        ]);
+        if control & 0x8000 == 0 || control & (1 << 11) == 0 {
+            return false;
+        }
+
+        self.perform_dma_transfer(3, control);
+        true
+    }
+
     /// Fires enabled DMA channels whose timing selector matches a peripheral event.
     fn trigger_dma_timing(&mut self, timing: u16) {
         for channel in 0..4 {
@@ -2804,6 +2823,28 @@ mod tests {
         bus.write8(0x0400_00DF, 0x98);
         assert_eq!(bus.read16(0x0400_00BA), 0x9000);
         assert_eq!(bus.read16(0x0400_00DE), 0x9800);
+    }
+
+    #[test]
+    fn dma3_game_pak_drq_is_serviced_only_by_an_external_request() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0100, 0xCAFE);
+        bus.write32(0x0400_00D4, 0x0200_0100);
+        bus.write32(0x0400_00D8, 0x0300_0100);
+        bus.write16(0x0400_00DC, 1);
+        // DMA3: enable + Game Pak DRQ, plus completion IRQ.
+        bus.write16(0x0400_00DE, 0xD800);
+
+        assert_eq!(bus.read16(0x0300_0100), 0);
+        assert!(!bus.request_game_pak_dma());
+        bus.advance_cycles(1232 * 160);
+        assert_eq!(bus.read16(0x0300_0100), 0);
+
+        assert!(bus.request_game_pak_dma());
+        assert_eq!(bus.read16(0x0300_0100), 0xCAFE);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 11), 1 << 11);
+        assert_eq!(bus.dma_enabled(3), Some(false));
+        assert!(!bus.request_game_pak_dma());
     }
 
     #[test]
