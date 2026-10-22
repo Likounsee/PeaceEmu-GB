@@ -2530,10 +2530,7 @@ mod tests {
 
         assert_eq!(bus.read16(destination), 0x1357);
         assert_eq!(bus.read16(destination + byte_length - 2), 0x2468);
-        assert_eq!(
-            bus.dma_source_address(3),
-            Some(source + byte_length)
-        );
+        assert_eq!(bus.dma_source_address(3), Some(source + byte_length));
         assert_eq!(
             bus.dma_destination_address(3),
             Some(destination + byte_length)
