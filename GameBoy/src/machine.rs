@@ -814,6 +814,14 @@ impl GbaMachine {
         self.cpu.snapshot()
     }
 
+    /// Restores modeled CPU registers and flags from a debugger/save-state snapshot.
+    ///
+    /// Peripheral state and machine execution counters are intentionally left
+    /// unchanged; use this for CPU-state editing, not a full machine rewind.
+    pub fn restore_cpu_snapshot(&mut self, snapshot: crate::CpuSnapshot) {
+        self.cpu.restore_snapshot(snapshot);
+    }
+
     /// Returns the loaded cartridge ROM image size in bytes.
     pub fn cartridge_rom_size_bytes(&self) -> usize {
         self.bus.cartridge_rom_size_bytes()
@@ -1399,6 +1407,34 @@ mod tests {
             .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
             .wrapping_neg();
         GbaCartridge::parse(&rom).unwrap()
+    }
+
+    #[test]
+    fn machine_can_restore_cpu_snapshot_without_rewinding_peripherals_or_counters() {
+        let mut machine = GbaMachine::new(cartridge());
+        let mut snapshot = machine.cpu_snapshot();
+        snapshot.registers[0] = 0xDEAD_BEEF;
+        snapshot.pc = 0x0800_0123;
+        snapshot.thumb = true;
+        snapshot.flags = crate::ConditionFlags {
+            negative: true,
+            zero: false,
+            carry: true,
+            overflow: false,
+        };
+        machine.bus_mut().write16(0x0400_0200, 1 << 3);
+        machine.bus_mut().request_interrupt(1 << 3);
+
+        machine.restore_cpu_snapshot(snapshot);
+
+        assert_eq!(machine.cpu().register(0), Some(0xDEAD_BEEF));
+        assert_eq!(machine.cpu().register(15), Some(0x0800_0122));
+        assert!(machine.cpu().is_thumb());
+        assert_eq!(machine.cpu().flags(), snapshot.flags);
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
+        assert_eq!(machine.bus().interrupt_enable(), 1 << 3);
+        assert_eq!(machine.bus().interrupt_requests() & (1 << 3), 1 << 3);
     }
 
     #[test]
