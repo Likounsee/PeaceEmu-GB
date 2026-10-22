@@ -1741,6 +1741,43 @@ impl Cpu {
                     }
                 }
             }
+            // Differential filters restore byte/halfword delta-compressed assets.
+            0x16 | 0x17 => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let wide = swi == 0x17;
+                let header = bus.read32(source);
+                let expected_tag = if wide { 0x81 } else { 0x80 };
+                if header as u8 != expected_tag {
+                    return Err(CpuError::UnsupportedInstruction { address, instruction });
+                }
+                let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
+                let mut cursor = source.wrapping_add(4);
+                if wide {
+                    let output_size = output_size & !1;
+                    let mut accumulated = bus.read16(cursor);
+                    cursor = cursor.wrapping_add(2);
+                    let mut written = 0_usize;
+                    while written < output_size {
+                        bus.write16(destination.wrapping_add(written as u32), accumulated);
+                        written += 2;
+                        if written < output_size {
+                            accumulated = accumulated.wrapping_add(bus.read16(cursor));
+                            cursor = cursor.wrapping_add(2);
+                        }
+                    }
+                } else {
+                    let mut accumulated = bus.read8(cursor);
+                    cursor = cursor.wrapping_add(1);
+                    for index in 0..output_size {
+                        bus.write8(destination.wrapping_add(index as u32), accumulated);
+                        if index + 1 < output_size {
+                            accumulated = accumulated.wrapping_add(bus.read8(cursor));
+                            cursor = cursor.wrapping_add(1);
+                        }
+                    }
+                }
+            }
             // LZ77 and run-length decompression are frequently used by GBA games
             // for tile maps, graphics and text. Keep decoding separate from the
             // bus writes so malformed back-references cannot read before output.
@@ -2575,6 +2612,39 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn diff8_filter_reconstructs_wrapping_delta_stream() {
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0200_0010, 0x0000_0380); // type 0x80, 3 output bytes
+        bus.write8(0x0200_0014, 250);
+        bus.write8(0x0200_0015, 10);
+        bus.write8(0x0200_0016, 5);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0x0200_0010);
+        cpu.set_register(1, 0x0300_0000);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0016, 0x16, false, &mut bus).unwrap();
+        assert_eq!(bus.read8(0x0300_0000), 250);
+        assert_eq!(bus.read8(0x0300_0001), 4);
+        assert_eq!(bus.read8(0x0300_0002), 9);
+    }
+
+    #[test]
+    fn diff16_filter_reconstructs_halfword_deltas() {
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0200_0010, 0x0000_0481); // type 0x81, 4 output bytes
+        bus.write16(0x0200_0014, 0xFFFE);
+        bus.write16(0x0200_0016, 5);
+        bus.write16(0x0200_0018, 4);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0x0200_0010);
+        cpu.set_register(1, 0x0300_0000);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0017, 0x17, false, &mut bus).unwrap();
+        assert_eq!(bus.read16(0x0300_0000), 0xFFFE);
+        assert_eq!(bus.read16(0x0300_0002), 3);
+    }
+
     #[test]
     fn bit_unpack_handles_packed_nibbles_and_offset_zero_flag() {
         let mut bus = bus_with_program(&[]);
