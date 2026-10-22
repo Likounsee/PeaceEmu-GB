@@ -4615,10 +4615,7 @@ mod tests {
             (1 << 0) | (1 << 3) | (1 << 12)
         );
         bus.write8(0x0400_0202, 1 << 3);
-        assert_eq!(
-            bus.interrupt_request_flags(),
-            (1 << 0) | (1 << 12)
-        );
+        assert_eq!(bus.interrupt_request_flags(), (1 << 0) | (1 << 12));
 
         // IE masks undefined sources even when written one byte at a time.
         bus.write8(0x0400_0200, 0xFF);
