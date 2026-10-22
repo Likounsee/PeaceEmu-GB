@@ -4128,6 +4128,48 @@ mod tests {
     }
 
     #[test]
+    fn repeated_hblank_dma_reloads_destination_and_advances_source() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0000, 0x1234);
+        bus.write16(0x0200_0002, 0xABCD);
+        bus.write32(0x0400_00B0, 0x0200_0000);
+        bus.write32(0x0400_00B4, 0x0300_0000);
+        bus.write16(0x0400_00B8, 1);
+        // Repeat + increment/reload destination + HBlank + IRQ + enable.
+        bus.write16(0x0400_00BA, 0xE260);
+
+        bus.advance_cycles(960);
+        assert_eq!(bus.read16(0x0300_0000), 0x1234);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0002));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+        assert_eq!(bus.dma_enabled(0), Some(true));
+
+        // Finish this scanline and reach the next visible HBlank boundary.
+        bus.advance_cycles(1232);
+        assert_eq!(bus.read16(0x0300_0000), 0xABCD);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0004));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+        assert_eq!(bus.dma_enabled(0), Some(true));
+        assert_ne!(bus.interrupt_request_flags() & (1 << 8), 0);
+    }
+
+    #[test]
+    fn dma_invalid_channel_queries_return_none() {
+        let bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.dma_source_address(4), None);
+        assert_eq!(bus.dma_destination_address(4), None);
+        assert_eq!(bus.dma_count_register(4), None);
+        assert_eq!(bus.dma_transfer_count(4), None);
+        assert_eq!(bus.dma_enabled(4), None);
+        assert_eq!(bus.dma_start_timing(4), None);
+        assert_eq!(bus.dma_source_control(4), None);
+        assert_eq!(bus.dma_destination_control(4), None);
+        assert_eq!(bus.dma_repeat(4), None);
+        assert_eq!(bus.dma_word_transfer(4), None);
+        assert_eq!(bus.dma_irq_enabled(4), None);
+    }
+
+    #[test]
     fn direct_sound_fifo_caps_at_32_bytes_and_holds_last_sample_on_underflow() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);
