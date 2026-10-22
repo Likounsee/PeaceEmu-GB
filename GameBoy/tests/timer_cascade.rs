@@ -295,9 +295,8 @@ fn timer_byte_control_writes_clear_phase_and_restart_from_reload() {
     bus.advance_cycles(17);
     assert_eq!(bus.timer_prescaler_phase(0), Some(17));
 
-    bus.write8(0x0400_0103, 0x00); // disable via byte write
+    bus.write8(0x0400_0102, 0x01); // disable via low control byte
     assert_eq!(bus.timer_prescaler_phase(0), Some(0));
-    bus.write8(0x0400_0103, 0x00);
     bus.write8(0x0400_0102, 0x81);
     assert_eq!(bus.timer_counter(0), Some(0xFFFC));
     assert_eq!(bus.timer_prescaler_phase(0), Some(0));
