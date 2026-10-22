@@ -4686,7 +4686,6 @@ mod tests {
         assert_eq!(bus.timer_counter(0), Some(0xFFFF));
     }
 
-
     #[test]
     fn sound_fifo_b_dma_uses_dma2_and_keeps_its_target_fixed() {
         let mut bus = MemoryBus::new(cartridge());
@@ -4738,5 +4737,4 @@ mod tests {
         assert_eq!(bus.dma_source_address(1), Some(0x0200_0000));
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
-
 }
