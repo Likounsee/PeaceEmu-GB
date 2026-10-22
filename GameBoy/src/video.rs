@@ -281,6 +281,67 @@ impl VideoFrame {
             false
         }
     }
+
+
+    /// Returns a horizontally mirrored copy of this frame.
+    ///
+    /// Malformed public frame values return None; the source frame is never
+    /// modified. The pixel format remains opaque ARGB8888.
+    pub fn flipped_horizontal(&self) -> Option<Self> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let mut pixels = Vec::with_capacity(self.pixels.len());
+        for y in 0..self.height {
+            let start = y.checked_mul(self.width)?;
+            let end = start.checked_add(self.width)?;
+            pixels.extend(self.pixels.get(start..end)?.iter().rev().copied());
+        }
+        Some(Self { width: self.width, height: self.height, pixels })
+    }
+
+    /// Returns a vertically mirrored copy of this frame.
+    ///
+    /// Malformed public frame values return None; the source frame is never
+    /// modified. The pixel format remains opaque ARGB8888.
+    pub fn flipped_vertical(&self) -> Option<Self> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let mut pixels = Vec::with_capacity(self.pixels.len());
+        for y in (0..self.height).rev() {
+            let start = y.checked_mul(self.width)?;
+            let end = start.checked_add(self.width)?;
+            pixels.extend_from_slice(self.pixels.get(start..end)?);
+        }
+        Some(Self { width: self.width, height: self.height, pixels })
+    }
+
+    /// Resizes this frame using nearest-neighbor sampling.
+    ///
+    /// Dimensions must be non-zero and the source frame must be well formed.
+    /// Sampling maps destination pixel centers to source pixel centers, and
+    /// checked arithmetic rejects dimensions that would overflow allocation.
+    pub fn resized_nearest(&self, width: usize, height: usize) -> Option<Self> {
+        if !self.is_well_formed() || self.width == 0 || self.height == 0 || width == 0 || height == 0 {
+            return None;
+        }
+        let pixel_count = width.checked_mul(height)?;
+        let mut pixels = Vec::with_capacity(pixel_count);
+        for y in 0..height {
+            let source_y = (((2_u128 * y as u128 + 1) * self.height as u128)
+                / (2 * height) as u128) as usize;
+            let source_y = source_y.min(self.height - 1);
+            let row_start = source_y.checked_mul(self.width)?;
+            for x in 0..width {
+                let source_x = (((2_u128 * x as u128 + 1) * self.width as u128)
+                    / (2 * width) as u128) as usize;
+                let source_x = source_x.min(self.width - 1);
+                pixels.push(*self.pixels.get(row_start.checked_add(source_x)?)?);
+            }
+        }
+        Some(Self { width, height, pixels })
+    }
 }
 
 /// Renders the current GBA bitmap display state.
@@ -2917,6 +2978,46 @@ mod tests {
         let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
         assert_eq!(frame.pixel(4, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn frame_mirroring_and_nearest_resize_preserve_pixel_layout() {
+        let frame = VideoFrame {
+            width: 2,
+            height: 2,
+            pixels: vec![0xFF00_0001, 0xFF00_0002, 0xFF00_0003, 0xFF00_0004],
+        };
+        assert_eq!(
+            frame.flipped_horizontal().unwrap().pixels,
+            vec![0xFF00_0002, 0xFF00_0001, 0xFF00_0004, 0xFF00_0003]
+        );
+        assert_eq!(
+            frame.flipped_vertical().unwrap().pixels,
+            vec![0xFF00_0003, 0xFF00_0004, 0xFF00_0001, 0xFF00_0002]
+        );
+        assert_eq!(
+            frame.resized_nearest(4, 4).unwrap().pixels,
+            vec![
+                0xFF00_0001, 0xFF00_0001, 0xFF00_0002, 0xFF00_0002,
+                0xFF00_0001, 0xFF00_0001, 0xFF00_0002, 0xFF00_0002,
+                0xFF00_0003, 0xFF00_0003, 0xFF00_0004, 0xFF00_0004,
+                0xFF00_0003, 0xFF00_0003, 0xFF00_0004, 0xFF00_0004,
+            ]
+        );
+        assert_eq!(frame.pixels[0], 0xFF00_0001);
+    }
+
+    #[test]
+    fn frame_transforms_reject_malformed_and_zero_sized_frames() {
+        let malformed = VideoFrame { width: 2, height: 2, pixels: vec![0; 3] };
+        assert!(malformed.flipped_horizontal().is_none());
+        assert!(malformed.flipped_vertical().is_none());
+        assert!(malformed.resized_nearest(3, 3).is_none());
+
+        let frame = VideoFrame { width: 1, height: 1, pixels: vec![0xFF12_3456] };
+        assert!(frame.resized_nearest(0, 1).is_none());
+        assert!(frame.resized_nearest(1, 0).is_none());
+        assert_eq!(frame.resized_nearest(3, 2).unwrap().pixels, vec![0xFF12_3456; 6]);
     }
 
     #[test]
