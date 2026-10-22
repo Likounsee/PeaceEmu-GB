@@ -4318,6 +4318,28 @@ mod tests {
     }
 
     #[test]
+    fn arm_gamepak_byte_store_adds_waitcnt_latency_even_when_rom_ignores_write() {
+        // STRB r0, [r1]. Game Pak ROM ignores writes, but the bus access
+        // still consumes the configured external-bus wait states.
+        let mut rom_bus = bus_with_program(&[0xE5C1_0000, 0xE1A0_0000]);
+        let mut rom_cpu = Cpu::new();
+        rom_cpu.reset(0x0200_0000);
+        rom_cpu.set_register(0, 0x5A);
+        rom_cpu.set_register(1, 0x0800_0100);
+        let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
+
+        let mut ram_bus = bus_with_program(&[0xE5C1_0000, 0xE1A0_0000]);
+        let mut ram_cpu = Cpu::new();
+        ram_cpu.reset(0x0200_0000);
+        ram_cpu.set_register(0, 0x5A);
+        ram_cpu.set_register(1, 0x0300_0100);
+        let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
+
+        assert!(rom_cycles > ram_cycles);
+        assert_eq!(ram_cycles, 2);
+    }
+
+    #[test]
     fn arm_register_specified_shift_transfer_executes_and_uses_shifted_address() {
         // LDR r0, [r1, r2, LSL r3] reaches ROM at 0x08000000.
         let mut bus = bus_with_program(&[0xE791_0312, 0xE1A0_0000]);
