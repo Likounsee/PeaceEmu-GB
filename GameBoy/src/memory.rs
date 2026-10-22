@@ -910,9 +910,10 @@ impl MemoryBus {
         }
 
         // KEYINPUT (0x04000130) is active-low and read-only. Bits 0..9 map
-        // to A, B, Select, Start, Right, Left, Up, Down, R and L.
+        // to A, B, Select, Start, Right, Left, Up, Down, R and L. The six
+        // unused upper bits read as ones on hardware, rather than zero.
         if (0x0400_0130..=0x0400_0131).contains(&address) {
-            let keyinput = (!self.keys_pressed) & 0x03FF;
+            let keyinput = ((!self.keys_pressed) & 0x03FF) | 0xFC00;
             return ((keyinput >> ((address - 0x0400_0130) * 8)) & 0xFF) as u8;
         }
         if (0x0400_0132..=0x0400_0133).contains(&address) {
@@ -4873,5 +4874,23 @@ mod tests {
         assert_eq!(bus.dma_source_address(1), Some(0));
         assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
         assert_eq!(bus.dma_enabled(1), Some(true));
+    }
+ 
+    #[test]
+    fn keyinput_unused_bits_read_high_for_byte_and_halfword_accesses() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        assert_eq!(bus.read16(0x0400_0130), 0xFFFF);
+        assert_eq!(bus.read8(0x0400_0130), 0xFF);
+        assert_eq!(bus.read8(0x0400_0131), 0xFF);
+
+        bus.set_button_pressed(GbaButton::A, true);
+        assert_eq!(bus.read16(0x0400_0130), 0xFFFE);
+        assert_eq!(bus.read8(0x0400_0130), 0xFE);
+        assert_eq!(bus.read8(0x0400_0131), 0xFF);
+
+        bus.set_keys_pressed(0x03FF);
+        assert_eq!(bus.read16(0x0400_0130), 0xFC00);
+        assert_eq!(bus.read8(0x0400_0131), 0xFC);
     }
 }
