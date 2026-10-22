@@ -524,6 +524,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 None,
                 &windows,
                 &mut frame,
+                None,
             );
         }
         return Some(frame);
@@ -739,6 +740,8 @@ fn render_text_backgrounds(
         bitmap_brightness_effect(bus, display_control, 5),
         windows,
     );
+    // Layer IDs match BLDCNT target bits: BG0..BG3=0..3, OBJ=4, backdrop=5.
+    let mut layers = vec![5_u8; frame.pixels.len()];
     for priority in (0..=3).rev() {
         // On equal priorities BG0 wins over BG1, then BG2, then BG3.
         // Draw the lower-numbered background last so it remains in front.
@@ -763,6 +766,7 @@ fn render_text_backgrounds(
                     bitmap_brightness_effect(bus, display_control, bg as u16),
                     windows,
                     frame,
+                    &mut layers,
                 );
             } else if bg >= 2 && (mode == 2 || bg == 2) {
                 render_affine_background(
@@ -773,6 +777,7 @@ fn render_text_backgrounds(
                     bitmap_brightness_effect(bus, display_control, bg as u16),
                     windows,
                     frame,
+                    &mut layers,
                 );
             }
         }
@@ -790,6 +795,7 @@ fn render_text_backgrounds(
             None,
             windows,
             frame,
+            Some(&mut layers),
         );
     }
 }
@@ -806,6 +812,7 @@ fn render_affine_background(
     brightness_effect: Option<(bool, u16)>,
     windows: &WindowConfig,
     frame: &mut VideoFrame,
+    layer_buffer: &mut [u8],
 ) {
     let register_base = 0x0400_0020 + (bg - 2) * 0x10;
     let pa = i32::from(bus.read16(register_base) as i16);
@@ -897,7 +904,8 @@ fn render_affine_background(
             let pixel_offset = ((source_y & 7) * 8 + (source_x & 7)) as usize;
             let palette_index = u32::from(pixels[pixel_offset]);
             if palette_index != 0 && windows.allows(x, y, bg as u16) {
-                frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                let destination = y * SCREEN_WIDTH + x;
+                frame.pixels[destination] = apply_brightness_effect(
                     palette[palette_index as usize],
                     if windows.effects_allowed(x, y) {
                         brightness_effect
@@ -905,6 +913,7 @@ fn render_affine_background(
                         None
                     },
                 );
+                layer_buffer[destination] = bg as u8;
             }
         }
     }
@@ -951,6 +960,7 @@ fn render_text_background(
     brightness_effect: Option<(bool, u16)>,
     windows: &WindowConfig,
     frame: &mut VideoFrame,
+    layer_buffer: &mut [u8],
 ) {
     let hofs_address = BG0HOFS + bg * 4;
     let vofs_address = BG0VOFS + bg * 4;
@@ -1063,7 +1073,8 @@ fn render_text_background(
             // Color index zero is transparent even when a 4bpp palette bank
             // makes its absolute palette index nonzero.
             if !transparent && windows.allows(x, y, bg as u16) {
-                frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                let destination = y * SCREEN_WIDTH + x;
+                frame.pixels[destination] = apply_brightness_effect(
                     palette[palette_index as usize],
                     if windows.effects_allowed(x, y) {
                         brightness_effect
@@ -1071,6 +1082,7 @@ fn render_text_background(
                         None
                     },
                 );
+                layer_buffer[destination] = bg as u8;
             }
         }
     }
@@ -1323,6 +1335,7 @@ fn render_regular_objects(
     mut obj_window_mask: Option<&mut [bool]>,
     windows: &WindowConfig,
     frame: &mut VideoFrame,
+    mut layer_buffer: Option<&mut [u8]>,
 ) {
     if display_control & (1 << 12) == 0 {
         return;
@@ -1536,13 +1549,32 @@ fn render_regular_objects(
                 }
                 let source_color = palette[palette_index as usize];
                 frame.pixels[destination] = if object_mode == 1 {
-                    // Semi-transparent OBJ pixels are forced first targets for
-                    // alpha blending. If alpha blending is unavailable or
-                    // masked by the current window, they render normally; they
-                    // must not fall through to ordinary OBJ brighten/darken.
-                    if mode >= 3 && windows.effects_allowed(screen_x as usize, screen_y as usize) {
-                        if let Some((eva, evb)) = bitmap_blend {
-                            blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                    // Semi-transparent OBJ pixels are forced first targets. In
+                    // bitmap modes, BG2 is the relevant second target; in tiled
+                    // modes, use the actual layer visible beneath this OBJ.
+                    if windows.effects_allowed(screen_x as usize, screen_y as usize) {
+                        if mode >= 3 {
+                            if let Some((eva, evb)) = bitmap_blend {
+                                blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                            } else {
+                                source_color
+                            }
+                        } else if let Some(layers) = layer_buffer.as_deref() {
+                            let target_layer = layers[destination];
+                            let control = bus.read16(0x0400_0050);
+                            let target_mask = if target_layer == 5 {
+                                control & (1 << 13) != 0
+                            } else {
+                                control & (1 << (8 + target_layer)) != 0
+                            };
+                            if (control >> 6) & 3 == 1 && target_mask {
+                                let coefficients = bus.read16(0x0400_0052);
+                                let eva = (coefficients & 0x1F).min(16);
+                                let evb = ((coefficients >> 8) & 0x1F).min(16);
+                                blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                            } else {
+                                source_color
+                            }
                         } else {
                             source_color
                         }
@@ -1559,6 +1591,9 @@ fn render_regular_objects(
                         },
                     )
                 };
+                if let Some(layers) = layer_buffer.as_deref_mut() {
+                    layers[destination] = 4;
+                }
             }
         }
     }
