@@ -118,6 +118,10 @@ DMA inspection is available through `dma_control(channel)`, `dma_source_address(
 
 Machine-level regressions also verify that an unsupported instruction at the cartridge entry point leaves the PC and successful-instruction/cycle counters unchanged, and that bounded instruction execution returns the same cycle total accumulated by the machine.
 
+## Reusing existing emulator work
+
+PeaceEmu selectively studies and adapts compatible upstream emulator implementations instead of rewriting every subsystem from scratch. The first code-level reference is [RustBoyAdvance-NG](https://github.com/michelhe/rustboyadvance-ng) (MIT), with small adaptations protected by PeaceEmu-specific regression tests. See [the upstream reuse ledger](docs/UPSTREAM_REUSE.md) for licensing checks, compatibility constraints, and the list of adapted behavior. GPL-licensed projects are used as behavioral references unless the project's licensing strategy is deliberately changed or compatible permission is obtained.
+
 ## Project status
 
 The main priorities are improving hardware accuracy and expanding integration between the CPU, memory bus, DMA, video, interrupts, and save devices. Timing is still approximate: instruction fetches, selected scalar data accesses, supported multiple-transfer bursts, and ARM single-data-transfer register offsets with immediate or register-specified shifts apply partial WAITCNT latency, including ARM halfword/signed transfers with immediate or unshifted-register offsets and Thumb LDSH odd-address byte timing; DMA stalls, complete exception handling, full audio output, and comprehensive game compatibility are not claimed.
