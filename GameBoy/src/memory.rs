@@ -3032,6 +3032,32 @@ mod tests {
     }
 
     #[test]
+    fn gamepak_word_bursts_restart_sequential_timing_at_each_rom_region() {
+        let bus = MemoryBus::new(cartridge());
+
+        // A word at the end of ROM0 consumes one non-sequential and one
+        // sequential halfword. The next word starts a fresh ROM1 access.
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x09FF_FFFC, false, 4, 2),
+            Some(14)
+        );
+
+        // ROM1 -> ROM2 must also restart the burst: ROM1's sequential
+        // halfword takes four cycles, while ROM2's takes eight.
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0BFF_FFFC, false, 4, 2),
+            Some(20)
+        );
+
+        // An already-sequential first transfer is still sequential only in
+        // its own region; it must not make the following ROM bank sequential.
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x09FF_FFFC, true, 4, 2),
+            Some(12)
+        );
+    }
+
+    #[test]
     fn gamepak_sequence_cycles_accumulates_sequential_accesses_safely() {
         let mut bus = MemoryBus::new(cartridge());
         assert_eq!(
