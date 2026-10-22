@@ -92,3 +92,27 @@ fn keypad_irq_supports_or_and_conditions_and_write_one_to_clear() {
     bus.set_button_pressed(gameboy::GbaButton::B, true);
     assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
 }
+
+
+#[test]
+fn dma_address_registers_mask_reserved_high_bits_for_word_and_byte_writes() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    // DMA0 SAD/DAD are 28-bit address registers; bits 28..31 are reserved.
+    bus.write32(0x0400_00B0, 0xFABC_DEF0);
+    bus.write32(0x0400_00B4, 0xE123_4560);
+    assert_eq!(bus.dma_source_address(0), Some(0x0ABC_DEF0));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0123_4560));
+
+    // STRB to the most-significant address byte must apply the same mask.
+    bus.write8(0x0400_00B3, 0xFF);
+    bus.write8(0x0400_00B7, 0xA5);
+    assert_eq!(bus.dma_source_address(0), Some(0x0FBC_DEF0));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0523_4560));
+
+    // STRH to the upper half of an address also masks the reserved nibble.
+    bus.write16(0x0400_00B2, 0xFFFF);
+    bus.write16(0x0400_00B6, 0xF321);
+    assert_eq!(bus.dma_source_address(0), Some(0x0FFF_DEF0));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0321_4560));
+}
