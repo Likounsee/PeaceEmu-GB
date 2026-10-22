@@ -3166,7 +3166,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn unsupported_rom_instruction_does_not_advance_machine_counters() {
         let mut rom = vec![0; GBA_HEADER_SIZE];
@@ -3201,5 +3200,4 @@ mod tests {
         assert_eq!(machine.cycles_elapsed(), cycles);
         assert!(cycles > 0);
     }
-
 }
