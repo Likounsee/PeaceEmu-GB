@@ -498,6 +498,14 @@ impl GbaMachine {
         self.bus.dma_irq_enabled(channel)
     }
 
+    /// Services one external Game Pak DRQ request through DMA3.
+    ///
+    /// Returns `true` when DMA3 is enabled in Game Pak DRQ mode and accepts
+    /// the request; video timing alone never services this external trigger.
+    pub fn request_game_pak_dma(&mut self) -> bool {
+        self.bus.request_game_pak_dma()
+    }
+
     /// Returns the interrupt-enable (IE) bitmask, with reserved bits removed.
     pub fn interrupt_enable_mask(&self) -> u16 {
         self.bus.interrupt_enable_mask()
@@ -2585,6 +2593,22 @@ mod tests {
         assert_eq!(snapshot.registers[15], CARTRIDGE_ENTRY_POINT);
         assert!(!snapshot.thumb);
         assert_eq!(snapshot.cpsr, machine.cpu().cpsr_flags());
+    }
+
+    #[test]
+    fn machine_forwards_external_game_pak_dma_requests() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0200_0100, 0xBEEF);
+        machine.bus_mut().write32(0x0400_00D4, 0x0200_0100);
+        machine.bus_mut().write32(0x0400_00D8, 0x0300_0100);
+        machine.bus_mut().write16(0x0400_00DC, 1);
+        machine.bus_mut().write16(0x0400_00DE, 0x9800);
+
+        assert!(!machine.request_game_pak_dma());
+        assert_eq!(machine.bus().read16(0x0300_0100), 0);
+        machine.bus_mut().write16(0x0400_00DE, 0x8800);
+        assert!(machine.request_game_pak_dma());
+        assert_eq!(machine.bus().read16(0x0300_0100), 0xBEEF);
     }
 
     #[test]
