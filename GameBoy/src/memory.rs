@@ -2456,6 +2456,25 @@ mod tests {
     }
 
     #[test]
+    fn immediate_word_dma_updates_live_addresses_and_requests_completion_irq() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0200_0000, 0x1234_5678);
+        bus.write32(0x0200_0004, 0xAABB_CCDD);
+        bus.write32(0x0400_00B0, 0x0200_0000);
+        bus.write32(0x0400_00B4, 0x0300_0000);
+        bus.write16(0x0400_00B8, 2);
+        // Immediate, 32-bit transfer, completion IRQ, enabled.
+        bus.write16(0x0400_00BA, 0xC400);
+
+        assert_eq!(bus.read32(0x0300_0000), 0x1234_5678);
+        assert_eq!(bus.read32(0x0300_0004), 0xAABB_CCDD);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0008));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0008));
+        assert_eq!(bus.dma_enabled(0), Some(false));
+        assert_eq!(bus.interrupt_request_flags() & (1 << 8), 1 << 8);
+    }
+
+    #[test]
     fn immediate_dma_supports_word_transfers_and_fixed_destination() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write32(0x0200_0000, 0x1234_5678);
