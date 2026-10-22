@@ -439,35 +439,6 @@ impl Cpu {
             return Some((start, 4, count));
         }
 
-        // ARM halfword/signed transfers support an unshifted register offset.
-        // Predict their effective address too, so WAITCNT is applied to LDRH,
-        // LDRSB and LDRSH rather than only immediate-offset encodings.
-        if instruction & 0x0E00_0090 == 0x0000_0090 && instruction & 0x60 != 0 {
-            let operation = (instruction >> 5) & 3;
-            if operation == 0 || (instruction & (1 << 20) == 0 && operation != 1) {
-                return None;
-            }
-            let rn = ((instruction >> 16) & 0xF) as usize;
-            let base = self.read_operand_register(rn, address);
-            let offset = if instruction & (1 << 22) != 0 {
-                ((instruction >> 4) & 0xF0) | (instruction & 0xF)
-            } else {
-                self.read_operand_register((instruction & 0xF) as usize, address)
-            };
-            let adjusted = if instruction & (1 << 23) != 0 {
-                base.wrapping_add(offset)
-            } else {
-                base.wrapping_sub(offset)
-            };
-            let effective = if instruction & (1 << 24) != 0 {
-                adjusted
-            } else {
-                base
-            };
-            let width = if operation == 2 { 1 } else { 2 };
-            return Some((effective, width, 1));
-        }
-
         // ARM single data transfer, with either an immediate offset or a
         // register offset using an immediate barrel-shifter amount.
         if instruction & 0x0C00_0000 == 0x0400_0000 {
