@@ -265,7 +265,7 @@ impl VideoFrame {
     /// Sets a pixel and returns false if its coordinates or backing-buffer
     /// offset are invalid. The frame's public dimensions are not modified.
     pub fn set_pixel(&mut self, x: usize, y: usize, color: u32) -> bool {
-        if x >= self.width || y >= self.height {
+        if !self.is_well_formed() || x >= self.width || y >= self.height {
             return false;
         }
         let Some(index) = y
@@ -3361,6 +3361,7 @@ mod tests {
         assert_eq!(malformed.pixel(0, 0), None);
         assert_eq!(malformed.row(0), None);
         assert!(malformed.row_mut(0).is_none());
+        assert!(!malformed.set_pixel(0, 0, 0xFFFFFFFF));
         assert_eq!(malformed.pixels, vec![0xFF12_3456, 0xFFAB_CDEF]);
     }
 }
