@@ -74,8 +74,14 @@ pub struct MachineSnapshot {
     pub timer_prescaler_divisors: [Option<u16>; 4],
     /// Cascade-mode state for timers 0 through 3.
     pub timer_cascade_enabled: [Option<bool>; 4],
+    /// Masked control register values for DMA channels 0 through 3.
+    pub dma_controls: [Option<u16>; 4],
     /// Enabled state of DMA channels 0 through 3.
     pub dma_enabled: [Option<bool>; 4],
+    /// Source address control modes for DMA channels 0 through 3.
+    pub dma_source_controls: [Option<u8>; 4],
+    /// Destination address control modes for DMA channels 0 through 3.
+    pub dma_destination_controls: [Option<u8>; 4],
     /// Start timing selectors for DMA channels 0 through 3.
     pub dma_start_timing: [Option<u8>; 4],
     /// Repeat configuration for DMA channels 0 through 3.
@@ -1258,11 +1264,29 @@ impl GbaMachine {
                 self.bus.timer_cascade_enabled(2),
                 self.bus.timer_cascade_enabled(3),
             ],
+            dma_controls: [
+                self.bus.dma_control(0),
+                self.bus.dma_control(1),
+                self.bus.dma_control(2),
+                self.bus.dma_control(3),
+            ],
             dma_enabled: [
                 self.bus.dma_enabled(0),
                 self.bus.dma_enabled(1),
                 self.bus.dma_enabled(2),
                 self.bus.dma_enabled(3),
+            ],
+            dma_source_controls: [
+                self.bus.dma_source_control(0),
+                self.bus.dma_source_control(1),
+                self.bus.dma_source_control(2),
+                self.bus.dma_source_control(3),
+            ],
+            dma_destination_controls: [
+                self.bus.dma_destination_control(0),
+                self.bus.dma_destination_control(1),
+                self.bus.dma_destination_control(2),
+                self.bus.dma_destination_control(3),
             ],
             dma_start_timing: [
                 self.bus.dma_start_timing(0),
@@ -2393,6 +2417,11 @@ mod tests {
         assert_eq!(dma.dma_destination_addresses[0], Some(0x0300_5678));
         assert_eq!(dma.dma_count_registers[0], Some(7));
         assert_eq!(dma.dma_transfer_counts[0], Some(7));
+        machine.bus_mut().write16(0x0400_00BA, (1 << 15) | (2 << 5) | (1 << 7) | (1 << 9) | (1 << 10));
+        let configured_dma = machine.diagnostic_snapshot();
+        assert_eq!(configured_dma.dma_controls[0], Some(0x83A0));
+        assert_eq!(configured_dma.dma_source_controls[0], Some(1));
+        assert_eq!(configured_dma.dma_destination_controls[0], Some(2));
 
         machine
             .bus_mut()
