@@ -4966,20 +4966,52 @@ mod tests {
     fn arm_condition_codes_cover_all_flag_combinations_and_reserved_nv() {
         let cases = [
             (
-                ConditionFlags { negative: false, zero: false, carry: false, overflow: false },
-                [false, true, false, true, false, true, false, true, false, true, true, false, true, false, true, false],
+                ConditionFlags {
+                    negative: false,
+                    zero: false,
+                    carry: false,
+                    overflow: false,
+                },
+                [
+                    false, true, false, true, false, true, false, true, false, true, true, false,
+                    true, false, true, false,
+                ],
             ),
             (
-                ConditionFlags { negative: false, zero: true, carry: true, overflow: false },
-                [true, false, true, false, false, true, false, true, false, true, true, false, false, true, true, false],
+                ConditionFlags {
+                    negative: false,
+                    zero: true,
+                    carry: true,
+                    overflow: false,
+                },
+                [
+                    true, false, true, false, false, true, false, true, false, true, true, false,
+                    false, true, true, false,
+                ],
             ),
             (
-                ConditionFlags { negative: true, zero: false, carry: true, overflow: true },
-                [false, true, true, false, true, false, true, false, true, false, true, false, true, false, true, false],
+                ConditionFlags {
+                    negative: true,
+                    zero: false,
+                    carry: true,
+                    overflow: true,
+                },
+                [
+                    false, true, true, false, true, false, true, false, true, false, true, false,
+                    true, false, true, false,
+                ],
             ),
             (
-                ConditionFlags { negative: true, zero: false, carry: false, overflow: false },
-                [false, true, false, true, true, false, false, true, false, true, false, true, false, true, true, false],
+                ConditionFlags {
+                    negative: true,
+                    zero: false,
+                    carry: false,
+                    overflow: false,
+                },
+                [
+                    false, true, false, true, true, false, false, true, false, true, false, true,
+                    false, true, true, false,
+                ],
             ),
         ];
         let mut cpu = Cpu::new();
