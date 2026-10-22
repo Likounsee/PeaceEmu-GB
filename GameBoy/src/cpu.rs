@@ -4876,4 +4876,30 @@ mod tests {
         assert_eq!(cpu.register(15), Some(0x0200_0004));
         assert!(cpu.is_thumb());
     }
+
+    #[test]
+    fn failed_arm_condition_does_not_mutate_flags_or_skip_sequential_pc() {
+        let mut bus = bus_with_program(&[0x0A00_0000]); // BEQ +0; Z is clear.
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: true,
+            zero: false,
+            carry: true,
+            overflow: true,
+        });
+        let before_flags = cpu.flags();
+
+        let outcome = cpu.step(&mut bus).unwrap();
+
+        assert_eq!(
+            outcome,
+            StepOutcome::ConditionFailed {
+                address: 0x0200_0000,
+                instruction: 0x0A00_0000,
+            }
+        );
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.flags(), before_flags);
+    }
 }
