@@ -229,10 +229,10 @@ impl Cpu {
     /// Executes one instruction and advances bus timers by an approximate cycle count.
     ///
     /// This is a transitional timing API: it accounts for common instruction
-    /// classes and adds the excess WAITCNT latency for Game Pak instruction fetches.
-    /// Data-access wait states, exact pipeline refill timing, and DMA stalls remain
-    /// incomplete. Use `step` when callers need instruction execution without
-    /// advancing peripheral time.
+    /// classes and adds excess WAITCNT latency for Game Pak instruction fetches
+    /// and supported scalar/multiple data accesses. Uncommon transfer encodings,
+    /// exact pipeline refill timing, and DMA stalls remain incomplete. Use `step`
+    /// when callers need instruction execution without advancing peripheral time.
     pub fn step_with_cycles(
         &mut self,
         bus: &mut MemoryBus,
