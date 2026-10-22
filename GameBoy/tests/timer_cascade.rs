@@ -122,13 +122,13 @@ fn dma_count_registers_mask_reserved_bits_by_channel_and_access_width() {
 
     // DMA0–DMA2 have 14-bit count registers; DMA3 retains all 16 bits.
     bus.write16(0x0400_00B8, 0xFFFF);
-    bus.write16(0x0400_00E8, 0xFFFF);
+    bus.write16(0x0400_00DC, 0xFFFF);
     assert_eq!(bus.read16(0x0400_00B8), 0x3FFF);
-    assert_eq!(bus.read16(0x0400_00E8), 0xFFFF);
+    assert_eq!(bus.read16(0x0400_00DC), 0xFFFF);
 
     // Byte writes to the high count byte must apply the same channel mask.
     bus.write8(0x0400_00B9, 0xFF);
-    bus.write8(0x0400_00E9, 0xFF);
+    bus.write8(0x0400_00DD, 0xFF);
     assert_eq!(bus.read16(0x0400_00B8), 0x3FFF);
-    assert_eq!(bus.read16(0x0400_00E8), 0xFFFF);
+    assert_eq!(bus.read16(0x0400_00DC), 0xFFFF);
 }
