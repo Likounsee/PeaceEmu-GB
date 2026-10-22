@@ -300,6 +300,48 @@ impl VideoFrame {
         Some(Self { width: self.width, height: self.height, pixels })
     }
 
+    /// Rotates the frame 90 degrees clockwise without resampling pixels.
+    ///
+    /// The resulting dimensions are height × width. Malformed frames return
+    /// None and the original frame is left unchanged.
+    pub fn rotated_clockwise(&self) -> Option<Self> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let pixel_count = self.width.checked_mul(self.height)?;
+        let mut pixels = vec![0; pixel_count];
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let destination_x = self.height.checked_sub(1 + y)?;
+                let destination_y = x;
+                let destination = destination_y.checked_mul(self.height)?.checked_add(destination_x)?;
+                pixels[destination] = *self.pixels.get(y.checked_mul(self.width)?.checked_add(x)?)?;
+            }
+        }
+        Some(Self { width: self.height, height: self.width, pixels })
+    }
+
+    /// Rotates the frame 90 degrees counter-clockwise without resampling.
+    ///
+    /// The resulting dimensions are height × width. Malformed frames return
+    /// None and the original frame is left unchanged.
+    pub fn rotated_counter_clockwise(&self) -> Option<Self> {
+        if !self.is_well_formed() {
+            return None;
+        }
+        let pixel_count = self.width.checked_mul(self.height)?;
+        let mut pixels = vec![0; pixel_count];
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let destination_x = y;
+                let destination_y = self.width.checked_sub(1 + x)?;
+                let destination = destination_y.checked_mul(self.height)?.checked_add(destination_x)?;
+                pixels[destination] = *self.pixels.get(y.checked_mul(self.width)?.checked_add(x)?)?;
+            }
+        }
+        Some(Self { width: self.height, height: self.width, pixels })
+    }
+
     /// Returns a vertically mirrored copy of this frame.
     ///
     /// Malformed public frame values return None; the source frame is never
@@ -3018,6 +3060,33 @@ mod tests {
         assert!(frame.resized_nearest(0, 1).is_none());
         assert!(frame.resized_nearest(1, 0).is_none());
         assert_eq!(frame.resized_nearest(3, 2).unwrap().pixels, vec![0xFF12_3456; 6]);
+    }
+
+    #[test]
+    fn frame_rotations_preserve_pixels_and_swap_dimensions() {
+        let frame = VideoFrame {
+            width: 3,
+            height: 2,
+            pixels: vec![1, 2, 3, 4, 5, 6],
+        };
+        let clockwise = frame.rotated_clockwise().unwrap();
+        assert_eq!((clockwise.width, clockwise.height), (2, 3));
+        assert_eq!(clockwise.pixels, vec![4, 1, 5, 2, 6, 3]);
+
+        let counter_clockwise = frame.rotated_counter_clockwise().unwrap();
+        assert_eq!((counter_clockwise.width, counter_clockwise.height), (2, 3));
+        assert_eq!(counter_clockwise.pixels, vec![3, 6, 2, 5, 1, 4]);
+
+        assert_eq!(clockwise.rotated_counter_clockwise().unwrap(), frame);
+        assert_eq!(counter_clockwise.rotated_clockwise().unwrap(), frame);
+        assert_eq!(frame.pixels, vec![1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn frame_rotations_reject_inconsistent_pixel_buffers() {
+        let malformed = VideoFrame { width: 3, height: 2, pixels: vec![1, 2, 3] };
+        assert!(malformed.rotated_clockwise().is_none());
+        assert!(malformed.rotated_counter_clockwise().is_none());
     }
 
     #[test]
