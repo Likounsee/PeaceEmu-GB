@@ -1796,7 +1796,10 @@ impl Cpu {
                         (cos * scale_y * 256.0).round() as i16,
                     ];
                     for (slot, coefficient) in matrix.into_iter().enumerate() {
-                        bus.write16(dst.wrapping_add((slot as u32).wrapping_mul(stride)), coefficient as u16);
+                        bus.write16(
+                            dst.wrapping_add((slot as u32).wrapping_mul(stride)),
+                            coefficient as u16,
+                        );
                     }
                 }
             }
