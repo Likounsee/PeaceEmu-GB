@@ -222,6 +222,24 @@ impl Cpu {
         }
     }
 
+    /// Restores a modeled CPU snapshot for a debugger or save-state loader.
+    ///
+    /// The program counter is aligned to the restored instruction state and the
+    /// sequential-fetch hint is discarded, so the next instruction starts a
+    /// fresh bus fetch sequence. Banked registers, SPSRs, and unmodeled CPSR
+    /// fields are not part of a snapshot.
+    pub fn restore_snapshot(&mut self, snapshot: CpuSnapshot) {
+        self.registers = snapshot.registers;
+        self.thumb = snapshot.thumb;
+        self.registers[15] = if self.thumb {
+            snapshot.pc & !1
+        } else {
+            snapshot.pc & !3
+        };
+        self.flags = snapshot.flags;
+        self.last_fetch_next = None;
+    }
+
     /// Evaluates an ARM condition code against the current flags.
     /// Codes 0x0–0xE follow ARM semantics; reserved 0xF and larger values return false.
     pub fn condition_passed_for(&self, condition: u8) -> bool {
@@ -4875,6 +4893,47 @@ mod tests {
         assert_eq!(cpu.register(14), Some(0x0200_0005));
         assert_eq!(cpu.register(15), Some(0x0200_0004));
         assert!(cpu.is_thumb());
+    }
+
+    #[test]
+    fn restoring_cpu_snapshot_restores_registers_flags_state_and_aligned_pc() {
+        let mut original = Cpu::new();
+        original.reset(0x0200_0000);
+        original.set_register(0, 0x1234_5678);
+        original.set_register(15, 0x0200_0012);
+        original.set_condition_flags(ConditionFlags {
+            negative: true,
+            zero: false,
+            carry: true,
+            overflow: true,
+        });
+        original.set_execution_state(true);
+        let snapshot = original.snapshot();
+
+        let mut restored = Cpu::new();
+        restored.reset(0x0800_0000);
+        restored.restore_snapshot(snapshot);
+
+        assert_eq!(restored.register(0), Some(0x1234_5678));
+        assert_eq!(restored.register(15), Some(0x0200_0012));
+        assert_eq!(restored.flags(), snapshot.flags);
+        assert!(restored.is_thumb());
+        assert_eq!(restored.snapshot().registers, snapshot.registers);
+    }
+
+    #[test]
+    fn restoring_arm_snapshot_aligns_pc_and_clears_thumb_state() {
+        let mut cpu = Cpu::new();
+        cpu.restore_snapshot(CpuSnapshot {
+            registers: [0; 16],
+            flags: ConditionFlags::default(),
+            cpsr: 0,
+            thumb: false,
+            pc: 0x0800_0003,
+        });
+
+        assert!(!cpu.is_thumb());
+        assert_eq!(cpu.register(15), Some(0x0800_0000));
     }
 
     #[test]
