@@ -1629,16 +1629,19 @@ impl Cpu {
                 let numerator = self.registers[0] as i32;
                 let denominator = self.registers[1] as i32;
                 if denominator == 0 {
-                    return Err(CpuError::UnsupportedInstruction {
-                        address,
-                        instruction,
-                    });
+                    // BIOS division by zero yields a sign-dependent sentinel,
+                    // preserves the numerator as remainder, and reports |quotient|.
+                    let quotient = if numerator < 0 { 1 } else { -1 };
+                    self.registers[0] = quotient as u32;
+                    self.registers[1] = numerator as u32;
+                    self.registers[3] = 1;
+                } else {
+                    let quotient = numerator.checked_div(denominator).unwrap_or(i32::MIN);
+                    let remainder = numerator.checked_rem(denominator).unwrap_or(0);
+                    self.registers[0] = quotient as u32;
+                    self.registers[1] = remainder as u32;
+                    self.registers[3] = quotient.wrapping_abs() as u32;
                 }
-                let quotient = numerator.checked_div(denominator).unwrap_or(i32::MIN);
-                let remainder = numerator.checked_rem(denominator).unwrap_or(0);
-                self.registers[0] = quotient as u32;
-                self.registers[1] = remainder as u32;
-                self.registers[3] = quotient.wrapping_abs() as u32;
             }
             // BitUnPack: unpack packed source fields and add the configured data offset.
             0x10 => {
@@ -2617,6 +2620,20 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bios_division_by_zero_returns_sign_sentinel_and_preserves_numerator() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, (-7_i32) as u32);
+        cpu.set_register(1, 0);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0006, 0x06, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(1));
+        assert_eq!(cpu.register(1), Some((-7_i32) as u32));
+        assert_eq!(cpu.register(3), Some(1));
+    }
+
     #[test]
     fn diff8_filter_reconstructs_wrapping_delta_stream() {
         let mut bus = bus_with_program(&[]);
