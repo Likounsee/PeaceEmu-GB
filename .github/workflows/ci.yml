@@ -42,6 +42,22 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo test --release --manifest-path GameBoy/Cargo.toml --all-targets
 
+  documentation:
+    name: Documentation tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run documentation tests
+        run: cargo test --doc --manifest-path GameBoy/Cargo.toml
+
+      - name: Build API documentation
+        run: cargo doc --no-deps --manifest-path GameBoy/Cargo.toml
+
   msrv:
     name: Minimum supported Rust (1.78)
     runs-on: ubuntu-latest
