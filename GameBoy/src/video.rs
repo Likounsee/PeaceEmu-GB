@@ -1243,7 +1243,9 @@ fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 12
 /// the backdrop is selected as BLDCNT's second alpha-blending target.
 fn bitmap_backdrop_alpha_blend(bus: &MemoryBus) -> Option<(u16, u16)> {
     let blend_control = bus.read16(0x0400_0050);
-    if (blend_control >> 6) & 3 != 1 || blend_control & (1 << 13) == 0 {
+    // Semi-transparent OBJ pixels force alpha blending regardless of the
+    // global BLDCNT effect-mode bits; only the selected second target matters.
+    if blend_control & (1 << 13) == 0 {
         return None;
     }
     let coefficients = bus.read16(0x0400_0052);
@@ -1259,10 +1261,9 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
         return None;
     }
     let blend_control = bus.read16(0x0400_0050);
-    // BLDCNT bits 6-7 select the effect; semi-transparent OBJ pixels only
-    // alpha-blend when that effect is enabled. BG2 is target 2 at bit 10
-    // (bits 8-11 select BG0-BG3 respectively).
-    if (blend_control >> 6) & 3 != 1 || blend_control & (1 << 10) == 0 {
+    // Semi-transparent OBJ pixels force alpha blending regardless of BLDCNT's
+    // global effect mode. BG2 is target 2 at bit 10 (bits 8-11 select BG0-BG3).
+    if blend_control & (1 << 10) == 0 {
         return None;
     }
     let coefficients = bus.read16(0x0400_0052);
@@ -1356,17 +1357,16 @@ fn render_regular_objects(
     // These registers cannot change during a snapshot render. Decode them once
     // instead of issuing MMIO reads for every semi-transparent OBJ pixel.
     let tiled_alpha_blend = if mode < 3 {
+        // Semi-transparent OBJ forces alpha blending even when BLDCNT selects
+        // brighten, darken, or no global effect. Its target masks and BLDALPHA
+        // coefficients still control the result.
         let control = bus.read16(0x0400_0050);
-        if (control >> 6) & 3 == 1 {
-            let coefficients = bus.read16(0x0400_0052);
-            Some((
-                control,
-                (coefficients & 0x1F).min(16),
-                ((coefficients >> 8) & 0x1F).min(16),
-            ))
-        } else {
-            None
-        }
+        let coefficients = bus.read16(0x0400_0052);
+        Some((
+            control,
+            (coefficients & 0x1F).min(16),
+            ((coefficients >> 8) & 0x1F).min(16),
+        ))
     } else {
         None
     };
@@ -2958,7 +2958,7 @@ mod tests {
     }
 
     #[test]
-    fn semi_transparent_obj_requires_alpha_effect_mode() {
+    fn semi_transparent_obj_forces_alpha_even_when_global_mode_is_brighten() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12));
         bus.write16(VRAM_BASE, 0x03E0);
@@ -2967,11 +2967,30 @@ mod tests {
         bus.write16(0x0700_0000, 1 << 10);
         bus.write16(0x0700_0002, 0);
         bus.write16(0x0700_0004, 512);
-        bus.write16(0x0400_0050, (2 << 6) | (1 << 10)); // Brighten, not alpha.
+        bus.write16(0x0400_0050, (2 << 6) | (1 << 10)); // Brighten, BG2 target 2.
         bus.write16(0x0400_0052, 8 | (8 << 8));
 
         let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
-        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+        // Semi-transparent OBJ forces alpha blending: red + green at 8/16 each.
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_7B00));
+    }
+
+    #[test]
+    fn tiled_semi_transparent_obj_forces_alpha_when_global_mode_is_darken() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12); // Mode 0, OBJ enabled.
+        bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop: target 2.
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
+        bus.write16(0x0601_0000, 0x1111);
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent OBJ.
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (3 << 6) | (1 << 13)); // Darken mode, backdrop target 2.
+        bus.write16(0x0400_0052, 8 | (8 << 8));
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
+        assert_eq!(frame.pixel(4, 4), Some(0xFF00_00FF));
     }
 
     #[test]
