@@ -1688,13 +1688,7 @@ impl Cpu {
             0x11 | 0x12 | 0x14 | 0x15 => {
                 let source = self.registers[0];
                 let destination = self.registers[1];
-                let output = Self::decompress_bios_data(
-                    address,
-                    instruction,
-                    swi,
-                    source,
-                    bus,
-                )?;
+                let output = Self::decompress_bios_data(address, instruction, swi, source, bus)?;
                 let vram = matches!(swi, 0x12 | 0x15);
                 if vram {
                     for (index, chunk) in output.chunks(2).enumerate() {
