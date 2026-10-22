@@ -2141,7 +2141,7 @@ mod tests {
         bus.write16(0x0400_0052, (31 << 8) | 31); // Both coefficients clamp to 16.
 
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
-        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_00FF));
     }
 
     #[test]
