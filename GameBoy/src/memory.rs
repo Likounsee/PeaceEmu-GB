@@ -3661,6 +3661,33 @@ mod tests {
     }
 
     #[test]
+    fn manually_selected_flash128k_is_instantiated_and_bank_switches_work() {
+        let cartridge = cartridge_with_save_signature(b"")
+            .with_save_type(Some(crate::SaveType::Flash128K));
+        let mut bus = MemoryBus::new(cartridge);
+        assert_eq!(bus.cartridge_save_type(), Some(crate::SaveType::Flash128K));
+        assert_eq!(bus.flash_data().map(<[u8]>::len), Some(128 * 1024));
+
+        // Select bank 1 using the Flash unlock sequence.
+        bus.write8(0x0E00_5555, 0xAA);
+        bus.write8(0x0E00_2AAA, 0x55);
+        bus.write8(0x0E00_5555, 0xB0);
+        bus.write8(0x0E00_0000, 1);
+        bus.write8(0x0E00_5555, 0xAA);
+        bus.write8(0x0E00_2AAA, 0x55);
+        bus.write8(0x0E00_5555, 0xA0);
+        bus.write8(0x0E00_1234, 0x5A);
+        assert_eq!(bus.read8(0x0E00_1234), 0x5A);
+
+        // Bank 0 is independent and remains erased.
+        bus.write8(0x0E00_5555, 0xAA);
+        bus.write8(0x0E00_2AAA, 0x55);
+        bus.write8(0x0E00_5555, 0xB0);
+        bus.write8(0x0E00_0000, 0);
+        assert_eq!(bus.read8(0x0E00_1234), 0xFF);
+    }
+
+    #[test]
     fn eeprom_bus_clocks_dma_halfword_bits_and_persists_images() {
         let mut bus = MemoryBus::new(cartridge_with_save_signature(b"EEPROM_V"));
         assert_eq!(bus.cartridge_save_type(), Some(crate::SaveType::Eeprom));
