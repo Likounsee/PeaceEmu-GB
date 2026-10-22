@@ -788,9 +788,20 @@ mod flash_tests {
 
         // Chip erase affects the entire physical array, including the inactive bank.
         assert_eq!(flash.read(0x0100), 0xFF);
+
+        // The erase must not silently switch banks: programming now still targets bank 1.
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xA0);
+        flash.write(0x0100, 0xA5);
+        assert_eq!(flash.read(0x0100), 0xA5);
+
         unlock_flash(&mut flash);
         flash.write(0x5555, 0xB0);
         flash.write(0, 0);
         assert_eq!(flash.read(0x0100), 0xFF);
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0xB0);
+        flash.write(0, 1);
+        assert_eq!(flash.read(0x0100), 0xA5);
     }
 }
