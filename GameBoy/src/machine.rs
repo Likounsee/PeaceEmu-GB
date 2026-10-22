@@ -127,6 +127,19 @@ pub struct GbaMachine {
     cycles_elapsed: u64,
 }
 
+/// Opaque, lossless snapshot of the modeled machine state for save states and rollback.
+///
+/// Unlike MachineSnapshot, this stores the CPU, complete memory bus (including RAM, I/O
+/// registers, timers, video position, DMA and audio FIFO queues), and execution counters.
+/// It does not serialize host-side frontend state or claim cycle accuracy beyond the emulator.
+#[derive(Clone, Debug)]
+pub struct GbaSaveState {
+    cpu: Cpu,
+    bus: MemoryBus,
+    instructions_executed: u64,
+    cycles_elapsed: u64,
+}
+
 impl GbaMachine {
     /// Creates a machine around a validated cartridge and starts at its ROM entry point.
     pub fn new(cartridge: GbaCartridge) -> Self {
@@ -138,6 +151,30 @@ impl GbaMachine {
             instructions_executed: 0,
             cycles_elapsed: 0,
         }
+    }
+
+    /// Captures a complete, restorable snapshot of the emulated machine.
+    ///
+    /// This is separate from diagnostic_snapshot, which is intended for inspection
+    /// and does not contain mutable hardware state.
+    pub fn save_state(&self) -> GbaSaveState {
+        GbaSaveState {
+            cpu: self.cpu.clone(),
+            bus: self.bus.clone(),
+            instructions_executed: self.instructions_executed,
+            cycles_elapsed: self.cycles_elapsed,
+        }
+    }
+
+    /// Restores a state previously captured by save_state.
+    ///
+    /// CPU, cartridge/bus state, peripherals, and counters are restored together. The state
+    /// object is borrowed and remains reusable, so the same checkpoint can be loaded repeatedly.
+    pub fn load_state(&mut self, state: &GbaSaveState) {
+        self.cpu = state.cpu.clone();
+        self.bus = state.bus.clone();
+        self.instructions_executed = state.instructions_executed;
+        self.cycles_elapsed = state.cycles_elapsed;
     }
 
     /// Executes one instruction and advances modeled peripherals by estimated cycles.
@@ -3200,6 +3237,44 @@ mod tests {
             after.video_cycles_into_scanline,
             before.video_cycles_into_scanline
         );
+    }
+
+    #[test]
+    fn save_state_restores_cpu_ram_interrupts_timers_video_and_counters() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write32(0x0200_0100, 0xCAFE_BABE);
+        machine.bus_mut().write16(0x0400_0100, 0xFFFE);
+        machine.bus_mut().write16(0x0400_0102, 0x0080);
+        machine.bus_mut().advance_cycles(1);
+        machine.request_interrupt(1 << 4);
+        machine.cpu_mut().set_register(0, 0x1234_5678);
+        machine.cpu_mut().set_register(15, CARTRIDGE_ENTRY_POINT);
+        let checkpoint = machine.save_state();
+        let checkpoint_diagnostics = machine.diagnostic_snapshot();
+
+        machine.bus_mut().write32(0x0200_0100, 0xDEAD_BEEF);
+        machine.bus_mut().write16(0x0400_0100, 0x4321);
+        machine.acknowledge_interrupts(1 << 4);
+        machine.set_button_pressed(crate::GbaButton::A, true);
+        machine.cpu_mut().set_register(0, 0);
+        machine.run_for_instructions(3).unwrap();
+        machine.bus_mut().advance_cycles(2000);
+
+        machine.load_state(&checkpoint);
+        assert_eq!(machine.bus().read32(0x0200_0100), 0xCAFE_BABE);
+        assert_eq!(machine.cpu().register(0), Some(0x1234_5678));
+        assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
+        assert_eq!(machine.interrupt_request_flags() & (1 << 4), 1 << 4);
+        assert_eq!(machine.timer_counter(0), Some(0xFFFF));
+        assert_eq!(machine.instructions_executed(), checkpoint_diagnostics.instructions_executed);
+        assert_eq!(machine.cycles_elapsed(), checkpoint_diagnostics.cycles_elapsed);
+        assert_eq!(machine.diagnostic_snapshot().video_scanline, checkpoint_diagnostics.video_scanline);
+        assert_eq!(machine.diagnostic_snapshot().video_cycles_into_scanline, checkpoint_diagnostics.video_cycles_into_scanline);
+
+        // Checkpoints are reusable rather than consumed by a restore.
+        machine.bus_mut().write32(0x0200_0100, 0);
+        machine.load_state(&checkpoint);
+        assert_eq!(machine.bus().read32(0x0200_0100), 0xCAFE_BABE);
     }
 
     #[test]
