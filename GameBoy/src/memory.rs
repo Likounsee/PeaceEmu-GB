@@ -4622,4 +4622,26 @@ mod tests {
         bus.write8(0x0400_0201, 0xFF);
         assert_eq!(bus.interrupt_enable_mask(), 0x3FFF);
     }
+
+    #[test]
+    fn disabling_and_reenabling_timer_discards_partial_prescaler_phase() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0100, 0xFFFE);
+        bus.write16(0x0400_0102, 0x0081); // Enable timer 0 with divisor 64.
+        bus.advance_cycles(17);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(17));
+
+        bus.write16(0x0400_0102, 0x0001); // Disable; phase must be cleared.
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+        bus.advance_cycles(20);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFE));
+
+        bus.write16(0x0400_0102, 0x0081);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+        assert_eq!(bus.timer_counter(0), Some(0xFFFE));
+        bus.advance_cycles(63);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFE));
+        bus.advance_cycles(1);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFF));
+    }
 }
