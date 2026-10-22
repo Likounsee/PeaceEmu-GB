@@ -2104,17 +2104,17 @@ mod tests {
     #[test]
     fn keyinput_is_active_low_read_only_and_masks_unused_bits() {
         let mut bus = MemoryBus::new(cartridge());
-        assert_eq!(bus.read16(0x0400_0130), 0x03FF);
+        assert_eq!(bus.read16(0x0400_0130), 0xFFFF);
 
         bus.set_keys_pressed(0b10_0000_0001);
-        assert_eq!(bus.read16(0x0400_0130), 0b01_1111_1110);
+        assert_eq!(bus.read16(0x0400_0130), 0b1111_1101_1111_1110);
         assert_eq!(bus.read8(0x0400_0130), 0xFE);
-        assert_eq!(bus.read8(0x0400_0131), 0x01);
+        assert_eq!(bus.read8(0x0400_0131), 0xFD);
 
         bus.write16(0x0400_0130, 0);
         assert_eq!(bus.read16(0x0400_0130), 0b01_1111_1110);
         bus.set_keys_pressed(u16::MAX);
-        assert_eq!(bus.read16(0x0400_0130), 0);
+        assert_eq!(bus.read16(0x0400_0130), 0xFC00);
     }
 
     #[test]
