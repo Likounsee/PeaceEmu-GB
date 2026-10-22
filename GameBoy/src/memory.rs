@@ -4686,3 +4686,56 @@ mod tests {
         assert_eq!(bus.timer_counter(0), Some(0xFFFF));
     }
 }
+
+
+    #[test]
+    fn sound_fifo_b_dma_uses_dma2_and_keeps_its_target_fixed() {
+        let mut bus = MemoryBus::new(cartridge());
+        for (address, word) in [
+            (0x0200_0000, 0x4433_2211),
+            (0x0200_0004, 0x8877_6655),
+            (0x0200_0008, 0xCCBB_AA99),
+            (0x0200_000C, 0x00FF_EEDD),
+        ] {
+            bus.write32(address, word);
+        }
+
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, 1 << 12); // FIFO B routed right, timer 0 selected.
+        // DMA2: incrementing source, fixed FIFO-B target, word/repeat/special timing.
+        bus.write32(0x0400_00CC, 0x0400_00A4);
+        bus.write32(0x0400_00C8, 0x0200_0000);
+        bus.write16(0x0400_00D0, 4);
+        bus.write16(0x0400_00D2, 0xB640);
+
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
+
+        assert_eq!(bus.audio_fifo_len(1), Some(16));
+        assert_eq!(bus.dma_source_address(2), Some(0x0200_0010));
+        assert_eq!(bus.dma_destination_address(2), Some(0x0400_00A4));
+        assert_eq!(bus.dma_enabled(2), Some(true));
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+    }
+
+    #[test]
+    fn sound_fifo_dma_rejects_incompatible_source_address_control() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0200_0000, 0x4433_2211);
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, 0); // FIFO A selects timer 0.
+        // DMA1 otherwise resembles FIFO DMA, but fixed-source mode is incompatible.
+        bus.write32(0x0400_00BC, 0x0200_0000);
+        bus.write32(0x0400_00C0, 0x0400_00A0);
+        bus.write16(0x0400_00C4, 4);
+        bus.write16(0x0400_00C6, 0xB6C0);
+
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
+
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.dma_source_address(1), Some(0x0200_0000));
+        assert_eq!(bus.dma_enabled(1), Some(true));
+    }
