@@ -48,6 +48,8 @@ pub struct MachineSnapshot {
     pub video_cycles_until_hblank: u32,
     /// Estimated cycles until the next VBlank entry.
     pub video_cycles_until_vblank: u32,
+    /// Master interrupt enable (IME) bit.
+    pub interrupt_master_enabled: bool,
     /// Interrupt enable (IE) mask.
     pub interrupt_enable: u16,
     /// Latched interrupt request (IF) flags.
@@ -104,6 +106,8 @@ pub struct MachineSnapshot {
     pub audio_fifo_last_samples: [Option<i8>; 2],
     /// Bytes remaining until Direct Sound FIFOs A and B reach the 16-byte refill threshold.
     pub audio_fifo_bytes_until_refill: [Option<usize>; 2],
+    /// KEYCNT selection and IRQ mode bits.
+    pub keypad_control: u16,
     /// Active-high pressed-button mask (bits 0–9 map to A, B, Select, Start, directions, R, L).
     pub keypad_pressed: u16,
     /// Whether the configured KEYCNT selected-button condition is currently satisfied.
@@ -1211,6 +1215,7 @@ impl GbaMachine {
             video_vcount_match: self.bus.video_vcount_match(),
             video_cycles_until_hblank: self.bus.video_cycles_until_hblank(),
             video_cycles_until_vblank: self.bus.video_cycles_until_vblank(),
+            interrupt_master_enabled: self.bus.interrupt_master_enabled(),
             interrupt_enable: self.bus.interrupt_enable_mask(),
             interrupt_requests: self.bus.interrupt_request_flags(),
             pending_interrupts: self.bus.pending_interrupts(),
@@ -1345,6 +1350,7 @@ impl GbaMachine {
                 self.bus.audio_fifo_bytes_until_refill(0),
                 self.bus.audio_fifo_bytes_until_refill(1),
             ],
+            keypad_control: self.bus.read16(0x0400_0132),
             keypad_pressed: self.bus.keys_pressed(),
             keypad_irq_requested: self.bus.keypad_irq_requested(),
         }
@@ -2361,8 +2367,10 @@ mod tests {
         assert!(hblank.video_in_hblank);
         assert_eq!(hblank.video_cycles_until_hblank, 1232);
         assert_eq!(hblank.cycles_elapsed, initial.cycles_elapsed);
+        assert!(!initial.interrupt_master_enabled);
         assert_eq!(initial.interrupt_enable, 0);
         assert_eq!(initial.interrupt_requests, 0);
+        assert_eq!(initial.keypad_control, 0);
         assert_eq!(initial.pending_interrupts, 0);
         assert_eq!(initial.pending_interrupt_source, None);
         assert!(!initial.interrupt_pending);
@@ -2403,6 +2411,7 @@ mod tests {
         machine.bus_mut().write16(0x0400_0208, 1);
         machine.request_interrupt(1 << 2);
         let pending = machine.diagnostic_snapshot();
+        assert!(!pending.interrupt_master_enabled);
         assert_eq!(pending.interrupt_enable, 1 << 2);
         assert_eq!(pending.interrupt_requests, 1 << 2);
         assert_eq!(pending.pending_interrupts, 1 << 2);
@@ -2431,6 +2440,7 @@ mod tests {
             .write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
         machine.set_button_pressed(GbaButton::A, true);
         let keypad = machine.diagnostic_snapshot();
+        assert_eq!(keypad.keypad_control, (1 << 14) | GbaButton::A.mask());
         assert_eq!(keypad.keypad_pressed, GbaButton::A.mask());
         assert!(keypad.keypad_irq_requested);
     }
