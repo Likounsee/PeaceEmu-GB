@@ -1,4 +1,4 @@
-//! ARM7TDMI execution core: the initial ARM-state instruction subset.
+//! Partial ARM7TDMI ARM/Thumb execution core with estimated instruction and Game Pak wait-state timing.
 
 use crate::MemoryBus;
 
@@ -93,8 +93,10 @@ pub struct CpuSnapshot {
     pub pc: u32,
 }
 
-/// ARM7TDMI CPU state, initially implementing ARM-state data processing,
-/// branches, and single word/byte transfers.
+/// ARM7TDMI CPU state with partial ARM and Thumb instruction support.
+///
+/// Banked registers, SPSRs, exception entry/return, and cycle-accurate
+/// execution are not modeled yet.
 #[derive(Clone, Debug)]
 pub struct Cpu {
     registers: [u32; 16],
