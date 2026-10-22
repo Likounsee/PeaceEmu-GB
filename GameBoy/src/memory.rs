@@ -4131,8 +4131,8 @@ mod tests {
         bus.advance_cycles(9);
         assert_eq!(bus.timer_prescaler_phase(0), Some(9));
 
-        // Byte writes to the high control byte must obey the same reset rule.
-        bus.write8(0x0400_0103, 0x00);
+        // Byte writes to the low control byte must obey the same reset rule.
+        bus.write8(0x0400_0102, 0x01);
         assert_eq!(bus.timer_prescaler_phase(0), Some(0));
         assert!(!bus.timer_enabled(0).unwrap());
     }
