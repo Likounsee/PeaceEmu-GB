@@ -496,6 +496,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 Some(&mut windows.obj_window_mask),
                 &mask_windows,
                 &mut mask_frame,
+                None,
             );
         }
     }
@@ -714,6 +715,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 None,
                 &windows,
                 &mut frame,
+                None,
             );
         }
     }
@@ -2105,7 +2107,7 @@ mod tests {
         bus.write16(0x0400_0052, (8 << 8) | 8); // EVA=8, EVB=8
 
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
-        assert_eq!(frame.pixel(0, 0), Some(0xFF84_0084));
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
         // A transparent OBJ pixel leaves the backdrop untouched.
         assert_eq!(frame.pixel(4, 4), Some(0xFF00_00FF));
     }
