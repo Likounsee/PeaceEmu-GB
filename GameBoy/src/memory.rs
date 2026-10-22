@@ -4742,7 +4742,7 @@ mod tests {
 
         bus.write16(0x0400_0084, 0x0080);
         bus.write16(0x0400_0082, 1 << 12); // FIFO B routed right, timer 0 selected.
-        // DMA2: incrementing source, fixed FIFO-B target, word/repeat/special timing.
+                                           // DMA2: incrementing source, fixed FIFO-B target, word/repeat/special timing.
         bus.write32(0x0400_00CC, 0x0400_00A4);
         bus.write32(0x0400_00C8, 0x0200_0000);
         bus.write16(0x0400_00D0, 4);
@@ -4765,7 +4765,7 @@ mod tests {
         bus.write32(0x0200_0000, 0x4433_2211);
         bus.write16(0x0400_0084, 0x0080);
         bus.write16(0x0400_0082, 0); // FIFO A selects timer 0.
-        // DMA1 otherwise resembles FIFO DMA, but fixed-source mode is incompatible.
+                                     // DMA1 otherwise resembles FIFO DMA, but fixed-source mode is incompatible.
         bus.write32(0x0400_00BC, 0x0200_0000);
         bus.write32(0x0400_00C0, 0x0400_00A0);
         bus.write16(0x0400_00C4, 4);
@@ -4785,7 +4785,13 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);
         bus.write16(0x0400_0082, 1 << 8); // FIFO A uses timer 0.
-        for word in [0x0302_0100, 0x0706_0504, 0x0B0A_0908, 0x0F0E_0D0C, 0x1312_1110] {
+        for word in [
+            0x0302_0100,
+            0x0706_0504,
+            0x0B0A_0908,
+            0x0F0E_0D0C,
+            0x1312_1110,
+        ] {
             bus.write32(0x0400_00A0, word);
         }
         assert_eq!(bus.audio_fifo_len(0), Some(20));
@@ -4849,7 +4855,6 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0130) & 0x03FF, !(0b11) & 0x03FF);
     }
 
-
     #[test]
     fn sound_fifo_dma_source_wraps_at_the_gba_28_bit_address_boundary() {
         let mut bus = MemoryBus::new(cartridge());
@@ -4869,5 +4874,4 @@ mod tests {
         assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
-
 }
