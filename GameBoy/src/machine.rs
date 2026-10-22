@@ -3165,4 +3165,41 @@ mod tests {
             before.video_cycles_into_scanline
         );
     }
+
+
+    #[test]
+    fn unsupported_rom_instruction_does_not_advance_machine_counters() {
+        let mut rom = vec![0; GBA_HEADER_SIZE];
+        // Undefined ARM instruction at the entry point; keep the cartridge
+        // header valid so construction succeeds and execution reaches it.
+        rom[0..4].copy_from_slice(&0xE7F0_00F0_u32.to_le_bytes());
+        rom[0xA0..0xAC].copy_from_slice(b"TEST GAME   ");
+        rom[0xAC..0xB0].copy_from_slice(b"TGME");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+        let before = machine.diagnostic_snapshot();
+
+        let error = machine.step().unwrap_err();
+        assert!(matches!(error, CpuError::UnsupportedInstruction { .. }));
+
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
+    }
+
+    #[test]
+    fn instruction_runner_reports_the_same_cycles_as_machine_counters() {
+        let mut machine = GbaMachine::new(cartridge());
+        let cycles = machine.run_for_instructions(8).unwrap();
+
+        assert_eq!(machine.instructions_executed(), 8);
+        assert_eq!(machine.cycles_elapsed(), cycles);
+        assert!(cycles > 0);
+    }
+
 }
