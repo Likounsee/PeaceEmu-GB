@@ -1984,14 +1984,14 @@ impl Cpu {
             let mut decoded = false;
             for _ in 0..=tree_size / 2 {
                 let node = bus.read8(node_address);
-                let bit = (payload_word >> 31) as u8;
-                payload_word <<= 1;
-                bits_remaining -= 1;
                 if bits_remaining == 0 {
                     payload_word_address = payload_word_address.wrapping_add(4);
                     payload_word = bus.read32(payload_word_address);
                     bits_remaining = 32;
                 }
+                let bit = (payload_word >> 31) as u8;
+                payload_word <<= 1;
+                bits_remaining -= 1;
                 let child_offset = u32::from(node & 0x3F) * 2 + 2 + u32::from(bit);
                 let child_address = node_address.wrapping_add(child_offset);
                 let is_leaf = if bit == 0 {
