@@ -793,5 +793,4 @@ mod flash_tests {
         flash.write(0, 0);
         assert_eq!(flash.read(0x0100), 0xFF);
     }
-
 }
