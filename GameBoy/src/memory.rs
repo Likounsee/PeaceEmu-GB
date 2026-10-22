@@ -4445,5 +4445,4 @@ mod tests {
         assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
-
 }
