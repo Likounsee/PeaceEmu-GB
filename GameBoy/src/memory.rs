@@ -4601,4 +4601,30 @@ mod tests {
         assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
+
+
+    #[test]
+    fn byte_writes_to_interrupt_registers_preserve_w1c_and_reserved_bit_rules() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.request_interrupt((1 << 0) | (1 << 3) | (1 << 12));
+
+        // IF is write-one-to-clear: clearing the low byte must not clear IRQs
+        // in the high byte, and writing zero must not clear any low-byte IRQ.
+        bus.write8(0x0400_0202, 0);
+        assert_eq!(
+            bus.interrupt_request_flags(),
+            (1 << 0) | (1 << 3) | (1 << 12)
+        );
+        bus.write8(0x0400_0202, 1 << 3);
+        assert_eq!(
+            bus.interrupt_request_flags(),
+            (1 << 0) | (1 << 12)
+        );
+
+        // IE masks undefined sources even when written one byte at a time.
+        bus.write8(0x0400_0200, 0xFF);
+        bus.write8(0x0400_0201, 0xFF);
+        assert_eq!(bus.interrupt_enable_mask(), 0x3FFF);
+    }
+
 }
