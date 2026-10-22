@@ -4076,6 +4076,63 @@ mod tests {
     }
 
     #[test]
+    fn ram_region_mirrors_hold_at_each_physical_backing_store_boundary() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // EWRAM (256 KiB) and IWRAM (32 KiB) mirror throughout their 16 MiB
+        // address regions, including accesses close to the physical boundary.
+        bus.write32(0x0203_FFFC, 0x1234_5678);
+        assert_eq!(bus.read32(0x0203_FFFC), 0x1234_5678);
+        assert_eq!(bus.read32(0x0207_FFFC), 0x1234_5678);
+        bus.write32(0x03FF_FFFC, 0xA1B2_C3D4);
+        assert_eq!(bus.read32(0x0300_7FFC), 0xA1B2_C3D4);
+        assert_eq!(bus.read32(0x03FF_FFFC), 0xA1B2_C3D4);
+
+        // Palette RAM and OAM each have 1 KiB of physical storage.
+        bus.write16(0x0500_03FE, 0xBEEF);
+        assert_eq!(bus.read16(0x0500_07FE), 0xBEEF);
+        assert_eq!(bus.read16(0x05FF_FFFE), 0xBEEF);
+        bus.write16(0x0700_03FE, 0xCAFE);
+        assert_eq!(bus.read16(0x0700_07FE), 0xCAFE);
+        assert_eq!(bus.read16(0x07FF_FFFE), 0xCAFE);
+    }
+
+    #[test]
+    fn ram_word_accesses_decode_each_byte_across_a_region_boundary() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // The last two bytes of IWRAM are followed by the beginning of the
+        // I/O window in the address map; the word access must not wrap back
+        // into IWRAM for its upper halfword.
+        bus.write16(0x03FF_FFFE, 0xCAFE);
+        bus.write16(0x0400_0000, 0x1234);
+        assert_eq!(bus.read32(0x03FF_FFFE), 0x1234_CAFE);
+
+        // Likewise, a word beginning at the end of EWRAM follows the actual
+        // address map byte-by-byte, rather than wrapping at 256 KiB.
+        bus.write16(0x0203_FFFE, 0xBEEF);
+        bus.write16(0x0204_0000, 0xCAFE);
+        assert_eq!(bus.read32(0x0203_FFFE), 0xCAFE_BEEF);
+    }
+
+    #[test]
+    fn dma_immediate_completion_updates_both_addresses_and_clears_enable() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0200_0000, 0x1122_3344);
+        bus.write32(0x0200_0004, 0x5566_7788);
+        bus.write32(0x0400_00B0, 0x0200_0000);
+        bus.write32(0x0400_00B4, 0x0300_0000);
+        bus.write16(0x0400_00B8, 2);
+        bus.write16(0x0400_00BA, 0x8400); // DMA0 immediate, 32-bit, enabled.
+
+        assert_eq!(bus.read32(0x0300_0000), 0x1122_3344);
+        assert_eq!(bus.read32(0x0300_0004), 0x5566_7788);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0008));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0008));
+        assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
     fn direct_sound_fifo_caps_at_32_bytes_and_holds_last_sample_on_underflow() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);
