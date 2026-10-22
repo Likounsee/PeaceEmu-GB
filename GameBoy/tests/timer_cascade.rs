@@ -93,7 +93,6 @@ fn keypad_irq_supports_or_and_conditions_and_write_one_to_clear() {
     assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
 }
 
-
 #[test]
 fn dma_address_registers_mask_reserved_high_bits_for_word_and_byte_writes() {
     let mut bus = MemoryBus::new(cartridge());
