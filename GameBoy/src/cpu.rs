@@ -1806,8 +1806,7 @@ impl Cpu {
                         let second = bus.read8(cursor.wrapping_add(1));
                         cursor = cursor.wrapping_add(2);
                         let count = usize::from(first >> 4) + 3;
-                        let distance =
-                            (usize::from(first & 0x0F) << 8 | usize::from(second)) + 1;
+                        let distance = (usize::from(first & 0x0F) << 8 | usize::from(second)) + 1;
                         if distance > output.len() {
                             return Err(CpuError::UnsupportedInstruction {
                                 address,
@@ -2675,8 +2674,15 @@ mod tests {
         let mut bus = bus_with_program(&[0xEF00_0014]);
         // RLE header: five output bytes, then a 3-byte run and two literals.
         for (offset, byte) in [
-            (0, 0x30), (1, 5), (2, 0), (3, 0),
-            (4, 0x80), (5, b'A'), (6, 1), (7, b'B'), (8, b'C'),
+            (0, 0x30),
+            (1, 5),
+            (2, 0),
+            (3, 0),
+            (4, 0x80),
+            (5, b'A'),
+            (6, 1),
+            (7, b'B'),
+            (8, b'C'),
         ] {
             bus.write8(0x0200_0100 + offset, byte);
         }
@@ -2686,7 +2692,9 @@ mod tests {
         cpu.set_register(1, 0x0200_0200);
         cpu.step(&mut bus).unwrap();
         assert_eq!(
-            (0..5).map(|i| bus.read8(0x0200_0200 + i)).collect::<Vec<_>>(),
+            (0..5)
+                .map(|i| bus.read8(0x0200_0200 + i))
+                .collect::<Vec<_>>(),
             b"AAABC"
         );
     }
@@ -2696,8 +2704,14 @@ mod tests {
         let mut bus = bus_with_program(&[0xEF00_0011]);
         // LZ77 header: six bytes. One literal ('A'), then a 5-byte back-reference.
         for (offset, byte) in [
-            (0, 0x10), (1, 6), (2, 0), (3, 0),
-            (4, 0x40), (5, b'A'), (6, 0x20), (7, 0x00),
+            (0, 0x10),
+            (1, 6),
+            (2, 0),
+            (3, 0),
+            (4, 0x40),
+            (5, b'A'),
+            (6, 0x20),
+            (7, 0x00),
         ] {
             bus.write8(0x0200_0100 + offset, byte);
         }
@@ -2707,7 +2721,9 @@ mod tests {
         cpu.set_register(1, 0x0200_0200);
         cpu.step(&mut bus).unwrap();
         assert_eq!(
-            (0..6).map(|i| bus.read8(0x0200_0200 + i)).collect::<Vec<_>>(),
+            (0..6)
+                .map(|i| bus.read8(0x0200_0200 + i))
+                .collect::<Vec<_>>(),
             b"AAAAAA"
         );
     }
@@ -2715,10 +2731,7 @@ mod tests {
     #[test]
     fn bios_hle_rle_vram_decompression_writes_packed_halfwords() {
         let mut bus = bus_with_program(&[0xEF00_0015]);
-        for (offset, byte) in [
-            (0, 0x30), (1, 3), (2, 0), (3, 0),
-            (4, 0x80), (5, 0x5A),
-        ] {
+        for (offset, byte) in [(0, 0x30), (1, 3), (2, 0), (3, 0), (4, 0x80), (5, 0x5A)] {
             bus.write8(0x0200_0100 + offset, byte);
         }
         let mut cpu = Cpu::new();
