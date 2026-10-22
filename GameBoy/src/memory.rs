@@ -4602,7 +4602,6 @@ mod tests {
         assert_eq!(bus.dma_enabled(1), Some(true));
     }
 
-
     #[test]
     fn byte_writes_to_interrupt_registers_preserve_w1c_and_reserved_bit_rules() {
         let mut bus = MemoryBus::new(cartridge());
@@ -4626,5 +4625,4 @@ mod tests {
         bus.write8(0x0400_0201, 0xFF);
         assert_eq!(bus.interrupt_enable_mask(), 0x3FFF);
     }
-
 }
