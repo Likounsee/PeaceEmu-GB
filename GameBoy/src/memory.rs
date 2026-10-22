@@ -1073,8 +1073,8 @@ impl MemoryBus {
     /// Writes a DMA control register and performs immediate-timing transfers.
     ///
     /// HBlank and VBlank requests are driven by video timing; sound FIFO
-    /// requests are serviced by the timer-overflow path. The external Game Pak
-    /// DRQ request line is not modeled yet.
+    /// requests are serviced by the timer-overflow path. DMA3 Game Pak DRQ mode
+    /// is armed here and serviced explicitly through `request_game_pak_dma`.
     fn write_dma_control(&mut self, channel: usize, value: u16) {
         if channel >= 4 {
             return;
@@ -2841,6 +2841,25 @@ mod tests {
         assert_eq!(bus.interrupt_request_flags() & (1 << 11), 1 << 11);
         assert_eq!(bus.dma_enabled(3), Some(false));
         assert!(!bus.request_game_pak_dma());
+    }
+
+    #[test]
+    fn dma3_game_pak_request_is_rejected_without_enabled_drq_mode() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0000, 0xCAFE);
+        bus.write32(0x0400_00D4, 0x0200_0000);
+        bus.write32(0x0400_00D8, 0x0300_0000);
+        bus.write16(0x0400_00DC, 1);
+
+        // Enabled DMA3 without bit 11 is not connected to the DRQ request line.
+        bus.write16(0x0400_00DE, 0x9000);
+        assert!(!bus.request_game_pak_dma());
+        assert_eq!(bus.read16(0x0300_0000), 0);
+
+        // Selecting DRQ without enabling the channel is also insufficient.
+        bus.write16(0x0400_00DE, 0x0800);
+        assert!(!bus.request_game_pak_dma());
+        assert_eq!(bus.read16(0x0300_0000), 0);
     }
 
     #[test]
