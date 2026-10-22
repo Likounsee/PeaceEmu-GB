@@ -4118,6 +4118,66 @@ mod tests {
     }
 
     #[test]
+    fn timer_large_cycle_batches_preserve_every_reload_and_latch_irq() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0100, 0xFFFE);
+        bus.write16(0x0400_0102, 0x00C0); // Timer 0, IRQ, enabled, divisor 1.
+
+        bus.advance_cycles(10);
+
+        // A two-tick period across ten cycles means five overflows and a reload.
+        assert_eq!(bus.timer_counter(0), Some(0xFFFE));
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+        assert_eq!(bus.interrupt_request_flags() & (1 << 3), 1 << 3);
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(2));
+    }
+
+    #[test]
+    fn direct_sound_fifos_only_consume_from_their_selected_timer() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, (1 << 8) | (1 << 14)); // A: timer 0; B: timer 1.
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        bus.write32(0x0400_00A4, 0x8877_6655);
+
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(3));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x11));
+        assert_eq!(bus.audio_fifo_len(1), Some(4));
+        assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
+
+        // Stop timer 0 so only timer 1 can clock the next sample.
+        bus.write16(0x0400_0102, 0);
+        bus.write16(0x0400_0104, 0xFFFF);
+        bus.write16(0x0400_0106, 0x0080);
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(3));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0x11));
+        assert_eq!(bus.audio_fifo_len(1), Some(3));
+        assert_eq!(bus.audio_fifo_last_sample(1), Some(0x55));
+    }
+
+    #[test]
+    fn video_timing_batches_cross_lines_and_frame_wrap_without_losing_phase() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.advance_cycles(1232 * 227 + 960);
+
+        assert_eq!(bus.video_scanline(), 227);
+        assert_eq!(bus.video_cycles_into_scanline(), 960);
+        assert!(bus.video_in_hblank());
+        assert!(bus.video_in_vblank());
+
+        bus.advance_cycles(272);
+        assert_eq!(bus.video_scanline(), 0);
+        assert_eq!(bus.video_cycles_into_scanline(), 0);
+        assert!(!bus.video_in_hblank());
+        assert!(!bus.video_in_vblank());
+        assert!(bus.video_vcount_match());
+    }
+
+    #[test]
     fn vram_byte_write_replicates_after_hardware_mirroring() {
         let mut bus = MemoryBus::new(cartridge());
 
