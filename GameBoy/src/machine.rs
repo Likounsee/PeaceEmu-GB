@@ -3249,8 +3249,10 @@ mod tests {
         machine.request_interrupt(1 << 4);
         machine.set_button_pressed(crate::GbaButton::A, true);
         machine.bus_mut().write32(0x0400_00A0, 0x807F_01FF);
-        machine.cpu_mut().set_register(0, 0x1234_5678);
-        machine.cpu_mut().set_register(15, CARTRIDGE_ENTRY_POINT);
+        let mut cpu_snapshot = machine.cpu().snapshot();
+        cpu_snapshot.registers[0] = 0x1234_5678;
+        cpu_snapshot.pc = CARTRIDGE_ENTRY_POINT;
+        machine.restore_cpu_snapshot(cpu_snapshot);
         let checkpoint = machine.save_state();
         let checkpoint_diagnostics = machine.diagnostic_snapshot();
 
@@ -3259,7 +3261,9 @@ mod tests {
         machine.acknowledge_interrupts(1 << 4);
         machine.set_button_pressed(crate::GbaButton::A, false);
         machine.bus_mut().write32(0x0400_00A0, 0);
-        machine.cpu_mut().set_register(0, 0);
+        let mut changed_cpu = machine.cpu().snapshot();
+        changed_cpu.registers[0] = 0;
+        machine.restore_cpu_snapshot(changed_cpu);
         machine.run_for_instructions(3).unwrap();
         machine.bus_mut().advance_cycles(2000);
 
