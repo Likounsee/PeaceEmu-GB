@@ -1105,10 +1105,7 @@ impl MemoryBus {
     /// DMA3 is enabled in DRQ mode and a transfer was accepted.
     pub fn request_game_pak_dma(&mut self) -> bool {
         let control_offset = 0xB0 + 3 * 12 + 10;
-        let control = u16::from_le_bytes([
-            self.io[control_offset],
-            self.io[control_offset + 1],
-        ]);
+        let control = u16::from_le_bytes([self.io[control_offset], self.io[control_offset + 1]]);
         if control & 0x8000 == 0 || control & (1 << 11) == 0 {
             return false;
         }
