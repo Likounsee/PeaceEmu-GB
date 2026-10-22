@@ -2144,6 +2144,39 @@ mod tests {
     }
 
     #[test]
+    fn keycnt_byte_writes_preserve_other_half_and_mask_reserved_bits() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        bus.write8(0x0400_0132, 0x03);
+        assert_eq!(bus.read16(0x0400_0132), 0x0003);
+
+        // Upper-byte writes can set IRQ/AND controls but reserved bits stay zero.
+        bus.write8(0x0400_0133, 0xFF);
+        assert_eq!(bus.read16(0x0400_0132), 0xC003);
+
+        // Replacing the low byte must preserve the upper-byte controls.
+        bus.write8(0x0400_0132, 0x01);
+        assert_eq!(bus.read16(0x0400_0132), 0xC001);
+
+        bus.write8(0x0400_0133, 0x00);
+        assert_eq!(bus.read16(0x0400_0132), 0x0001);
+    }
+
+    #[test]
+    fn keyinput_ignores_byte_and_word_writes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.set_keys_pressed(GbaButton::A.mask() | GbaButton::Start.mask());
+        let before = bus.read16(0x0400_0130);
+
+        bus.write8(0x0400_0130, 0xFF);
+        bus.write8(0x0400_0131, 0x00);
+        bus.write32(0x0400_0130, 0);
+
+        assert_eq!(bus.read16(0x0400_0130), before);
+        assert_eq!(bus.keys_pressed(), GbaButton::A.mask() | GbaButton::Start.mask());
+    }
+
+    #[test]
     fn keycnt_halfword_write_does_not_latch_irq_from_intermediate_value() {
         let mut bus = MemoryBus::new(cartridge());
         bus.set_keys_pressed(1);
