@@ -1168,16 +1168,20 @@ impl MemoryBus {
                 let data = self.read16(src);
                 self.write16(dst, data);
             }
-            src = match source_mode {
+            // DMA address registers and the GBA external address bus are
+            // 28-bit. Apply wrapping after every element, not only when the
+            // final address is written back, so a burst crossing 0x0FFFFFFF
+            // accesses the wrapped address on its next iteration.
+            src = (match source_mode {
                 1 => src.wrapping_sub(step),
                 2 => src,
                 _ => src.wrapping_add(step),
-            };
-            dst = match destination_mode {
+            }) & 0x0FFF_FFFF;
+            dst = (match destination_mode {
                 1 => dst.wrapping_sub(step),
                 2 => dst,
                 _ => dst.wrapping_add(step),
-            };
+            }) & 0x0FFF_FFFF;
         }
 
         // The programmed DMA address registers expose only bits 0..27.
