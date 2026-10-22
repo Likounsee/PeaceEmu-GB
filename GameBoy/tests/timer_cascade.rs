@@ -173,7 +173,6 @@ fn repeated_hblank_dma_advances_source_and_reloads_destination() {
     assert_eq!(bus.dma_enabled(0), Some(true));
 }
 
-
 #[test]
 fn vblank_dma_fires_at_line_160_and_video_deadline_tracks_frame_wrap() {
     let mut bus = MemoryBus::new(cartridge());
@@ -221,17 +220,25 @@ fn dispstat_byte_writes_configure_vcount_irq_without_writing_status_bits() {
 fn waitcnt_width_timing_accounts_for_rom_sequential_access_and_bank_boundaries() {
     let mut bus = MemoryBus::new(cartridge());
 
-    assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(6));
-    assert_eq!(bus.gamepak_access_cycles_for_width(0x0A00_0000, false, 4), Some(8));
+    assert_eq!(
+        bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+        Some(6)
+    );
+    assert_eq!(
+        bus.gamepak_access_cycles_for_width(0x0A00_0000, false, 4),
+        Some(8)
+    );
 
     // ROM0 sequential accesses become one cycle; the first non-sequential
     // halfword remains four cycles, so a 32-bit word costs five cycles.
     bus.write16(0x0400_0204, 1 << 4);
     assert_eq!(bus.gamepak_access_cycles(0x0800_0000, false), Some(4));
     assert_eq!(bus.gamepak_access_cycles(0x0800_0000, true), Some(1));
-    assert_eq!(bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4), Some(5));
+    assert_eq!(
+        bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+        Some(5)
+    );
 }
-
 
 #[test]
 fn interrupt_controller_byte_writes_preserve_ie_if_and_ime_semantics() {
@@ -278,12 +285,12 @@ fn gamepak_burst_restarts_nonsequential_waitstate_at_rom_bank_boundary() {
         bus.gamepak_sequence_cycles(0x09FF_FFFE, false, 2, 2),
         Some(6) // ROM0: 4 cycles, ROM1: 2 cycles; no sequential carry-over
     );
-    assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0), Some(0));
-    assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
     assert_eq!(
-        bus.gamepak_sequence_cycles(0xFFFF_FFFE, false, 2, 2),
-        None
+        bus.gamepak_sequence_cycles(0x0800_0000, false, 2, 0),
+        Some(0)
     );
+    assert_eq!(bus.gamepak_sequence_cycles(0x0800_0000, false, 3, 1), None);
+    assert_eq!(bus.gamepak_sequence_cycles(0xFFFF_FFFE, false, 2, 2), None);
 }
 
 #[test]
