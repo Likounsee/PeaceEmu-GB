@@ -3246,6 +3246,42 @@ mod tests {
     }
 
     #[test]
+    fn bios_huffman_decompression_rejects_tree_without_a_reachable_leaf() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0120);
+        bus.write8(source + 4, 0); // A two-byte tree.
+        bus.write8(source + 5, 0); // Neither child is a leaf.
+        bus.write32(source + 8, 0); // Always choose the non-leaf left child.
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        assert!(cpu
+            .execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .is_err());
+        assert_eq!(cpu.register(15), Some(0x0200_0200));
+    }
+
+    #[test]
+    fn bios_huffman_decompression_zero_length_does_not_touch_destination() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0020);
+        bus.write8(destination, 0xA5);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read8(destination), 0xA5);
+    }
+
+    #[test]
     fn bios_huffman_decompression_rejects_unknown_format_without_advancing_pc() {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
