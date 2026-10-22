@@ -1677,6 +1677,35 @@ impl Cpu {
                     }
                 }
             }
+            // LZ77 and run-length decompression are frequently used by GBA games
+            // for tile maps, graphics and text. Keep decoding separate from the
+            // bus writes so malformed back-references cannot read before output.
+            0x11 | 0x12 | 0x14 | 0x15 => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let output = Self::decompress_bios_data(
+                    address,
+                    instruction,
+                    swi,
+                    source,
+                    bus,
+                )?;
+                let vram = matches!(swi, 0x12 | 0x15);
+                if vram {
+                    for (index, chunk) in output.chunks(2).enumerate() {
+                        let low = chunk[0];
+                        let high = chunk.get(1).copied().unwrap_or(0);
+                        bus.write16(
+                            destination.wrapping_add((index as u32) * 2) & !1,
+                            u16::from_le_bytes([low, high]),
+                        );
+                    }
+                } else {
+                    for (index, byte) in output.into_iter().enumerate() {
+                        bus.write8(destination.wrapping_add(index as u32), byte);
+                    }
+                }
+            }
             // CpuFastSet copies/fills words in groups of eight; count rounds up.
             0x0C => {
                 let source = self.registers[0] & !3;
@@ -1707,6 +1736,89 @@ impl Cpu {
             self.registers[15] = address.wrapping_add(4) & !3;
         }
         Ok(())
+    }
+
+    /// Decodes the BIOS LZ77 (0x10 header) and RLE (0x30 header) streams.
+    ///
+    /// VRAM-specific packing is handled by the caller: the decoder always
+    /// returns the uncompressed byte stream, making the format logic testable
+    /// independently of destination bus restrictions.
+    fn decompress_bios_data(
+        address: u32,
+        instruction: u32,
+        swi: u32,
+        source: u32,
+        bus: &MemoryBus,
+    ) -> Result<Vec<u8>, CpuError> {
+        let header = bus.read32(source);
+        let expected_tag = if matches!(swi, 0x11 | 0x12) {
+            0x10
+        } else {
+            0x30
+        };
+        if header as u8 != expected_tag {
+            return Err(CpuError::UnsupportedInstruction {
+                address,
+                instruction,
+            });
+        }
+        let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
+        let mut output = Vec::with_capacity(output_size);
+        let mut cursor = source.wrapping_add(4);
+
+        if matches!(swi, 0x14 | 0x15) {
+            while output.len() < output_size {
+                let control = bus.read8(cursor);
+                cursor = cursor.wrapping_add(1);
+                if control & 0x80 != 0 {
+                    let count = usize::from(control & 0x7F) + 3;
+                    let value = bus.read8(cursor);
+                    cursor = cursor.wrapping_add(1);
+                    let remaining = output_size - output.len();
+                    output.extend(core::iter::repeat(value).take(count.min(remaining)));
+                } else {
+                    let count = usize::from(control) + 1;
+                    let remaining = (output_size - output.len()).min(count);
+                    for _ in 0..remaining {
+                        output.push(bus.read8(cursor));
+                        cursor = cursor.wrapping_add(1);
+                    }
+                }
+            }
+        } else {
+            while output.len() < output_size {
+                let flags = bus.read8(cursor);
+                cursor = cursor.wrapping_add(1);
+                for bit in (0..8).rev() {
+                    if output.len() >= output_size {
+                        break;
+                    }
+                    if flags & (1 << bit) == 0 {
+                        output.push(bus.read8(cursor));
+                        cursor = cursor.wrapping_add(1);
+                    } else {
+                        let first = bus.read8(cursor);
+                        let second = bus.read8(cursor.wrapping_add(1));
+                        cursor = cursor.wrapping_add(2);
+                        let count = usize::from(first >> 4) + 3;
+                        let distance =
+                            (usize::from(first & 0x0F) << 8 | usize::from(second)) + 1;
+                        if distance > output.len() {
+                            return Err(CpuError::UnsupportedInstruction {
+                                address,
+                                instruction,
+                            });
+                        }
+                        let remaining = (output_size - output.len()).min(count);
+                        for _ in 0..remaining {
+                            let value = output[output.len() - distance];
+                            output.push(value);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(output)
     }
 
     /// Executes ARM7TDMI SWP/SWPB. The read and write are performed as
@@ -2533,6 +2645,66 @@ mod tests {
         assert_eq!(bus.read32(0x0200_0300), 0x1234_5678);
         assert_eq!(bus.read32(0x0200_0304), 0x1234_5678);
         assert_eq!(bus.read32(0x0200_0308), 0x1234_5678);
+    }
+
+    #[test]
+    fn bios_hle_rle_decompression_handles_runs_and_literals() {
+        let mut bus = bus_with_program(&[0xEF00_0014]);
+        // RLE header: five output bytes, then a 3-byte run and two literals.
+        for (offset, byte) in [
+            (0, 0x30), (1, 5), (2, 0), (3, 0),
+            (4, 0x80), (5, b'A'), (6, 1), (7, b'B'), (8, b'C'),
+        ] {
+            bus.write8(0x0200_0100 + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(
+            (0..5).map(|i| bus.read8(0x0200_0200 + i)).collect::<Vec<_>>(),
+            b"AAABC"
+        );
+    }
+
+    #[test]
+    fn bios_hle_lz77_decompression_handles_overlapping_backreferences() {
+        let mut bus = bus_with_program(&[0xEF00_0011]);
+        // LZ77 header: six bytes. One literal ('A'), then a 5-byte back-reference.
+        for (offset, byte) in [
+            (0, 0x10), (1, 6), (2, 0), (3, 0),
+            (4, 0x40), (5, b'A'), (6, 0x20), (7, 0x00),
+        ] {
+            bus.write8(0x0200_0100 + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(
+            (0..6).map(|i| bus.read8(0x0200_0200 + i)).collect::<Vec<_>>(),
+            b"AAAAAA"
+        );
+    }
+
+    #[test]
+    fn bios_hle_rle_vram_decompression_writes_packed_halfwords() {
+        let mut bus = bus_with_program(&[0xEF00_0015]);
+        for (offset, byte) in [
+            (0, 0x30), (1, 3), (2, 0), (3, 0),
+            (4, 0x80), (5, 0x5A),
+        ] {
+            bus.write8(0x0200_0100 + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0600_0000);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read16(0x0600_0000), 0x5A5A);
+        assert_eq!(bus.read16(0x0600_0002) & 0x00FF, 0x005A);
     }
 
     #[test]
