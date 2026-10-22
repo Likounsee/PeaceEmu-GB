@@ -233,7 +233,7 @@ impl VideoFrame {
     /// Returns the pixel at (x, y), or None when outside the frame, when the
     /// public dimensions would overflow, or when the backing buffer is incomplete.
     pub fn pixel(&self, x: usize, y: usize) -> Option<u32> {
-        if x >= self.width || y >= self.height {
+        if !self.is_well_formed() || x >= self.width || y >= self.height {
             return None;
         }
         let index = y.checked_mul(self.width)?.checked_add(x)?;
@@ -243,7 +243,7 @@ impl VideoFrame {
     /// Returns one complete row, or None if the row is outside the frame or
     /// the backing buffer does not contain every pixel in that row.
     pub fn row(&self, y: usize) -> Option<&[u32]> {
-        if y >= self.height {
+        if !self.is_well_formed() || y >= self.height {
             return None;
         }
         let start = y.checked_mul(self.width)?;
@@ -254,7 +254,7 @@ impl VideoFrame {
     /// Returns one complete mutable row, or None if the row is outside the
     /// frame or the backing buffer does not contain every pixel in that row.
     pub fn row_mut(&mut self, y: usize) -> Option<&mut [u32]> {
-        if y >= self.height {
+        if !self.is_well_formed() || y >= self.height {
             return None;
         }
         let start = y.checked_mul(self.width)?;
@@ -3347,5 +3347,20 @@ mod tests {
         let frame = render_bitmap_frame(&bus).unwrap();
         assert_eq!(frame.pixel(0, 0), Some(0xFF00_FF00));
         assert_eq!(frame.pixel(4, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn frame_pixel_and_rows_reject_globally_malformed_buffers() {
+        let mut malformed = VideoFrame {
+            width: 2,
+            height: 2,
+            pixels: vec![0xFF12_3456, 0xFFAB_CDEF],
+        };
+        // Even coordinates whose individual pixel data exists must not make an
+        // incomplete frame appear valid to consumers of the frame API.
+        assert_eq!(malformed.pixel(0, 0), None);
+        assert_eq!(malformed.row(0), None);
+        assert!(malformed.row_mut(0).is_none());
+        assert_eq!(malformed.pixels, vec![0xFF12_3456, 0xFFAB_CDEF]);
     }
 }
