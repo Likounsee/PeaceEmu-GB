@@ -1755,18 +1755,20 @@ impl Cpu {
                 let mut cursor = source.wrapping_add(4);
                 if wide {
                     let output_size = output_size & !1;
-                    let mut accumulated = bus.read16(cursor);
-                    cursor = cursor.wrapping_add(2);
-                    let mut written = 0_usize;
-                    while written < output_size {
-                        bus.write16(destination.wrapping_add(written as u32), accumulated);
-                        written += 2;
-                        if written < output_size {
-                            accumulated = accumulated.wrapping_add(bus.read16(cursor));
-                            cursor = cursor.wrapping_add(2);
+                    if output_size != 0 {
+                        let mut accumulated = bus.read16(cursor);
+                        cursor = cursor.wrapping_add(2);
+                        let mut written = 0_usize;
+                        while written < output_size {
+                            bus.write16(destination.wrapping_add(written as u32), accumulated);
+                            written += 2;
+                            if written < output_size {
+                                accumulated = accumulated.wrapping_add(bus.read16(cursor));
+                                cursor = cursor.wrapping_add(2);
+                            }
                         }
                     }
-                } else {
+                } else if output_size != 0 {
                     let mut accumulated = bus.read8(cursor);
                     cursor = cursor.wrapping_add(1);
                     for index in 0..output_size {
