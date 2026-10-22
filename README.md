@@ -30,7 +30,7 @@ Hardware regression coverage now also checks DISPSTAT/VCOUNT read-only status se
 
 ## Build and test
 
-GitHub Actions checks formatting, compilation, and the test suite on stable Rust across Linux, Windows, and macOS. A separate Ubuntu job also checks the declared minimum toolchain (Rust 1.78), so newer stable-only APIs do not silently raise the MSRV.
+GitHub Actions checks formatting, compilation, and the test suite on stable Rust across Linux, Windows, and macOS. Linux also runs the test suite in release mode, while a documentation job checks doctests and builds the API reference. A separate Ubuntu job checks the declared minimum toolchain (Rust 1.78), so newer stable-only APIs do not silently raise the MSRV.
 
 From the repository root:
 
