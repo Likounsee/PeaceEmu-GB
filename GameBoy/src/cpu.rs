@@ -2763,9 +2763,9 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_000F, 0x0F, false, &mut bus)
             .unwrap();
         assert_eq!(bus.read16(destination) as i16, 256);
-        assert_eq!(bus.read16(destination + 2) as i16, 0);
-        assert_eq!(bus.read16(destination + 4) as i16, 0);
-        assert_eq!(bus.read16(destination + 6) as i16, 256);
+        assert_eq!(bus.read16(destination + 8) as i16, 0);
+        assert_eq!(bus.read16(destination + 16) as i16, 0);
+        assert_eq!(bus.read16(destination + 24) as i16, 256);
         assert_eq!(bus.read16(destination + 2) as i16, 0);
         assert_eq!(bus.read16(destination + 10) as i16, -128);
         assert_eq!(bus.read16(destination + 18) as i16, 512);
