@@ -4413,4 +4413,37 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(0), Some(0));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
     }
+    #[test]
+    fn sound_fifo_dma_waits_for_its_selected_timer_and_keeps_fifo_b_target_fixed() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0200_0000, 0x4433_2211);
+        bus.write32(0x0200_0004, 0x8877_6655);
+        bus.write32(0x0200_0008, 0xCCBB_AA99);
+        bus.write32(0x0200_000C, 0x00FF_EEDD);
+
+        bus.write16(0x0400_0084, 0x0080);
+        // FIFO A selects timer 1, so a timer-0 overflow must not consume or refill it.
+        bus.write16(0x0400_0082, (1 << 8) | (1 << 10));
+        // DMA1: incrementing EWRAM source, fixed FIFO-A destination, word/repeat/FIFO timing.
+        bus.write32(0x0400_00B4, 0x0400_00A0);
+        bus.write32(0x0400_00B0, 0x0200_0000);
+        bus.write16(0x0400_00B8, 4);
+        bus.write16(0x0400_00BA, 0xB640);
+
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080); // Timer 0 enabled, divisor 1.
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.dma_source_address(1), Some(0x0200_0000));
+
+        // Timer 1 now overflows: it clocks FIFO A and causes one four-word refill.
+        bus.write16(0x0400_0104, 0xFFFF);
+        bus.write16(0x0400_0106, 0x0080);
+        bus.advance_cycles(1);
+        assert_eq!(bus.audio_fifo_len(0), Some(16));
+        assert_eq!(bus.dma_source_address(1), Some(0x0200_0010));
+        assert_eq!(bus.dma_destination_address(1), Some(0x0400_00A0));
+        assert_eq!(bus.dma_enabled(1), Some(true));
+    }
+
 }
