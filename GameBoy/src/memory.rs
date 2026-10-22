@@ -4729,7 +4729,7 @@ mod tests {
         bus.write32(0x0400_00BC, 0x0200_0000);
         bus.write32(0x0400_00C0, 0x0400_00A0);
         bus.write16(0x0400_00C4, 4);
-        bus.write16(0x0400_00C6, 0xB6C0);
+        bus.write16(0x0400_00C6, 0xB740);
 
         bus.write16(0x0400_0100, 0xFFFF);
         bus.write16(0x0400_0102, 0x0080);
