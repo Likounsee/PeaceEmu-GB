@@ -330,12 +330,12 @@ impl VideoFrame {
         let mut pixels = Vec::with_capacity(pixel_count);
         for y in 0..height {
             let source_y = (((2_u128 * y as u128 + 1) * self.height as u128)
-                / (2 * height) as u128) as usize;
+                / (2_u128 * height as u128)) as usize;
             let source_y = source_y.min(self.height - 1);
             let row_start = source_y.checked_mul(self.width)?;
             for x in 0..width {
                 let source_x = (((2_u128 * x as u128 + 1) * self.width as u128)
-                    / (2 * width) as u128) as usize;
+                    / (2_u128 * width as u128)) as usize;
                 let source_x = source_x.min(self.width - 1);
                 pixels.push(*self.pixels.get(row_start.checked_add(source_x)?)?);
             }
