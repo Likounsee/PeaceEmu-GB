@@ -2920,7 +2920,8 @@ mod tests {
         bus.write16(0x0400_0054, 16);
 
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
-        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+        // Full-strength GBA brighten drives every 5-bit channel to 31.
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_FFFF));
     }
 
     #[test]
