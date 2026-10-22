@@ -1882,13 +1882,16 @@ impl Cpu {
                     }
                 }
             }
-            // LZ77 and run-length decompression are frequently used by GBA games
-            // for tile maps, graphics and text. Keep decoding separate from the
-            // bus writes so malformed back-references cannot read before output.
-            0x11 | 0x12 | 0x14 | 0x15 => {
+            // LZ77, Huffman, and run-length BIOS decompressors share the same
+            // bounded output path; VRAM packing remains specific to the caller.
+            0x11 | 0x12 | 0x13 | 0x14 | 0x15 => {
                 let source = self.registers[0];
                 let destination = self.registers[1];
-                let output = Self::decompress_bios_data(address, instruction, swi, source, bus)?;
+                let output = if swi == 0x13 {
+                    Self::huffman_decompress_bios_data(address, instruction, source, bus)?
+                } else {
+                    Self::decompress_bios_data(address, instruction, swi, source, bus)?
+                };
                 let vram = matches!(swi, 0x12 | 0x15);
                 if vram {
                     for (index, chunk) in output.chunks(2).enumerate() {
@@ -1935,6 +1938,70 @@ impl Cpu {
             self.registers[15] = address.wrapping_add(4) & !3;
         }
         Ok(())
+    }
+
+    /// Decodes the BIOS Huffman stream (SWI 0x13), supporting 4-bit and 8-bit symbols.
+    ///
+    /// The tree stores leaf symbols in child slots; payload bits are consumed most-significant
+    /// bit first from little-endian 32-bit words, as required by the GBA BIOS format.
+    fn huffman_decompress_bios_data(
+        address: u32,
+        instruction: u32,
+        source: u32,
+        bus: &MemoryBus,
+    ) -> Result<Vec<u8>, CpuError> {
+        let header = bus.read32(source);
+        let format = (header & 0xFF) as u8;
+        let symbol_bits = match format {
+            0x20 => 8_usize,
+            0x24 => 4_usize,
+            _ => return Err(CpuError::UnsupportedInstruction { address, instruction }),
+        };
+        let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
+        let symbol_count = output_size.saturating_mul(8 / symbol_bits);
+        let tree_size = usize::from(bus.read8(source.wrapping_add(4))).saturating_add(1) * 2;
+        let tree_start = source.wrapping_add(5);
+        let payload_start = source
+            .wrapping_add(5)
+            .wrapping_add(tree_size as u32)
+            .wrapping_add(3)
+            & !3;
+        let mut output = Vec::with_capacity(output_size);
+        let mut payload_word_address = payload_start;
+        let mut payload_word = bus.read32(payload_word_address);
+        let mut bits_remaining = 32_u8;
+
+        for symbol_index in 0..symbol_count {
+            let mut node_address = tree_start;
+            loop {
+                let node = bus.read8(node_address);
+                let bit = (payload_word >> 31) as u8;
+                payload_word <<= 1;
+                bits_remaining -= 1;
+                if bits_remaining == 0 {
+                    payload_word_address = payload_word_address.wrapping_add(4);
+                    payload_word = bus.read32(payload_word_address);
+                    bits_remaining = 32;
+                }
+                let child_offset = u32::from(node & 0x3F) * 2 + 2 + u32::from(bit);
+                let child_address = node_address.wrapping_add(child_offset);
+                let is_leaf = if bit == 0 { node & 0x80 != 0 } else { node & 0x40 != 0 };
+                if is_leaf {
+                    let symbol = bus.read8(child_address);
+                    if symbol_bits == 8 {
+                        output.push(symbol);
+                    } else if symbol_index & 1 == 0 {
+                        output.push(symbol << 4);
+                    } else if let Some(byte) = output.last_mut() {
+                        *byte |= symbol & 0x0F;
+                    }
+                    break;
+                }
+                node_address = child_address;
+            }
+        }
+        output.truncate(output_size);
+        Ok(output)
     }
 
     /// Decodes the BIOS LZ77 (0x10 header) and RLE (0x30 header) streams.
@@ -3108,6 +3175,29 @@ mod tests {
         assert_eq!(bus.read32(0x0200_0300), 0x1234_5678);
         assert_eq!(bus.read32(0x0200_0304), 0x1234_5678);
         assert_eq!(bus.read32(0x0200_0308), 0x1234_5678);
+    }
+
+    #[test]
+    fn bios_huffman_decompression_decodes_eight_bit_symbols_msb_first() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0420); // 4 output bytes, 8-bit symbols.
+        bus.write8(source + 4, 1); // Four-byte tree.
+        bus.write8(source + 5, 0xC0); // Both root children are leaves.
+        bus.write8(source + 7, b'A');
+        bus.write8(source + 8, b'B');
+        bus.write32(source + 12, 0x5000_0000); // Bits 0,1,0,1.
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .unwrap();
+
+        assert_eq!((0..4).map(|i| bus.read8(destination + i)).collect::<Vec<_>>(), b"ABAB");
+        assert_eq!(cpu.register(15), Some(0x0200_0204));
     }
 
     #[test]
