@@ -1640,6 +1640,11 @@ impl Cpu {
                 self.registers[1] = remainder as u32;
                 self.registers[3] = quotient.wrapping_abs() as u32;
             }
+            // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
+            // This is a compatibility value; it does not claim to emulate BIOS ROM.
+            0x0D => {
+                self.registers[0] = 0xBAAE_187F;
+            }
             // Sqrt: unsigned integer square root.
             0x08 => {
                 let value = u64::from(self.registers[0]);
@@ -1660,7 +1665,7 @@ impl Cpu {
                 let fill = control & (1 << 24) != 0;
                 let word = control & (1 << 26) != 0;
                 if word {
-                    let mut value = bus.read32(source & !3);
+                    let mut value = 0;
                     for index in 0..count {
                         if !fill || index == 0 {
                             value = bus.read32(source.wrapping_add(index * 4) & !3);
@@ -1668,7 +1673,7 @@ impl Cpu {
                         bus.write32(destination.wrapping_add(index * 4) & !3, value);
                     }
                 } else {
-                    let mut value = bus.read16(source & !1);
+                    let mut value = 0;
                     for index in 0..count {
                         if !fill || index == 0 {
                             value = bus.read16(source.wrapping_add(index * 2) & !1);
@@ -1713,7 +1718,7 @@ impl Cpu {
                 let control = self.registers[2];
                 let count = (control & 0x001F_FFFF).saturating_add(7) & !7;
                 let fill = control & (1 << 24) != 0;
-                let mut value = bus.read32(source);
+                let mut value = 0;
                 for index in 0..count {
                     if !fill || index == 0 {
                         value = bus.read32(source.wrapping_add(index * 4));
@@ -2622,6 +2627,24 @@ mod tests {
         cpu.set_register(0, 0xFFFF_FFFF);
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(0), Some(65_535));
+    }
+
+    #[test]
+    fn bios_hle_checksum_and_halfword_cpuset_are_supported() {
+        let mut bus = bus_with_program(&[0xEF00_000D, 0xEF00_000B]);
+        bus.write16(0x0200_0100, 0x1357);
+        bus.write16(0x0200_0102, 0x2468);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.set_register(2, 2);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read16(0x0200_0200), 0x1357);
+        assert_eq!(bus.read16(0x0200_0202), 0x2468);
     }
 
     #[test]
