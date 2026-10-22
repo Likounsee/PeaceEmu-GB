@@ -3201,6 +3201,45 @@ mod tests {
     }
 
     #[test]
+    fn bios_huffman_decompression_packs_four_bit_symbols_high_nibble_first() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0124); // One output byte, 4-bit symbols.
+        bus.write8(source + 4, 1);
+        bus.write8(source + 5, 0xC0);
+        bus.write8(source + 7, 0x03);
+        bus.write8(source + 8, 0x0C);
+        bus.write32(source + 12, 0x5000_0000); // Symbols 3, C, then padding.
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read8(destination), 0x3C);
+    }
+
+    #[test]
+    fn bios_huffman_decompression_rejects_unknown_format_without_advancing_pc() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0128);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+
+        assert!(cpu
+            .execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .is_err());
+        assert_eq!(cpu.register(15), Some(0x0200_0200));
+    }
+
+    #[test]
     fn bios_hle_rle_decompression_handles_runs_and_literals() {
         let mut bus = bus_with_program(&[0xEF00_0014]);
         // RLE header: five output bytes, then a 3-byte run and two literals.
