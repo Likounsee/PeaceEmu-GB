@@ -897,10 +897,10 @@ impl GbaMachine {
     /// This is a configuration snapshot. WAITCNT excess latency is partially
     /// integrated for instruction fetches and selected data transfers; DMA
     /// stalls remain outside actual CPU cycle accounting. Supported ARM/Thumb
-    /// scalar loads/stores, ARM register offsets with immediate or
-    /// register-specified shifts, and multiple-transfer bursts add excess WAITCNT
-    /// latency. Register-specified shifts on halfword/signed transfers and DMA
-    /// bus contention are not yet included.
+    /// scalar loads/stores, SWP/SWPB read-modify-write operations, ARM register
+    /// offsets with immediate or register-specified shifts, and multiple-transfer
+    /// bursts add excess WAITCNT latency. DMA stalls and bus contention are not
+    /// yet included.
     pub fn gamepak_wait_control(&self) -> u16 {
         self.bus.gamepak_wait_control()
     }
