@@ -793,12 +793,16 @@ impl MemoryBus {
         {
             return;
         }
-        let source = u32::from_le_bytes(self.io[base..base + 4].try_into().unwrap()) & !3;
+        // DMA addresses are 28-bit on the GBA. Keep each word fetch and the
+        // saved post-transfer source inside that address space, including wrap.
+        let source = u32::from_le_bytes(self.io[base..base + 4].try_into().unwrap()) & 0x0FFF_FFFC;
         for index in 0..4 {
-            let word = self.read32(source.wrapping_add(index * 4));
+            let address = source.wrapping_add(index * 4) & 0x0FFF_FFFC;
+            let word = self.read32(address);
             self.write_audio_fifo_word(fifo, word);
         }
-        self.io[base..base + 4].copy_from_slice(&source.wrapping_add(16).to_le_bytes());
+        let next_source = source.wrapping_add(16) & 0x0FFF_FFFC;
+        self.io[base..base + 4].copy_from_slice(&next_source.to_le_bytes());
         if control & (1 << 14) != 0 {
             self.request_interrupt(1 << (8 + channel));
         }
