@@ -4048,6 +4048,76 @@ mod tests {
     }
 
     #[test]
+    fn timer_overflow_estimate_tracks_prescaler_phase_and_reload() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0100, 0xFFFE);
+        bus.write16(0x0400_0102, 0x00C1); // Timer 0, IRQ enabled, /64, enabled.
+
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
+        bus.advance_cycles(10);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(10));
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(118));
+
+        bus.advance_cycles(54);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFF));
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(64));
+
+        bus.advance_cycles(64);
+        assert_eq!(bus.timer_counter(0), Some(0xFFFE));
+        assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
+        assert_ne!(bus.interrupt_request_flags() & (1 << 3), 0);
+    }
+
+    #[test]
+    fn timer_overflow_estimate_rejects_disabled_cascade_and_invalid_timers() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.timer_cycles_until_overflow(0), None);
+        assert_eq!(bus.timer_cycles_until_overflow(4), None);
+
+        bus.write16(0x0400_0104, 0xFFFE);
+        bus.write16(0x0400_0106, 0x0084); // Timer 1 enabled in cascade mode.
+        assert_eq!(bus.timer_cycles_until_overflow(1), None);
+    }
+
+    #[test]
+    fn dma_decrement_source_and_fixed_destination_follow_address_modes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0002, 0x1234);
+        bus.write16(0x0200_0004, 0xABCD);
+        bus.write32(0x0400_00B0, 0x0200_0004);
+        bus.write32(0x0400_00B4, 0x0300_0000);
+        bus.write16(0x0400_00B8, 2);
+        // DMA0 immediate, source decrement, destination fixed, enabled.
+        bus.write16(0x0400_00BA, 0x80C0);
+
+        assert_eq!(bus.read16(0x0300_0000), 0x1234);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0000));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+        assert_eq!(bus.dma_source_control(0), Some(1));
+        assert_eq!(bus.dma_destination_control(0), Some(2));
+        assert_eq!(bus.dma_enabled(0), Some(false));
+    }
+
+    #[test]
+    fn dma3_gamepak_drq_mode_waits_for_external_request() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0200_0000, 0xBEEF);
+        bus.write32(0x0400_00D4, 0x0200_0000);
+        bus.write32(0x0400_00D8, 0x0300_0000);
+        bus.write16(0x0400_00DC, 1);
+        // DMA3 enable + Game Pak DRQ; the external request line is not modeled.
+        bus.write16(0x0400_00DE, 0x8800);
+
+        assert_eq!(bus.read16(0x0300_0000), 0);
+        assert_eq!(bus.dma_enabled(3), Some(true));
+        bus.advance_cycles(960);
+        bus.advance_cycles(160 * 1232);
+        assert_eq!(bus.read16(0x0300_0000), 0);
+        assert_eq!(bus.dma_enabled(3), Some(true));
+    }
+
+    #[test]
     fn vram_byte_write_replicates_after_hardware_mirroring() {
         let mut bus = MemoryBus::new(cartridge());
 
