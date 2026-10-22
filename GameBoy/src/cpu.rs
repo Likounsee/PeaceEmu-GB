@@ -1707,6 +1707,22 @@ impl Cpu {
             0x0D => {
                 self.registers[0] = 0xBAAE_187F;
             }
+            // ArcTan: interpret R0 as signed 1.14 tangent and return a 3.12 angle.
+            0x09 => {
+                let tangent = (self.registers[0] as i16) as f64 / 16_384.0;
+                self.registers[0] = (tangent.atan() * 4_096.0).round() as i32 as u32;
+            }
+            // ArcTan2: signed 1.14 Y (R1) and X (R0), result in signed 3.12 radians.
+            0x0A => {
+                let x = (self.registers[0] as i16) as f64;
+                let y = (self.registers[1] as i16) as f64;
+                let angle = if x == 0.0 && y == 0.0 {
+                    0.0
+                } else {
+                    y.atan2(x)
+                };
+                self.registers[0] = (angle * 4_096.0).round() as i32 as u32;
+            }
             // Sqrt: unsigned integer square root.
             0x08 => {
                 let value = u64::from(self.registers[0]);
@@ -2620,6 +2636,47 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bios_arctan_returns_zero_and_positive_quarter_turn_approximation() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0009, 0x09, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(0));
+
+        cpu.set_register(0, 16_384);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0009, 0x09, false, &mut bus)
+            .unwrap();
+        let angle = cpu.register(0).unwrap() as i32;
+        assert!((angle - 3_217).abs() <= 1);
+    }
+
+    #[test]
+    fn bios_arctan2_handles_origin_and_quadrants() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 0);
+        cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(0));
+
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 16_384);
+        cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(6_434));
+
+        cpu.set_register(0, (-16_384_i32) as u32);
+        cpu.set_register(1, 0);
+        cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some((-12_868_i32) as u32));
+    }
+
     #[test]
     fn bios_division_by_zero_returns_sign_sentinel_and_preserves_numerator() {
         let mut bus = bus_with_program(&[]);
