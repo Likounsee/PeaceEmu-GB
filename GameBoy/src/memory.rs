@@ -4118,6 +4118,26 @@ mod tests {
     }
 
     #[test]
+    fn disabling_timer_discards_partial_prescaler_phase_for_halfword_and_byte_writes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0100, 0xFF00);
+        bus.write16(0x0400_0102, 0x0081); // Timer 0, enabled, divisor 64.
+        bus.advance_cycles(17);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(17));
+
+        bus.write16(0x0400_0102, 0x0001);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+        bus.write16(0x0400_0102, 0x0081);
+        bus.advance_cycles(9);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(9));
+
+        // Byte writes to the high control byte must obey the same reset rule.
+        bus.write8(0x0400_0103, 0x00);
+        assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+        assert!(!bus.timer_enabled(0).unwrap());
+    }
+
+    #[test]
     fn timer_large_cycle_batches_preserve_every_reload_and_latch_irq() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0100, 0xFFFE);
