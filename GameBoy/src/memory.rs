@@ -2112,7 +2112,7 @@ mod tests {
         assert_eq!(bus.read8(0x0400_0131), 0xFD);
 
         bus.write16(0x0400_0130, 0);
-        assert_eq!(bus.read16(0x0400_0130), 0b01_1111_1110);
+        assert_eq!(bus.read16(0x0400_0130), 0b1111_1101_1111_1110);
         bus.set_keys_pressed(u16::MAX);
         assert_eq!(bus.read16(0x0400_0130), 0xFC00);
     }
@@ -4055,7 +4055,7 @@ mod tests {
         let mut bus = MemoryBus::new(cartridge());
         let keypad_irq = 1_u16 << 12;
 
-        assert_eq!(bus.read16(0x0400_0130), 0x03FF);
+        assert_eq!(bus.read16(0x0400_0130), 0xFFFF);
         bus.write16(0x0400_0132, (1 << 14) | GbaButton::A.mask());
         assert!(!bus.keypad_irq_requested());
         assert_eq!(bus.interrupt_request_flags() & keypad_irq, 0);
