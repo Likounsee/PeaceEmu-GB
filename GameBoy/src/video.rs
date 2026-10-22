@@ -2092,6 +2092,25 @@ mod tests {
     }
 
     #[test]
+    fn semi_transparent_obj_alpha_blends_with_selected_backdrop_target_in_text_mode() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 1 << 12); // OBJ enabled, mode 0
+        bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop (second target)
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // OBJ palette index 1: red
+        bus.write16(0x0601_0000, 0x1111); // 4bpp tile with opaque index-1 pixels
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 13)); // Alpha mode, backdrop target 2
+        bus.write16(0x0400_0052, (8 << 8) | 8); // EVA=8, EVB=8
+
+        let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF84_0084));
+        // A transparent OBJ pixel leaves the backdrop untouched.
+        assert_eq!(frame.pixel(4, 4), Some(0xFF00_00FF));
+    }
+
+    #[test]
     fn affine_background_mosaic_repeats_source_pixels_and_rows() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 2 | (1 << 10)); // Mode 2, BG2 enabled
