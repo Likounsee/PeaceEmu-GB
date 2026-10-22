@@ -2015,7 +2015,10 @@ impl Cpu {
                 node_address = child_address;
             }
             if !decoded {
-                return Err(CpuError::UnsupportedInstruction { address, instruction });
+                return Err(CpuError::UnsupportedInstruction {
+                    address,
+                    instruction,
+                });
             }
         }
         output.truncate(output_size);
