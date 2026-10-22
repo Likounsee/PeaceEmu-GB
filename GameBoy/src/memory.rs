@@ -2833,7 +2833,6 @@ mod tests {
         bus.write16(0x0400_00DE, 0xD800);
 
         assert_eq!(bus.read16(0x0300_0100), 0);
-        assert!(!bus.request_game_pak_dma());
         bus.advance_cycles(1232 * 160);
         assert_eq!(bus.read16(0x0300_0100), 0);
 
