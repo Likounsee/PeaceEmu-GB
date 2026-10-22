@@ -474,9 +474,11 @@ impl FlashDevice {
                     _ => 0xFF,
                 }
             } else {
+                // Macronix-compatible 128-KiB GBA Flash (device ID 0x09).
+                // The identification bytes are exposed low byte first.
                 match address {
-                    0 => 0x62,
-                    1 => 0x13,
+                    0 => 0xC2,
+                    1 => 0x09,
                     _ => 0xFF,
                 }
             };
@@ -645,6 +647,17 @@ mod flash_tests {
     }
 
     #[test]
+    fn flash128k_reports_macronix_identification_bytes() {
+        let mut flash = FlashDevice::new(SaveType::Flash128K).unwrap();
+        unlock_flash(&mut flash);
+        flash.write(0x5555, 0x90);
+
+        assert_eq!(flash.read(0), 0xC2);
+        assert_eq!(flash.read(1), 0x09);
+        assert_eq!(flash.read(2), 0xFF);
+    }
+
+    #[test]
     fn flash_id_mode_ignores_program_commands_until_reset() {
         let mut flash = FlashDevice::new(SaveType::Flash64K).unwrap();
         unlock_flash(&mut flash);
@@ -680,7 +693,7 @@ mod flash_tests {
         flash.write(0, 1);
         unlock_flash(&mut flash);
         flash.write(0x5555, 0x90);
-        assert_eq!(flash.read(0), 0x62);
+        assert_eq!(flash.read(0), 0xC2);
 
         flash.load_data(&image).unwrap();
         assert_eq!(flash.read(0), 0x12);
