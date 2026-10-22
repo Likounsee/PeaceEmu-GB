@@ -1723,6 +1723,64 @@ impl Cpu {
                 };
                 self.registers[0] = (angle * 4_096.0).round() as i32 as u32;
             }
+            // BgAffineSet: build affine BG matrices and fixed-point reference points.
+            0x0E => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let count = self.registers[2].min(0x1000);
+                for index in 0..count {
+                    let src = source.wrapping_add(index * 20);
+                    let dst = destination.wrapping_add(index * 16);
+                    let tex_x = bus.read32(src) as i32;
+                    let tex_y = bus.read32(src.wrapping_add(4)) as i32;
+                    let screen_x = bus.read16(src.wrapping_add(8)) as i16 as i32;
+                    let screen_y = bus.read16(src.wrapping_add(10)) as i16 as i32;
+                    let scale_x = bus.read16(src.wrapping_add(12)) as i16 as f64 / 256.0;
+                    let scale_y = bus.read16(src.wrapping_add(14)) as i16 as f64 / 256.0;
+                    let theta = bus.read16(src.wrapping_add(16));
+                    let angle = f64::from(theta) * (std::f64::consts::TAU / 65_536.0);
+                    let sin = angle.sin();
+                    let cos = angle.cos();
+                    let pa = (cos * scale_x * 256.0).round() as i16;
+                    let pb = (-sin * scale_x * 256.0).round() as i16;
+                    let pc = (sin * scale_y * 256.0).round() as i16;
+                    let pd = (cos * scale_y * 256.0).round() as i16;
+                    bus.write16(dst, pa as u16);
+                    bus.write16(dst.wrapping_add(2), pb as u16);
+                    bus.write16(dst.wrapping_add(4), pc as u16);
+                    bus.write16(dst.wrapping_add(6), pd as u16);
+                    let ref_x = tex_x.wrapping_sub(pa as i32 * screen_x + pb as i32 * screen_y);
+                    let ref_y = tex_y.wrapping_sub(pc as i32 * screen_x + pd as i32 * screen_y);
+                    bus.write32(dst.wrapping_add(8), ref_x as u32);
+                    bus.write32(dst.wrapping_add(12), ref_y as u32);
+                }
+            }
+            // ObjAffineSet: write each 2x2 OBJ matrix using the caller's byte stride.
+            0x0F => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let count = self.registers[2].min(0x1000);
+                let stride = self.registers[3].max(2);
+                for index in 0..count {
+                    let src = source.wrapping_add(index * 8);
+                    let dst = destination.wrapping_add(index * stride);
+                    let scale_x = bus.read16(src) as i16 as f64 / 256.0;
+                    let scale_y = bus.read16(src.wrapping_add(2)) as i16 as f64 / 256.0;
+                    let theta = bus.read16(src.wrapping_add(4));
+                    let angle = f64::from(theta) * (std::f64::consts::TAU / 65_536.0);
+                    let sin = angle.sin();
+                    let cos = angle.cos();
+                    let matrix = [
+                        (cos * scale_x * 256.0).round() as i16,
+                        (-sin * scale_x * 256.0).round() as i16,
+                        (sin * scale_y * 256.0).round() as i16,
+                        (cos * scale_y * 256.0).round() as i16,
+                    ];
+                    for (slot, coefficient) in matrix.into_iter().enumerate() {
+                        bus.write16(dst.wrapping_add((slot as u32).wrapping_mul(stride)), coefficient as u16);
+                    }
+                }
+            }
             // Sqrt: unsigned integer square root.
             0x08 => {
                 let value = u64::from(self.registers[0]);
@@ -2636,6 +2694,62 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bios_bg_affine_set_writes_identity_matrix_and_reference_point() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 100 << 8);
+        bus.write32(source + 4, 50 << 8);
+        bus.write16(source + 8, 2);
+        bus.write16(source + 10, 3);
+        bus.write16(source + 12, 0x0100);
+        bus.write16(source + 14, 0x0100);
+        bus.write16(source + 16, 0);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 1);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000E, 0x0E, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read16(destination) as i16, 256);
+        assert_eq!(bus.read16(destination + 2) as i16, 0);
+        assert_eq!(bus.read16(destination + 4) as i16, 0);
+        assert_eq!(bus.read16(destination + 6) as i16, 256);
+        assert_eq!(bus.read32(destination + 8), (98 << 8) as u32);
+        assert_eq!(bus.read32(destination + 12), (47 << 8) as u32);
+    }
+
+    #[test]
+    fn bios_obj_affine_set_respects_destination_stride() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write16(source, 0x0100);
+        bus.write16(source + 2, 0x0100);
+        bus.write16(source + 4, 0);
+        bus.write16(source + 8, 0x0080);
+        bus.write16(source + 10, 0x0200);
+        bus.write16(source + 12, 0x4000);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 2);
+        cpu.set_register(3, 8);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000F, 0x0F, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read16(destination) as i16, 256);
+        assert_eq!(bus.read16(destination + 2) as i16, 0);
+        assert_eq!(bus.read16(destination + 4) as i16, 0);
+        assert_eq!(bus.read16(destination + 6) as i16, 256);
+        assert_eq!(bus.read16(destination + 8) as i16, 0);
+        assert_eq!(bus.read16(destination + 10) as i16, -128);
+        assert_eq!(bus.read16(destination + 12) as i16, 512);
+        assert_eq!(bus.read16(destination + 14) as i16, 0);
+    }
+
     #[test]
     fn bios_arctan_returns_zero_and_positive_quarter_turn_approximation() {
         let mut bus = bus_with_program(&[]);
