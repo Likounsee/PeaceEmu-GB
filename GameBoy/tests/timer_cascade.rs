@@ -132,3 +132,19 @@ fn dma_count_registers_mask_reserved_bits_by_channel_and_access_width() {
     assert_eq!(bus.read16(0x0400_00B8), 0x3FFF);
     assert_eq!(bus.read16(0x0400_00DC), 0xFFFF);
 }
+
+#[test]
+fn dma_increment_wraps_programmed_address_registers_to_28_bits() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0200_0000, 0xCAFE);
+    bus.write32(0x0400_00B0, 0x0FFF_FFFE); // source increments past bit 27
+    bus.write32(0x0400_00B4, 0x0200_0000);
+    bus.write16(0x0400_00B8, 1);
+    bus.write16(0x0400_00BA, 0x8400); // enable + completion IRQ, immediate
+
+    assert_eq!(bus.read16(0x0200_0000), 0);
+    assert_eq!(bus.dma_source_address(0), Some(0));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0200_0002));
+    assert_eq!(bus.interrupt_request_flags() & (1 << 8), 1 << 8);
+    assert_eq!(bus.dma_enabled(0), Some(false));
+}
