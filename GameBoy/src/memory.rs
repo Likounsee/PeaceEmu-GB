@@ -5075,4 +5075,35 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0130), 0xFC00);
         assert_eq!(bus.read8(0x0400_0131), 0xFC);
     }
+
+    #[test]
+    fn direct_sound_fifo_is_little_endian_bounded_and_resettable() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080); // Enable master sound.
+        bus.write32(0x0400_00A0, 0x807F_01FF);
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+        assert_eq!(bus.audio_fifo_status(0).unwrap().queued_bytes, 4);
+        assert_eq!(bus.audio_fifo_status(0).unwrap().last_sample, 0);
+
+        for _ in 0..10 {
+            bus.write32(0x0400_00A0, 0x1122_3344);
+        }
+        assert_eq!(bus.audio_fifo_len(0), Some(32));
+        bus.write16(0x0400_0082, 1 << 11); // FIFO A reset is a write-one command.
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
+        assert_eq!(bus.read16(0x0400_0082) & (1 << 11), 0);
+    }
+
+    #[test]
+    fn timer_byte_writes_preserve_other_reload_byte_and_control_bits() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0100, 0x1234);
+        bus.write8(0x0400_0100, 0xAB);
+        assert_eq!(bus.timer_reload_value(0), Some(0x12AB));
+        bus.write8(0x0400_0102, 0xC7);
+        assert_eq!(bus.read16(0x0400_0102) & 0x00C3, 0x00C3);
+        assert_eq!(bus.read16(0x0400_0102) & !0x00C3, 0);
+    }
+
 }

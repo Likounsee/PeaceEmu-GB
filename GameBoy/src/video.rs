@@ -3383,4 +3383,30 @@ mod tests {
         assert!(!malformed.set_pixel(0, 0, 0xFFFFFFFF));
         assert_eq!(malformed.pixels, vec![0xFF12_3456, 0xFFAB_CDEF]);
     }
+
+    #[test]
+    fn bitmap_mode3_enabled_bg2_reads_first_and_last_framebuffer_pixels() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 3 | (1 << 10));
+        bus.write16(VRAM_BASE, 0x001F);
+        bus.write16(VRAM_BASE + ((SCREEN_WIDTH * SCREEN_HEIGHT - 1) * 2) as u32, 0x7C00);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+        assert_eq!(frame.pixel(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1), Some(0xFF00_00FF));
+    }
+
+    #[test]
+    fn forced_blank_overrides_invalid_display_mode_and_ignores_vram_contents() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 7 | (1 << 7));
+        bus.write16(VRAM_BASE, 0x001F);
+        let frame = render_bitmap_frame(&bus).expect("forced blank is renderable in every mode");
+        assert_eq!(frame.pixel(0, 0), Some(0xFFFF_FFFF));
+        assert_eq!(
+            frame.pixel(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1),
+            Some(0xFFFF_FFFF)
+        );
+    }
+
 }

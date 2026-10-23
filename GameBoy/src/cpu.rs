@@ -6512,4 +6512,48 @@ mod tests {
         assert!(!cpu.is_halted());
         assert_eq!(bus.pending_interrupts(), 1 << 1);
     }
+
+    #[test]
+    fn bios_cpu_set_supports_word_fill_and_preserves_neighboring_memory() {
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0200_0000, 0xA1B2_C3D4);
+        bus.write32(0x0300_0010, 0xDEAD_BEEF);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0x0200_0000);
+        cpu.set_register(1, 0x0300_0000);
+        cpu.set_register(2, (1 << 24) | (1 << 26) | 4);
+        cpu.execute_swi(0x0200_0100, 0xEF00_000B, 0x0B, false, &mut bus)
+            .unwrap();
+
+        for index in 0..4 {
+            assert_eq!(bus.read32(0x0300_0000 + index * 4), 0xA1B2_C3D4);
+        }
+        assert_eq!(bus.read32(0x0300_0010), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn bios_cpu_fast_set_rounds_copy_length_up_to_eight_words() {
+        let mut bus = bus_with_program(&[]);
+        for index in 0..17 {
+            bus.write32(0x0200_0000 + index * 4, 0xCAFE_0000 | index);
+            bus.write32(0x0300_0000 + index * 4, 0xDEAD_BEEF);
+        }
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 0x0200_0000);
+        cpu.set_register(1, 0x0300_0000);
+        cpu.set_register(2, 9); // CpuFastSet rounds 9 words up to 16.
+        cpu.execute_swi(0x0200_0100, 0xEF00_000C, 0x0C, false, &mut bus)
+            .unwrap();
+
+        for index in 0..16 {
+            assert_eq!(
+                bus.read32(0x0300_0000 + index * 4),
+                0xCAFE_0000 | index
+            );
+        }
+        assert_eq!(bus.read32(0x0300_0040), 0xDEAD_BEEF);
+    }
+
 }
