@@ -7336,11 +7336,17 @@ mod tests {
         // The sound reset clears the modeled sound registers but preserves the
         // 16-byte Wave RAM window, so its work estimate excludes those bytes.
         cpu.set_register(0, 1 << 6);
-        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_0001, false, &bus), 1 + 2 * 0x40);
+        assert_eq!(
+            cpu.estimate_bios_swi_cycles(0xEF00_0001, false, &bus),
+            1 + 2 * 0x40
+        );
 
         // General I/O reset covers 0x400 bytes minus sound and SIO windows.
         cpu.set_register(0, 1 << 7);
-        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_0001, false, &bus), 1 + 2 * 0x3A0);
+        assert_eq!(
+            cpu.estimate_bios_swi_cycles(0xEF00_0001, false, &bus),
+            1 + 2 * 0x3A0
+        );
     }
 
     #[test]
