@@ -6443,6 +6443,33 @@ mod tests {
     }
 
     #[test]
+    fn bios_cpu_set_hle_cycles_advance_timers_and_match_transfer_work() {
+        let mut bus = bus_with_program(&[0xEF00_000B]); // SWI CpuSet.
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.set_register(2, (1 << 26) | 4); // Four word copies.
+        for index in 0..4 {
+            bus.write32(0x0200_0100 + index * 4, 0x1234_0000 + index);
+        }
+        bus.write16(0x0400_0100, 0xFFFF); // Timer 0 overflows on each cycle.
+        bus.write16(0x0400_0102, 0x0080); // Enable, prescaler 1.
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+
+        assert!(matches!(outcome, StepOutcome::Executed { .. }));
+        assert_eq!(cycles, 9); // Base + one read and one write per word.
+        for index in 0..4 {
+            assert_eq!(
+                bus.read32(0x0200_0200 + index * 4),
+                0x1234_0000 + index
+            );
+        }
+        assert_eq!(bus.read16(0x0400_0100), 0xFFFF);
+        assert!(bus.timer_counter(0).unwrap() >= 0xFFFF);
+    }
+
+    #[test]
     fn bios_cpu_fast_set_rounds_count_up_to_eight_words() {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
