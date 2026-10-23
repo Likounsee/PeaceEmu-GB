@@ -3367,10 +3367,22 @@ mod tests {
         let mut machine = GbaMachine::new(cartridge());
         let before = machine.diagnostic_snapshot();
 
-        assert_eq!(machine.run_until_audio_fifo_at_least(2, 1, 64).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_at_most(2, 0, 64).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_at_least(0, 33, 64).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_at_most(0, 33, 64).unwrap(), None);
+        assert_eq!(
+            machine.run_until_audio_fifo_at_least(2, 1, 64).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_most(2, 0, 64).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_least(0, 33, 64).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_most(0, 33, 64).unwrap(),
+            None
+        );
 
         let after = machine.diagnostic_snapshot();
         assert_eq!(after.instructions_executed, before.instructions_executed);
