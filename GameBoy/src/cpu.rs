@@ -6252,6 +6252,44 @@ mod tests {
     }
 
     #[test]
+    fn bios_register_ram_reset_clears_only_selected_regions() {
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0200_0100, 0x1234_5678);
+        bus.write32(0x0300_0100, 0x2345_6789);
+        bus.write16(0x0500_0010, 0x3456);
+        bus.write16(0x0600_0010, 0x4567);
+        bus.write16(0x0700_0010, 0x5678);
+        bus.write8(0x0E00_0010, 0x67);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, (1 << 0) | (1 << 2) | (1 << 8));
+        cpu.execute_swi(0x0200_0200, 0xEF00_0001, 0x01, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read32(0x0200_0100), 0);
+        assert_eq!(bus.read16(0x0500_0010), 0);
+        assert_eq!(bus.read8(0x0E00_0010), 0);
+        assert_eq!(bus.read32(0x0300_0100), 0x2345_6789);
+        assert_eq!(bus.read16(0x0600_0010), 0x4567);
+        assert_eq!(bus.read16(0x0700_0010), 0x5678);
+    }
+
+    #[test]
+    fn bios_register_ram_reset_zero_flags_leave_memory_untouched() {
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0200_0100, 0xCAFE_BABE);
+        bus.write16(0x0500_0010, 0xABCD);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0001, 0x01, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read32(0x0200_0100), 0xCAFE_BABE);
+        assert_eq!(bus.read16(0x0500_0010), 0xABCD);
+    }
+
+    #[test]
     fn bios_sqrt_handles_zero_perfect_squares_and_u32_max() {
         let mut bus = bus_with_program(&[]);
         let mut cpu = Cpu::new();
