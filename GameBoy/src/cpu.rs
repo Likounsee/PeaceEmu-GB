@@ -93,6 +93,8 @@ pub struct CpuSnapshot {
     pub thumb: bool,
     /// Whether BIOS Halt is active and waiting for an enabled interrupt.
     pub halted: bool,
+    /// Whether BIOS Stop is active and waiting for an enabled keypad interrupt.
+    pub stopped: bool,
     /// Interrupt sources selected by BIOS IntrWait/VBlankIntrWait, if any.
     pub bios_wait_mask: Option<u16>,
     /// Stored program-counter value.
@@ -110,6 +112,8 @@ pub struct Cpu {
     thumb: bool,
     /// True after BIOS Halt (SWI 0x02) until an enabled interrupt is pending.
     halted: bool,
+    /// True after BIOS Stop (SWI 0x03) until an enabled keypad interrupt is pending.
+    stopped: bool,
     /// Interrupt mask awaited by BIOS IntrWait/VBlankIntrWait, if any.
     bios_wait_mask: Option<u16>,
     /// Expected address of the next sequential instruction fetch and its state.
@@ -132,6 +136,7 @@ impl Cpu {
             flags: ConditionFlags::default(),
             thumb: false,
             halted: false,
+            stopped: false,
             bios_wait_mask: None,
             last_fetch_next: None,
         }
@@ -144,6 +149,7 @@ impl Cpu {
         self.flags = ConditionFlags::default();
         self.thumb = false;
         self.halted = false;
+        self.stopped = false;
         self.bios_wait_mask = None;
         self.last_fetch_next = None;
     }
@@ -183,6 +189,7 @@ impl Cpu {
             // explicitly resumes execution from the new address.
             self.last_fetch_next = None;
             self.halted = false;
+            self.stopped = false;
             self.bios_wait_mask = None;
         }
         self.registers[index] = if index == 15 {
@@ -199,10 +206,15 @@ impl Cpu {
 
     /// Returns whether BIOS Halt has stopped instruction execution.
     ///
-    /// A debugger CPU snapshot does not preserve this wait state; full machine
-    /// save states do, because they clone the complete CPU.
+    /// A debugger CPU snapshot preserves this wait state; full machine save
+    /// states preserve all CPU state because they clone the complete CPU.
     pub fn is_halted(&self) -> bool {
         self.halted
+    }
+
+    /// Returns whether BIOS Stop is waiting for an enabled keypad interrupt.
+    pub fn is_stopped(&self) -> bool {
+        self.stopped
     }
 
     /// Returns whether the CPU is currently executing Thumb instructions.
@@ -218,6 +230,7 @@ impl Cpu {
         // This API is for an external loader/debugger, not an instruction.
         // A state change therefore also releases a BIOS wait at the old PC.
         self.halted = false;
+        self.stopped = false;
         self.bios_wait_mask = None;
         self.thumb = thumb;
         self.last_fetch_next = None;
@@ -248,6 +261,7 @@ impl Cpu {
             cpsr: self.cpsr_flags(),
             thumb: self.thumb,
             halted: self.halted,
+            stopped: self.stopped,
             bios_wait_mask: self.bios_wait_mask,
             pc: self.registers[15],
         }
@@ -270,6 +284,7 @@ impl Cpu {
         };
         self.flags = snapshot.flags;
         self.halted = snapshot.halted;
+        self.stopped = snapshot.stopped;
         self.bios_wait_mask = snapshot.bios_wait_mask;
         self.last_fetch_next = None;
     }
@@ -291,6 +306,16 @@ impl Cpu {
         &mut self,
         bus: &mut MemoryBus,
     ) -> Result<(StepOutcome, u32), CpuError> {
+        if self.stopped {
+            // STOP only resumes on an enabled keypad interrupt (IE & IF bit 12).
+            // Timers and the PPU are not enough to wake the processor from STOP.
+            if bus.pending_interrupts() & (1 << 12) == 0 {
+                bus.advance_cycles(1);
+                return Ok((StepOutcome::Halted, 1));
+            }
+            self.stopped = false;
+            self.last_fetch_next = None;
+        }
         if self.halted {
             let pending = bus.pending_interrupts();
             if let Some(mask) = self.bios_wait_mask {
@@ -1729,10 +1754,17 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
-            // Halt: stop fetching instructions until an enabled interrupt is requested.
+            // Halt: stop fetching instructions until any enabled interrupt is requested.
             0x02 => {
+                self.stopped = false;
                 self.bios_wait_mask = None;
                 self.halted = true;
+            }
+            // Stop suspends the CPU until an enabled keypad IRQ wakes it.
+            0x03 => {
+                self.halted = false;
+                self.bios_wait_mask = None;
+                self.stopped = true;
             }
             // IntrWait: R0 requests clearing old IF flags; R1 selects sources.
             0x04 | 0x05 => {
@@ -3058,6 +3090,44 @@ mod tests {
         assert!(!cpu.is_halted());
         cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(cpu.register(0), Some(7));
+    }
+
+    #[test]
+    fn bios_stop_only_wakes_on_enabled_keypad_interrupt_and_survives_snapshot() {
+        let mut bus = bus_with_program(&[0xEF00_0003, 0xE3A0_0007]); // Stop; MOV r0, #7.
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+
+        let (stop, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(stop, StepOutcome::Executed { .. }));
+        assert!(cpu.is_stopped());
+        assert!(!cpu.is_halted());
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+
+        let snapshot = cpu.snapshot();
+        let mut restored = Cpu::new();
+        restored.restore_snapshot(snapshot);
+        assert!(restored.is_stopped());
+
+        // VBlank can be enabled and pending, but it must not wake STOP.
+        bus.write16(0x0400_0200, 1 << 0);
+        bus.request_interrupt(1 << 0);
+        let (idle, cycles) = restored.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(idle, StepOutcome::Halted);
+        assert_eq!(cycles, 1);
+        assert!(restored.is_stopped());
+        assert_eq!(restored.register(0), Some(0));
+
+        // KEYCNT requests an IRQ when A is pressed; IE must also enable bit 12.
+        bus.write16(0x0400_0132, 0x4001);
+        bus.write16(0x0400_0200, 1 << 12);
+        bus.set_button_pressed(crate::GbaButton::A, true);
+        assert_ne!(bus.interrupt_request_flags() & (1 << 12), 0);
+
+        let (resumed, _) = restored.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(resumed, StepOutcome::Executed { .. }));
+        assert!(!restored.is_stopped());
+        assert_eq!(restored.register(0), Some(7));
     }
 
     #[test]
