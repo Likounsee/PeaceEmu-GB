@@ -6336,6 +6336,57 @@ mod tests {
     }
 
     #[test]
+    fn bios_intr_wait_returns_immediately_for_an_already_pending_match() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
+        bus.request_interrupt((1 << 0) | (1 << 1));
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 1 << 0);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_0004, 0x04, false, &mut bus)
+            .unwrap();
+
+        assert!(!cpu.is_halted());
+        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(bus.pending_interrupts(), 1 << 1);
+    }
+
+    #[test]
+    fn bios_cpu_set_copies_and_fills_aligned_words() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        for (index, value) in [0x1234_5678_u32, 0xABCD_EF01, 0x0BAD_F00D]
+            .into_iter()
+            .enumerate()
+        {
+            bus.write32(source + index as u32 * 4, value);
+        }
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source + 1);
+        cpu.set_register(1, destination + 3);
+        cpu.set_register(2, (1 << 26) | 3);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000B, 0x0B, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read32(destination), 0x1234_5678);
+        assert_eq!(bus.read32(destination + 4), 0xABCD_EF01);
+        assert_eq!(bus.read32(destination + 8), 0x0BAD_F00D);
+
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination + 0x20);
+        cpu.set_register(2, (1 << 24) | (1 << 26) | 3);
+        cpu.execute_swi(0x0200_0204, 0xEF00_000B, 0x0B, false, &mut bus)
+            .unwrap();
+        for index in 0..3_u32 {
+            assert_eq!(bus.read32(destination + 0x20 + index * 4), 0x1234_5678);
+        }
+    }
+
+    #[test]
     fn bios_intr_wait_ignores_unselected_interrupts_and_consumes_match() {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
