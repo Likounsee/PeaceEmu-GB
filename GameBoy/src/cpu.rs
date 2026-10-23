@@ -7400,6 +7400,14 @@ mod tests {
             cpu.estimate_bios_swi_cycles(0xEF00_0001, false, &bus),
             1 + 2 * 0x3A0
         );
+
+        // Independent SIO, sound (excluding Wave RAM), and general-I/O flags
+        // must each contribute only their own reset workload.
+        cpu.set_register(0, (1 << 5) | (1 << 6) | (1 << 7));
+        assert_eq!(
+            cpu.estimate_bios_swi_cycles(0xEF00_0001, false, &bus),
+            1 + 2 * (0x10 + 0x30 + 0x3A0)
+        );
     }
 
     #[test]
