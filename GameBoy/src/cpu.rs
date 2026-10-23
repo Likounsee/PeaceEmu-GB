@@ -6252,7 +6252,7 @@ mod tests {
     }
 
     #[test]
-    fn bios_register_ram_reset_clears_only_selected_regions() {
+    fn bios_register_ram_reset_clears_ewram_palette_and_sram_only() {
         let mut bus = bus_with_program(&[]);
         bus.write32(0x0200_0100, 0x1234_5678);
         bus.write32(0x0300_0100, 0x2345_6789);
