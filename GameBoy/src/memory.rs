@@ -4149,7 +4149,7 @@ mod tests {
 
     #[test]
     fn gamepak_width_timing_covers_rom_sram_and_boundary_rejection() {
-        let mut bus = MemoryBus::new(cartridge());
+        let bus = MemoryBus::new(cartridge());
 
         // Default WAITCNT: ROM0 non-sequential=4, sequential=2; a word
         // consists of one non-sequential and one sequential halfword.
