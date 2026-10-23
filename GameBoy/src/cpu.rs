@@ -2073,10 +2073,6 @@ impl Cpu {
                     }
                 }
             }
-            // BIOS checksum SWI returns the fixed checksum of the original GBA BIOS.
-            0x0D => {
-                self.registers[0] = 0xBAAE_187F;
-            }
             // SoundBias selects the DAC midpoint while preserving non-bias register bits.
             0x19 => {
                 let current = bus.read16(0x0400_0088);
