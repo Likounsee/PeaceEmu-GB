@@ -6989,7 +6989,7 @@ mod tests {
     #[test]
     fn bios_midi_key_to_frequency_returns_reference_frequency_and_octaves() {
         let mut bus = bus_with_program(&[]);
-        let wave = 0x0200_1000;
+        let wave: u32 = 0x0200_1000;
         bus.write32(wave.wrapping_add(4), 48_000);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0200);
@@ -7017,7 +7017,7 @@ mod tests {
     #[test]
     fn bios_midi_key_to_frequency_applies_fine_adjustment() {
         let mut bus = bus_with_program(&[]);
-        let wave = 0x0200_1000;
+        let wave: u32 = 0x0200_1000;
         bus.write32(wave.wrapping_add(4), 12_000);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0200);
