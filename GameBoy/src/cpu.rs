@@ -6979,18 +6979,21 @@ mod tests {
         cpu.set_register(0, wave);
         cpu.set_register(1, 180);
         cpu.set_register(2, 0);
-        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
         assert_eq!(cpu.register(0), Some(48_000));
         assert_eq!(cpu.register(15), Some(0x0200_0204));
 
         cpu.set_register(0, wave);
         cpu.set_register(1, 168);
-        cpu.execute_swi(0x0200_0204, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        cpu.execute_swi(0x0200_0204, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
         assert_eq!(cpu.register(0), Some(24_000));
 
         cpu.set_register(0, wave);
         cpu.set_register(1, 192);
-        cpu.execute_swi(0x0200_0208, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        cpu.execute_swi(0x0200_0208, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
         assert_eq!(cpu.register(0), Some(96_000));
     }
 
@@ -7004,7 +7007,8 @@ mod tests {
         cpu.set_register(0, wave);
         cpu.set_register(1, 180);
         cpu.set_register(2, 128);
-        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
         let actual = cpu.register(0).unwrap();
         let expected = (12_000.0_f64 * 2.0_f64.powf(0.5 / 12.0)).round() as u32;
         assert_eq!(actual, expected);
