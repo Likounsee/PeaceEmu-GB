@@ -751,6 +751,50 @@ impl Cpu {
             return 1;
         }
 
+        // BIOS HLE routines still occupy CPU time. Estimate the cost of the
+        // memory-heavy services from their arguments instead of charging every
+        // SWI a single ALU cycle; peripheral timers must advance during large
+        // CpuSet/CpuFastSet/RegisterRamReset operations.
+        if instruction & 0x0F00_0000 == 0x0F00_0000 {
+            match instruction & 0x00FF_FFFF {
+                0x01 => {
+                    let flags = self.registers[0];
+                    let bytes = [
+                        (1 << 0, 256_u32 * 1024),
+                        (1 << 1, 32 * 1024),
+                        (1 << 2, 1024),
+                        (1 << 3, 96 * 1024),
+                        (1 << 4, 1024),
+                        (1 << 8, 32 * 1024),
+                    ]
+                    .iter()
+                    .filter(|(flag, _)| flags & flag != 0)
+                    .fold(0_u32, |total, (_, length)| total.saturating_add(*length));
+                    if bytes != 0 {
+                        return 1_u32.saturating_add(bytes.saturating_mul(2));
+                    }
+                }
+                0x0B | 0x0C => {
+                    let control = self.registers[2];
+                    let fill = control & (1 << 24) != 0;
+                    let count = if instruction & 0x00FF_FFFF == 0x0C {
+                        (control & 0x001F_FFFF).saturating_add(7) & !7
+                    } else {
+                        control & 0x001F_FFFF
+                    };
+                    let word = instruction & 0x00FF_FFFF == 0x0C
+                        || control & (1 << 26) != 0;
+                    // A fill reads one source element; a copy reads each
+                    // element. Every output element also incurs a write.
+                    let per_element = if fill { 1 } else { 2 };
+                    return 1_u32.saturating_add(
+                        count.saturating_mul(per_element).saturating_add(u32::from(word)),
+                    );
+                }
+                _ => {}
+            }
+        }
+
         // ARM branch and branch-with-link require a pipeline refill.
         if instruction & 0x0E00_0000 == 0x0A00_0000 {
             return 3;
