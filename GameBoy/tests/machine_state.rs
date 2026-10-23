@@ -79,7 +79,10 @@ fn cycle_runner_executes_whole_instruction_and_reports_its_cycles() {
     let elapsed = machine.run_for_cycles(1).unwrap();
 
     assert!(elapsed >= 1);
-    assert_eq!(machine.diagnostic_snapshot().cycles_elapsed, u64::from(elapsed));
+    assert_eq!(
+        machine.diagnostic_snapshot().cycles_elapsed,
+        u64::from(elapsed)
+    );
     assert_eq!(machine.diagnostic_snapshot().instructions_executed, 1);
 }
 
