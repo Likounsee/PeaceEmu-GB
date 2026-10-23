@@ -222,8 +222,14 @@ mod tests {
         assert_eq!(SaveType::detect(b"SRAM_"), None);
         assert_eq!(SaveType::detect(b"EEPROM_"), None);
         assert_eq!(SaveType::detect(b"FLASH1M_"), None);
-        assert_eq!(SaveType::detect(b"prefix\0EEPROM_V\0suffix"), Some(SaveType::Eeprom));
-        assert_eq!(SaveType::detect(b"prefix\0FLASH512_V\0SRAM_V"), Some(SaveType::Flash64K));
+        assert_eq!(
+            SaveType::detect(b"prefix\0EEPROM_V\0suffix"),
+            Some(SaveType::Eeprom)
+        );
+        assert_eq!(
+            SaveType::detect(b"prefix\0FLASH512_V\0SRAM_V"),
+            Some(SaveType::Flash64K)
+        );
     }
 
     #[test]

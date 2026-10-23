@@ -5083,6 +5083,9 @@ mod tests {
         bus.write16(0x0400_0082, (1 << 9) | (1 << 8) | (1 << 2));
         bus.write32(0x0400_00A0, 0x2020_2020);
         bus.write32(0x0400_00A4, 0x1010_1010);
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
         let (left, right) = bus.direct_sound_stereo_sample();
         assert_ne!(left, 0);
         assert_ne!(right, 0);
