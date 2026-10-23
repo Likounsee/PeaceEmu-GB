@@ -4927,6 +4927,22 @@ mod tests {
     }
 
     #[test]
+    fn word_interrupt_and_waitstate_writes_keep_register_masks_and_side_effects() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // STR to IE writes its low halfword, while the high halfword is IF
+        // with write-one-to-clear semantics rather than ordinary RAM storage.
+        bus.request_interrupt((1 << 0) | (1 << 9) | (1 << 12));
+        bus.write32(0x0400_0200, 0x0000_0205);
+        assert_eq!(bus.interrupt_enable_mask(), 0x0205);
+        assert_eq!(bus.interrupt_request_flags(), (1 << 0) | (1 << 12));
+
+        // WAITCNT is 15-bit; the reserved top bit must read as zero.
+        bus.write16(0x0400_0204, 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0204), 0x7FFF);
+    }
+
+    #[test]
     fn disabling_and_reenabling_timer_discards_partial_prescaler_phase() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0100, 0xFFFE);
