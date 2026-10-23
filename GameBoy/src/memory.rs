@@ -1089,6 +1089,14 @@ impl MemoryBus {
     /// DISPSTAT/VCOUNT and enabled HBlank, VBlank, and VCOUNT-match IRQs. The caller
     /// supplies elapsed CPU cycles; instruction-specific bus wait states are not yet modeled.
     pub fn advance_cycles(&mut self, cycles: u32) {
+        // Most instructions execute with all hardware timers disabled. In that
+        // common case, jump between PPU transition edges instead of iterating
+        // once per CPU cycle; HBlank/VBlank DMA and IRQ edges remain exact.
+        if self.timer_control.iter().all(|control| control & 0x0080 == 0) {
+            self.advance_video_cycles_without_timers(cycles);
+            return;
+        }
+
         for _ in 0..cycles {
             self.advance_video_cycle();
             let mut previous_overflow = false;
@@ -1132,6 +1140,30 @@ impl MemoryBus {
                         self.timer_counter[timer] = next;
                     }
                 }
+            }
+        }
+    }
+
+    /// Advances PPU time in chunks when no enabled timer requires per-cycle work.
+    fn advance_video_cycles_without_timers(&mut self, cycles: u32) {
+        let mut remaining = cycles;
+        while remaining != 0 {
+            let next_edge = if self.video_cycles_in_line < 960 {
+                960
+            } else {
+                1232
+            };
+            let distance = u32::from(next_edge - self.video_cycles_in_line);
+            let step = remaining.min(distance);
+            self.video_cycles_in_line += step as u16;
+            remaining -= step;
+
+            if self.video_cycles_in_line == 960 {
+                self.enter_hblank();
+            }
+            if self.video_cycles_in_line == 1232 {
+                self.video_cycles_in_line = 0;
+                self.finish_scanline();
             }
         }
     }
@@ -1306,22 +1338,27 @@ impl MemoryBus {
     fn advance_video_cycle(&mut self) {
         self.video_cycles_in_line += 1;
         if self.video_cycles_in_line == 960 {
-            self.dispstat |= 1 << 1;
-            // HBlank DMA transfers are for visible scanlines only. HBlank
-            // status and its IRQ still occur during VBlank, but the DMA
-            // request must not start another display transfer there.
-            if self.vcount < 160 {
-                self.trigger_dma_timing(2);
-            }
-            if self.dispstat & (1 << 4) != 0 {
-                self.request_interrupt(1 << 1);
-            }
+            self.enter_hblank();
         }
-        if self.video_cycles_in_line < 1232 {
-            return;
+        if self.video_cycles_in_line == 1232 {
+            self.video_cycles_in_line = 0;
+            self.finish_scanline();
         }
+    }
 
-        self.video_cycles_in_line = 0;
+    fn enter_hblank(&mut self) {
+        self.dispstat |= 1 << 1;
+        // HBlank DMA transfers are for visible scanlines only. HBlank status
+        // and its IRQ still occur during VBlank, but DMA must not fire there.
+        if self.vcount < 160 {
+            self.trigger_dma_timing(2);
+        }
+        if self.dispstat & (1 << 4) != 0 {
+            self.request_interrupt(1 << 1);
+        }
+    }
+
+    fn finish_scanline(&mut self) {
         self.vcount += 1;
         if self.vcount == 228 {
             self.vcount = 0;
@@ -3049,6 +3086,25 @@ mod tests {
         assert_eq!(bus.read32(0x0400_00B4), 0x0300_0000);
         assert_eq!(bus.read16(0x0400_00B8), 1);
         assert_eq!(bus.read16(0x0400_00BA) & 0x8000, 0x8000);
+    }
+
+    #[test]
+    fn timerless_video_cycle_batching_matches_cycle_by_cycle_reference() {
+        let mut fast = MemoryBus::new(cartridge());
+        fast.write16(0x0400_0004, (1 << 3) | (1 << 4) | (1 << 5) | (160 << 8));
+        fast.advance_cycles(1232 * 159 + 959);
+        let mut reference = fast.clone();
+
+        for cycles in [1, 1, 273, 1232, 1232 * 70 + 960, 1232 * 100 + 1231] {
+            fast.advance_cycles(cycles);
+            for _ in 0..cycles {
+                reference.advance_video_cycle();
+            }
+            assert_eq!(fast.video_cycles_in_line, reference.video_cycles_in_line);
+            assert_eq!(fast.vcount, reference.vcount);
+            assert_eq!(fast.dispstat, reference.dispstat);
+            assert_eq!(fast.interrupt_request_flags(), reference.interrupt_request_flags());
+        }
     }
 
     #[test]
