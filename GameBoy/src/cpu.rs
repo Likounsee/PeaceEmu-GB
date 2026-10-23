@@ -748,6 +748,31 @@ impl Cpu {
                 .fold(0_u32, |total, (_, length)| total.saturating_add(*length));
                 1_u32.saturating_add(bytes.saturating_mul(2))
             }
+            0x06 | 0x07 => {
+                // BIOS division uses a variable-iteration signed division
+                // routine. DivArm swaps R0/R1 before evaluating the operands.
+                let (numerator, denominator) = if swi == 0x07 {
+                    (self.registers[1] as i32, self.registers[0] as i32)
+                } else {
+                    (self.registers[0] as i32, self.registers[1] as i32)
+                };
+                if denominator == 0 {
+                    12
+                } else {
+                    let numerator_bits = 32 - numerator.unsigned_abs().leading_zeros();
+                    let denominator_bits = 32 - denominator.unsigned_abs().leading_zeros();
+                    12 + numerator_bits.max(denominator_bits)
+                }
+            }
+            0x08 => {
+                // Integer square root uses a logarithmic number of refinement
+                // steps; bound the estimate even for the largest input.
+                let value = self.registers[0];
+                let bits = 32 - value.leading_zeros();
+                4 + bits.div_ceil(2) * 2
+            }
+            0x09 => 12, // ArcTan fixed-point polynomial.
+            0x0A => 24, // ArcTan2 performs more range/quadrant handling.
             0x0B | 0x0C => {
                 let control = self.registers[2];
                 let fill = control & (1 << 24) != 0;
@@ -7422,6 +7447,37 @@ mod tests {
         assert_eq!(cpu.estimate_bios_swi_cycles(0xDF11, true, &bus), 1 + 32 * 3);
         assert_eq!(cpu.estimate_bios_swi_cycles(0xE1A0_0000, false, &bus), 1);
         assert_eq!(cpu.estimate_bios_swi_cycles(0x2000, true, &bus), 1);
+    }
+
+    #[test]
+    fn bios_math_cycle_estimates_scale_with_operand_complexity() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.set_register(0, 7);
+        cpu.set_register(1, 2);
+        assert!(cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus)
+            < cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus) + 1);
+        let small_div = cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus);
+        cpu.set_register(0, i32::MIN as u32);
+        let large_div = cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus);
+        assert!(large_div >= small_div);
+        assert_eq!(
+            cpu.estimate_bios_swi_cycles(0xEF00_0007, false, &bus),
+            12 + (32 - (i32::MIN).unsigned_abs().leading_zeros()).max(32 - 7_u32.leading_zeros())
+        );
+
+        cpu.set_register(0, 0);
+        let zero_sqrt = cpu.estimate_bios_swi_cycles(0xEF00_0008, false, &bus);
+        cpu.set_register(0, u32::MAX);
+        let max_sqrt = cpu.estimate_bios_swi_cycles(0xEF00_0008, false, &bus);
+        assert!(max_sqrt > zero_sqrt);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xDF08, true, &bus), max_sqrt);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_0009, false, &bus), 12);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_000A, false, &bus), 24);
+        // Estimation is observational: it must not mutate registers or bus state.
+        assert_eq!(cpu.register(0), Some(u32::MAX));
+        bus.write16(0x0400_0100, 0xFFFE);
+        assert_eq!(bus.timer_counter(0), Some(0));
     }
 
     #[test]
