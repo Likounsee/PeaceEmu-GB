@@ -7669,7 +7669,7 @@ mod tests {
         });
         cpu.set_execution_state(true);
 
-        cpu.execute_swi(0x0200_0200, 0xEF00_0000, 0x00, false, &mut bus)
+        cpu.execute_swi(0x0200_0200, 0xDF00, 0x00, true, &mut bus)
             .unwrap();
 
         assert_eq!(cpu.register(15), Some(0x0800_0000));
