@@ -203,20 +203,21 @@ impl GbaMachine {
         Ok(elapsed)
     }
 
-    /// Executes instructions until at least `cycle_budget` estimated cycles have elapsed.
-    ///
-    /// Since instructions are indivisible at this API level, the returned cycle
-    /// count can exceed the budget by the final instruction's estimated duration.
-    /// A zero budget performs no work. Peripheral timing advances through
-    /// `step` for every executed instruction.
     /// Executes whole instructions until at least `cycle_budget` cycles have elapsed.
     ///
     /// Since instructions cannot be split, the returned count can exceed the requested budget
     /// by the remaining cycles of the final instruction. A zero budget executes nothing.
+    /// If STOP freezes the system clock, returns the elapsed cycles so far (possibly zero)
+    /// instead of spinning while peripherals are paused.
     pub fn run_for_cycles(&mut self, cycle_budget: u64) -> Result<u64, CpuError> {
         let mut elapsed = 0_u64;
         while elapsed < cycle_budget {
-            elapsed = elapsed.saturating_add(u64::from(self.step()?));
+            let cycles = self.step()?;
+            if cycles == 0 {
+                // STOP suspends the GBA system clock until a keypad IRQ arrives.
+                break;
+            }
+            elapsed = elapsed.saturating_add(u64::from(cycles));
         }
         Ok(elapsed)
     }
