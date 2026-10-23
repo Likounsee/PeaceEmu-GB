@@ -1882,6 +1882,13 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
+            // SoftReset returns to the cartridge entry point. The emulator does
+            // not model banked mode stacks, so only the System stack is restored.
+            0x00 => {
+                self.reset(0x0800_0000);
+                self.registers[13] = 0x0300_7F00;
+                return Ok(());
+            }
             // Halt: stop fetching instructions until any enabled interrupt is requested.
             0x02 => {
                 self.stopped = false;
@@ -7644,6 +7651,33 @@ mod tests {
         assert_eq!(cpu.register(1), Some(0x8765_4321));
         assert_eq!(cpu.register(2), Some(0xA5A5_5A5A));
         assert_eq!(cpu.register(15), Some(0x0200_0204));
+    }
+
+    #[test]
+    fn bios_soft_reset_restarts_at_cartridge_entry_and_restores_system_stack() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0x1234_5678);
+        cpu.set_register(1, 0x8765_4321);
+        cpu.set_register(13, 0x0300_1000);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: true,
+            zero: true,
+            carry: true,
+            overflow: true,
+        });
+        cpu.set_execution_state(true);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_0000, 0x00, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(15), Some(0x0800_0000));
+        assert_eq!(cpu.register(13), Some(0x0300_7F00));
+        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(1), Some(0));
+        assert!(!cpu.is_thumb());
+        assert_eq!(cpu.flags(), ConditionFlags::default());
     }
 
     #[test]
