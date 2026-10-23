@@ -3405,9 +3405,9 @@ mod tests {
     fn zero_budget_interrupt_and_frame_waiters_do_not_advance_state() {
         let mut machine = GbaMachine::new(cartridge());
         let before = machine.diagnostic_snapshot();
-        assert_eq!(machine.run_until_interrupt(1), Ok(0));
+        assert_eq!(machine.run_until_interrupt(0), Ok(0));
         assert_eq!(machine.run_until_next_frame(0), Ok(None));
-        assert_eq!(machine.run_until_next_scanline(0), Ok(None));
+        assert_eq!(machine.run_until_next_scanline(1, 0), Ok(None));
         let after = machine.diagnostic_snapshot();
         assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
         assert_eq!(after.instructions_executed, before.instructions_executed);
