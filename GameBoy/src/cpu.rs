@@ -830,7 +830,8 @@ impl Cpu {
     fn estimate_cycles(&self, instruction: u32) -> u32 {
         // Conditional ARM instructions that fail still consume their fetch
         // cycle, but must not be charged for data transfers or pipeline work.
-        if !self.thumb && ((instruction >> 28) == 0xF || !self.condition_passed(instruction >> 28)) {
+        if !self.thumb && ((instruction >> 28) == 0xF || !self.condition_passed(instruction >> 28))
+        {
             return 1;
         }
 
