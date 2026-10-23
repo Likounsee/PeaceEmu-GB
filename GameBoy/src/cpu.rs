@@ -3309,7 +3309,10 @@ mod tests {
         let (idle, cycles) = restored.step_with_cycles(&mut bus).unwrap();
         assert_eq!(idle, StepOutcome::Halted);
         assert_eq!(cycles, 0);
-        assert_eq!((bus.video_scanline(), bus.video_cycles_into_scanline()), video_before);
+        assert_eq!(
+            (bus.video_scanline(), bus.video_cycles_into_scanline()),
+            video_before
+        );
         assert!(restored.is_stopped());
         assert_eq!(restored.register(0), Some(0));
 
