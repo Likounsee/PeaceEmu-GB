@@ -71,3 +71,23 @@ fn invalid_video_position_does_not_execute_instructions() {
     );
     assert_eq!(machine.diagnostic_snapshot(), before);
 }
+
+#[test]
+fn cycle_runner_executes_whole_instruction_and_reports_its_cycles() {
+    let mut machine = GbaMachine::new(looping_cartridge());
+
+    let elapsed = machine.run_for_cycles(1).unwrap();
+
+    assert!(elapsed >= 1);
+    assert_eq!(machine.diagnostic_snapshot().cycles_elapsed, u64::from(elapsed));
+    assert_eq!(machine.diagnostic_snapshot().instructions_executed, 1);
+}
+
+#[test]
+fn video_position_runner_returns_zero_if_already_at_target() {
+    let mut machine = GbaMachine::new(looping_cartridge());
+    let before = machine.diagnostic_snapshot();
+
+    assert_eq!(machine.run_until_video_position(0, 0, 10).unwrap(), Some(0));
+    assert_eq!(machine.diagnostic_snapshot(), before);
+}
