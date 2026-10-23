@@ -803,7 +803,7 @@ impl Cpu {
                     elements.saturating_mul(destination_width.saturating_add(2)) / 8,
                 )
             }
-            0x11..=0x17 => {
+            0x11..=0x18 => {
                 let source = self.registers[0];
                 let output_len = u32::from(bus.read8(source.wrapping_add(1)))
                     | (u32::from(bus.read8(source.wrapping_add(2))) << 8)
@@ -2112,10 +2112,14 @@ impl Cpu {
                 }
             }
             // Differential filters restore byte/halfword delta-compressed assets.
-            0x16 | 0x17 => {
+            0x16 | 0x17 | 0x18 => {
                 let source = self.registers[0];
                 let destination = self.registers[1];
-                let wide = swi == 0x17;
+                // Diff8bitUnFilterVRAM (0x17) still decodes byte deltas; only
+                // the destination write width differs. Diff16bitUnFilter is
+                // SWI 0x18 and consumes a 0x81-tagged halfword stream.
+                let wide = swi == 0x18;
+                let vram = swi == 0x17;
                 let header = bus.read32(source);
                 let expected_tag = if wide { 0x81 } else { 0x80 };
                 if header as u8 != expected_tag {
@@ -2144,11 +2148,36 @@ impl Cpu {
                 } else if output_size != 0 {
                     let mut accumulated = bus.read8(cursor);
                     cursor = cursor.wrapping_add(1);
-                    for index in 0..output_size {
-                        bus.write8(destination.wrapping_add(index as u32), accumulated);
-                        if index + 1 < output_size {
-                            accumulated = accumulated.wrapping_add(bus.read8(cursor));
-                            cursor = cursor.wrapping_add(1);
+                    if vram {
+                        let mut written = 0_usize;
+                        while written < output_size {
+                            let low = accumulated;
+                            let high = if written + 1 < output_size {
+                                let delta = bus.read8(cursor);
+                                cursor = cursor.wrapping_add(1);
+                                accumulated = accumulated.wrapping_add(delta);
+                                accumulated
+                            } else {
+                                0
+                            };
+                            bus.write16(
+                                destination.wrapping_add(written as u32) & !1,
+                                u16::from_le_bytes([low, high]),
+                            );
+                            written += 2;
+                            if written < output_size {
+                                let delta = bus.read8(cursor);
+                                cursor = cursor.wrapping_add(1);
+                                accumulated = accumulated.wrapping_add(delta);
+                            }
+                        }
+                    } else {
+                        for index in 0..output_size {
+                            bus.write8(destination.wrapping_add(index as u32), accumulated);
+                            if index + 1 < output_size {
+                                accumulated = accumulated.wrapping_add(bus.read8(cursor));
+                                cursor = cursor.wrapping_add(1);
+                            }
                         }
                     }
                 }
@@ -3973,8 +4002,8 @@ mod tests {
     }
 
     #[test]
-    fn bios_differential_filter_accumulates_wrapping_halfword_deltas() {
-        let mut bus = bus_with_program(&[0xEF00_0017]);
+    fn bios_diff16_filter_uses_swi_18_and_accumulates_halfword_deltas() {
+        let mut bus = bus_with_program(&[0xEF00_0018]);
         let source = 0x0200_0100;
         for (offset, byte) in [
             (0, 0x81),
@@ -3999,6 +4028,35 @@ mod tests {
         assert_eq!(bus.read16(0x0200_0200), 0xFFFE);
         assert_eq!(bus.read16(0x0200_0202), 0x0003);
         assert_eq!(bus.read16(0x0200_0204), 0x0005);
+    }
+
+    #[test]
+    fn bios_diff8_vram_filter_packs_byte_deltas_into_halfword_writes() {
+        let mut bus = bus_with_program(&[0xEF00_0017]);
+        let source = 0x0200_0100;
+        for (offset, byte) in [(0, 0x80), (1, 3), (2, 0), (3, 0), (4, 250), (5, 10), (6, 10)] {
+            bus.write8(source + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, 0x0600_0000);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read16(0x0600_0000), 0x04FA);
+        assert_eq!(bus.read16(0x0600_0002), 0x0018);
+    }
+
+    #[test]
+    fn bios_diff16_filter_rejects_byte_delta_header() {
+        let mut bus = bus_with_program(&[0xEF00_0018]);
+        let source = 0x0200_0100;
+        bus.write32(source, 4 << 8 | 0x80);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, 0x0200_0200);
+        assert!(cpu.step(&mut bus).is_err());
+        assert_eq!(bus.read32(0x0200_0200), 0);
     }
 
     #[test]
