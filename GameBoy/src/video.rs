@@ -3195,8 +3195,11 @@ mod tests {
 
             // A window can independently prohibit effects at the target pixel.
             bus.write16(0x0400_0000, mode | (1 << 10) | (1 << 13));
-            let (window_x_start, window_x_end, window_y_start, window_y_end) =
-                if mode == 5 { (40_u16, 48_u16, 16_u16, 17_u16) } else { (0, 8, 0, 1) };
+            let (window_x_start, window_x_end, window_y_start, window_y_end) = if mode == 5 {
+                (40_u16, 48_u16, 16_u16, 17_u16)
+            } else {
+                (0, 8, 0, 1)
+            };
             bus.write16(0x0400_0040, (window_x_end << 8) | window_x_start);
             bus.write16(0x0400_0044, (window_y_end << 8) | window_y_start);
             bus.write16(0x0400_0048, 1 << 2);
