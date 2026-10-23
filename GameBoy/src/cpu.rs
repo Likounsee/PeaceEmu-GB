@@ -91,6 +91,8 @@ pub struct CpuSnapshot {
     pub cpsr: u32,
     /// Whether the processor is in Thumb state.
     pub thumb: bool,
+    /// Whether BIOS Halt is active and waiting for an enabled interrupt.
+    pub halted: bool,
     /// Stored program-counter value.
     pub pc: u32,
 }
@@ -232,6 +234,7 @@ impl Cpu {
             flags: self.flags,
             cpsr: self.cpsr_flags(),
             thumb: self.thumb,
+            halted: self.halted,
             pc: self.registers[15],
         }
     }
@@ -240,8 +243,8 @@ impl Cpu {
     ///
     /// The program counter is aligned to the restored instruction state and the
     /// sequential-fetch hint is discarded, so the next instruction starts a
-    /// fresh bus fetch sequence. Banked registers, SPSRs, and unmodeled CPSR
-    /// fields are not part of a snapshot.
+    /// fresh bus fetch sequence. The BIOS Halt state is preserved. Banked
+    /// registers, SPSRs, and unmodeled CPSR fields are not part of a snapshot.
     pub fn restore_snapshot(&mut self, snapshot: CpuSnapshot) {
         self.registers = snapshot.registers;
         self.thumb = snapshot.thumb;
@@ -251,7 +254,7 @@ impl Cpu {
             snapshot.pc & !3
         };
         self.flags = snapshot.flags;
-        self.halted = false;
+        self.halted = snapshot.halted;
         self.last_fetch_next = None;
     }
 
@@ -5981,6 +5984,27 @@ mod tests {
     }
 
     #[test]
+    fn restoring_cpu_snapshot_preserves_bios_halt_state() {
+        let mut bus = bus_with_program(&[0xEF00_0002]); // SWI Halt.
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(cpu.is_halted());
+
+        let snapshot = cpu.snapshot();
+        assert!(snapshot.halted);
+
+        let mut restored = Cpu::new();
+        restored.restore_snapshot(snapshot);
+        assert!(restored.is_halted());
+
+        let (outcome, cycles) = restored.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(outcome, StepOutcome::Halted);
+        assert_eq!(cycles, 1);
+        assert_eq!(restored.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
     fn restoring_arm_snapshot_aligns_pc_and_clears_thumb_state() {
         let mut cpu = Cpu::new();
         cpu.restore_snapshot(CpuSnapshot {
@@ -5988,6 +6012,7 @@ mod tests {
             flags: ConditionFlags::default(),
             cpsr: 0,
             thumb: false,
+            halted: false,
             pc: 0x0800_0003,
         });
 
