@@ -6784,12 +6784,14 @@ mod tests {
             .unwrap();
         assert!(cpu.is_stopped());
 
-        cpu.set_register(15, 0x0800_0003);
+        // The execution-state setter itself must release STOP, independent of
+        // a separate debugger PC edit (which also resumes the CPU).
         cpu.set_execution_state(true);
         assert!(cpu.is_thumb());
         assert!(!cpu.is_stopped());
-        assert_eq!(cpu.register(15), Some(0x0800_0002));
 
+        assert!(cpu.set_register(15, 0x0800_0003));
+        assert_eq!(cpu.register(15), Some(0x0800_0002));
         cpu.set_execution_state(false);
         assert!(!cpu.is_thumb());
         assert_eq!(cpu.register(15), Some(0x0800_0000));
@@ -6819,8 +6821,8 @@ mod tests {
 
         assert!(cpu.is_thumb());
         assert_eq!(cpu.register(15), Some(0x0800_0002));
-        assert_eq!(cpu.cpsr_flags(), 0xF000_0020);
-        assert_eq!(cpu.snapshot().cpsr, 0xF000_0020);
+        assert_eq!(cpu.cpsr_flags(), 0xD000_0020);
+        assert_eq!(cpu.snapshot().cpsr, 0xD000_0020);
     }
 
 }
