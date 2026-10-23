@@ -1736,6 +1736,44 @@ mod tests {
     }
 
     #[test]
+    fn stopped_machine_freezes_peripherals_and_cycle_budget_returns_without_spinning() {
+        let mut rom = vec![0; GBA_HEADER_SIZE];
+        rom[0..4].copy_from_slice(&0xEF00_0003_u32.to_le_bytes()); // SWI Stop.
+        rom[0xA0..0xAC].copy_from_slice(b"STOP TEST   ");
+        rom[0xAC..0xB0].copy_from_slice(b"STPE");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+        machine.step().unwrap();
+        assert!(machine.cpu_snapshot().stopped);
+
+        let cycles_before = machine.cycles_elapsed();
+        let video_before = (
+            machine.bus().video_scanline(),
+            machine.bus().video_cycles_into_scanline(),
+        );
+        assert_eq!(machine.run_for_cycles(100).unwrap(), 0);
+        assert_eq!(machine.cycles_elapsed(), cycles_before);
+        assert_eq!(
+            (
+                machine.bus().video_scanline(),
+                machine.bus().video_cycles_into_scanline(),
+            ),
+            video_before
+        );
+
+        // An enabled keypad IRQ releases STOP; ordinary VBlank does not.
+        machine.bus_mut().write16(0x0400_0132, 0x4001);
+        machine.bus_mut().write16(0x0400_0200, 1 << 12);
+        machine.set_keys_pressed(1);
+        assert!(machine.run_for_cycles(1).unwrap() >= 1);
+        assert!(!machine.cpu_snapshot().stopped);
+    }
+
+    #[test]
     fn machine_can_restore_cpu_snapshot_without_rewinding_peripherals_or_counters() {
         let mut machine = GbaMachine::new(cartridge());
         let mut snapshot = machine.cpu_snapshot();
