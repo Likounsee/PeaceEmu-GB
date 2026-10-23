@@ -782,14 +782,10 @@ impl Cpu {
                     } else {
                         control & 0x001F_FFFF
                     };
-                    let word = instruction & 0x00FF_FFFF == 0x0C
-                        || control & (1 << 26) != 0;
                     // A fill reads one source element; a copy reads each
                     // element. Every output element also incurs a write.
                     let per_element = if fill { 1 } else { 2 };
-                    return 1_u32.saturating_add(
-                        count.saturating_mul(per_element).saturating_add(u32::from(word)),
-                    );
+                    return 1_u32.saturating_add(count.saturating_mul(per_element));
                 }
                 _ => {}
             }
@@ -6627,4 +6623,28 @@ mod tests {
         }
         assert_eq!(bus.read32(0x0300_0040), 0xDEAD_BEEF);
     }
+
+    #[test]
+    fn bios_memory_hle_cycle_estimates_scale_with_transfer_size() {
+        let mut cpu = Cpu::new();
+
+        // CpuSet: four-word copy costs one setup cycle plus a read/write pair
+        // for each word, rather than the old fixed one-cycle SWI estimate.
+        cpu.set_register(2, (1 << 26) | 4);
+        assert_eq!(cpu.estimate_cycles(0xEF00_000B), 9);
+
+        // Fill reads the source once and writes each of four destination words.
+        cpu.set_register(2, (1 << 26) | (1 << 24) | 4);
+        assert_eq!(cpu.estimate_cycles(0xEF00_000B), 5);
+
+        // CpuFastSet rounds a one-word request up to eight words.
+        cpu.set_register(2, 1);
+        assert_eq!(cpu.estimate_cycles(0xEF00_000C), 17);
+
+        // RegisterRamReset's EWRAM flag clears 256 KiB; its timing estimate
+        // must account for that work instead of treating it like a tiny SWI.
+        cpu.set_register(0, 1);
+        assert_eq!(cpu.estimate_cycles(0xEF00_0001), 1 + 2 * 256 * 1024);
+    }
+
 }
