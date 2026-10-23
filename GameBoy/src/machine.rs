@@ -193,8 +193,8 @@ impl GbaMachine {
     /// Executes at most the requested number of instructions and returns their estimated cycles.
     ///
     /// A zero instruction budget performs no work. Execution stops immediately
-    /// on the first CPU error; counters and peripherals reflect only the
-    /// instructions that completed successfully.
+    /// on the first CPU error or when STOP freezes the system clock; counters and
+    /// peripherals reflect only instructions that completed successfully.
     pub fn run_for_instructions(&mut self, instruction_budget: usize) -> Result<u64, CpuError> {
         let mut elapsed = 0_u64;
         for _ in 0..instruction_budget {
@@ -446,7 +446,8 @@ impl GbaMachine {
     /// Executes up to the requested number of instructions, returning estimated total cycles.
     ///
     /// If an unsupported instruction is encountered, execution stops with that
-    /// error; counters retain the progress made before the error.
+    /// error; if STOP freezes the clock, execution ends without spinning. Counters
+    /// retain the progress made before either condition.
     pub fn run_steps(&mut self, count: usize) -> Result<u64, CpuError> {
         let mut cycles = 0_u64;
         for _ in 0..count {
@@ -1848,6 +1849,8 @@ mod tests {
             machine.bus().video_cycles_into_scanline(),
         );
         assert_eq!(machine.run_for_cycles(100).unwrap(), 0);
+        assert_eq!(machine.run_for_instructions(100).unwrap(), 0);
+        assert_eq!(machine.run_steps(100).unwrap(), 0);
         assert_eq!(machine.cycles_elapsed(), cycles_before);
         // Event-driven runners must stop immediately when STOP freezes the clock,
         // rather than burning their entire instruction budget without progress.
