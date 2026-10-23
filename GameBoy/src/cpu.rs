@@ -310,8 +310,9 @@ impl Cpu {
             // STOP only resumes on an enabled keypad interrupt (IE & IF bit 12).
             // Timers and the PPU are not enough to wake the processor from STOP.
             if bus.pending_interrupts() & (1 << 12) == 0 {
-                bus.advance_cycles(1);
-                return Ok((StepOutcome::Halted, 1));
+                // STOP halts the system clock domain: unlike HALT, it must not
+                // advance timers, scanline timing, audio, or DMA until keypad wake.
+                return Ok((StepOutcome::Halted, 0));
             }
             self.stopped = false;
             self.last_fetch_next = None;
@@ -3304,9 +3305,11 @@ mod tests {
         // VBlank can be enabled and pending, but it must not wake STOP.
         bus.write16(0x0400_0200, 1 << 0);
         bus.request_interrupt(1 << 0);
+        let video_before = (bus.video_scanline(), bus.video_cycle());
         let (idle, cycles) = restored.step_with_cycles(&mut bus).unwrap();
         assert_eq!(idle, StepOutcome::Halted);
-        assert_eq!(cycles, 1);
+        assert_eq!(cycles, 0);
+        assert_eq!((bus.video_scanline(), bus.video_cycle()), video_before);
         assert!(restored.is_stopped());
         assert_eq!(restored.register(0), Some(0));
 
