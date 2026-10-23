@@ -1920,8 +1920,7 @@ impl Cpu {
                 // stores. This matters for OAM, where ordinary byte writes are ignored.
                 bus.reset_bios_memory_regions(flags);
                 let regions: &[(u32, u32, u32)] = &[
-                    // SIO and cartridge save memory retain their device write semantics.
-                    (1 << 5, 0x0400_0120, 0x10),
+                    // Cartridge save memory retains its device write semantics.
                     (1 << 8, 0x0E00_0000, 32 * 1024),
                 ];
                 for &(flag, base, length) in regions {
@@ -1930,6 +1929,9 @@ impl Cpu {
                             bus.write8(base.wrapping_add(offset), 0);
                         }
                     }
+                }
+                if flags & (1 << 5) != 0 {
+                    bus.reset_sio_registers();
                 }
                 if flags & (1 << 6) != 0 {
                     bus.reset_sound_registers();
