@@ -3801,6 +3801,81 @@ mod tests {
     }
 
     #[test]
+    fn bios_differential_filter_accumulates_wrapping_byte_deltas() {
+        let mut bus = bus_with_program(&[0xEF00_0016]);
+        let source = 0x0200_0100;
+        for (offset, byte) in [
+            (0, 0x80),
+            (1, 4),
+            (2, 0),
+            (3, 0),
+            (4, 250),
+            (5, 10),
+            (6, 10),
+            (7, 10),
+        ] {
+            bus.write8(source + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.step(&mut bus).unwrap();
+
+        assert_eq!(
+            (0..4)
+                .map(|offset| bus.read8(0x0200_0200 + offset))
+                .collect::<Vec<_>>(),
+            [250, 4, 14, 24]
+        );
+    }
+
+    #[test]
+    fn bios_differential_filter_accumulates_wrapping_halfword_deltas() {
+        let mut bus = bus_with_program(&[0xEF00_0017]);
+        let source = 0x0200_0100;
+        for (offset, byte) in [
+            (0, 0x81),
+            (1, 6),
+            (2, 0),
+            (3, 0),
+            (4, 0xFE),
+            (5, 0xFF),
+            (6, 5),
+            (7, 0),
+            (8, 2),
+            (9, 0),
+        ] {
+            bus.write8(source + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.step(&mut bus).unwrap();
+
+        assert_eq!(bus.read16(0x0200_0200), 0xFFFE);
+        assert_eq!(bus.read16(0x0200_0202), 0x0003);
+        assert_eq!(bus.read16(0x0200_0204), 0x0005);
+    }
+
+    #[test]
+    fn bios_cpuset_halfword_fill_aligns_source_and_destination() {
+        let mut bus = bus_with_program(&[0xEF00_000B]);
+        bus.write16(0x0200_0100, 0xBEEF);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0101);
+        cpu.set_register(1, 0x0200_0201);
+        cpu.set_register(2, (1 << 24) | 3);
+        cpu.step(&mut bus).unwrap();
+
+        for offset in [0, 2, 4] {
+            assert_eq!(bus.read16(0x0200_0200 + offset), 0xBEEF);
+        }
+    }
+
+    #[test]
     fn thumb_bios_hle_swi_returns_to_next_halfword() {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0200_0000, 0xDF08);
