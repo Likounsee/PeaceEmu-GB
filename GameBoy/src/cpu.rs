@@ -1038,8 +1038,26 @@ impl Cpu {
     /// Thumb execution is supported, but exceptions, banked registers, and SPSRs
     /// are not modeled yet.
     pub fn step(&mut self, bus: &mut MemoryBus) -> Result<StepOutcome, CpuError> {
+        if self.stopped {
+            // STOP is only released by an enabled keypad interrupt, not by an
+            // arbitrary enabled interrupt such as VBlank.
+            if bus.pending_interrupts() & (1 << 12) == 0 {
+                return Ok(StepOutcome::Halted);
+            }
+            self.stopped = false;
+            self.last_fetch_next = None;
+        }
         if self.halted {
-            if bus.pending_interrupts() == 0 {
+            let pending = bus.pending_interrupts();
+            if let Some(mask) = self.bios_wait_mask {
+                let matched = pending & mask;
+                if matched == 0 {
+                    return Ok(StepOutcome::Halted);
+                }
+                // BIOS IntrWait consumes only the interrupt flags it selected.
+                bus.acknowledge_interrupts(matched);
+                self.bios_wait_mask = None;
+            } else if pending == 0 {
                 return Ok(StepOutcome::Halted);
             }
             self.halted = false;
@@ -7015,6 +7033,63 @@ mod tests {
         for index in 0..8_u32 {
             assert_eq!(bus.read32(destination + 0x40 + index * 4), 0xA000_0000);
         }
+    }
+
+    #[test]
+    fn instruction_step_intr_wait_ignores_unselected_irqs_and_consumes_only_match() {
+        let mut bus = bus_with_program(&[0xE1A0_0000]); // MOV R0, R0
+        bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 1 << 0);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0004, 0x04, false, &mut bus)
+            .unwrap();
+
+        bus.request_interrupt(1 << 1);
+        assert_eq!(cpu.step(&mut bus).unwrap(), StepOutcome::Halted);
+        assert!(cpu.is_halted());
+        assert_eq!(bus.pending_interrupts(), 1 << 1);
+
+        bus.request_interrupt(1 << 0);
+        assert!(!matches!(cpu.step(&mut bus).unwrap(), StepOutcome::Halted));
+        assert!(!cpu.is_halted());
+        assert_eq!(bus.pending_interrupts(), 1 << 1);
+    }
+
+    #[test]
+    fn instruction_step_stop_wakes_only_for_enabled_keypad_irq() {
+        let mut bus = bus_with_program(&[0xE1A0_0000]); // MOV R0, R0
+        bus.write16(0x0400_0200, (1 << 0) | (1 << 12));
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0003, 0x03, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_stopped());
+
+        bus.request_interrupt(1 << 0);
+        assert_eq!(cpu.step(&mut bus).unwrap(), StepOutcome::Halted);
+        assert!(cpu.is_stopped());
+
+        bus.request_interrupt(1 << 12);
+        assert!(!matches!(cpu.step(&mut bus).unwrap(), StepOutcome::Halted));
+        assert!(!cpu.is_stopped());
+    }
+
+    #[test]
+    fn instruction_step_halt_wakes_on_any_enabled_pending_irq() {
+        let mut bus = bus_with_program(&[0xE1A0_0000]); // MOV R0, R0
+        bus.write16(0x0400_0200, 1 << 3);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0002, 0x02, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.step(&mut bus).unwrap(), StepOutcome::Halted);
+        assert!(cpu.is_halted());
+        bus.request_interrupt(1 << 3);
+        assert!(!matches!(cpu.step(&mut bus).unwrap(), StepOutcome::Halted));
+        assert!(!cpu.is_halted());
     }
 
     #[test]
