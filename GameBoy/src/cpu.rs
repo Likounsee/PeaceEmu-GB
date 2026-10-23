@@ -2420,60 +2420,6 @@ impl Cpu {
         Ok(())
     }
 
-    /// Executes ARM7TDMI long multiply instructions (UMULL/UMLAL/SMULL/SMLAL).
-    fn execute_long_multiply(
-        &mut self,
-        address: u32,
-        instruction: u32,
-    ) -> Result<(), CpuError> {
-        let signed = instruction & (1 << 22) != 0;
-        let accumulate = instruction & (1 << 21) != 0;
-        let set_flags = instruction & (1 << 20) != 0;
-        let rd_hi = ((instruction >> 16) & 0xF) as usize;
-        let rd_lo = ((instruction >> 12) & 0xF) as usize;
-        let rs = ((instruction >> 8) & 0xF) as usize;
-        let rm = (instruction & 0xF) as usize;
-
-        // Long multiply requires two distinct general-purpose destination
-        // registers. PC operands/destinations and overlapping result registers
-        // are unpredictable on ARM7TDMI and are reported consistently.
-        if rd_hi == 15
-            || rd_lo == 15
-            || rd_hi == rd_lo
-            || rs == 15
-            || rm == 15
-        {
-            return Err(CpuError::UnsupportedInstruction {
-                address,
-                instruction,
-            });
-        }
-
-        let product = if signed {
-            let lhs = self.registers[rm] as i32 as i64;
-            let rhs = self.registers[rs] as i32 as i64;
-            (lhs.wrapping_mul(rhs)) as u64
-        } else {
-            u64::from(self.registers[rm]).wrapping_mul(u64::from(self.registers[rs]))
-        };
-        let result = if accumulate {
-            let previous = (u64::from(self.registers[rd_hi]) << 32)
-                | u64::from(self.registers[rd_lo]);
-            product.wrapping_add(previous)
-        } else {
-            product
-        };
-
-        self.registers[rd_lo] = result as u32;
-        self.registers[rd_hi] = (result >> 32) as u32;
-        if set_flags {
-            self.flags.negative = result >> 63 != 0;
-            self.flags.zero = result == 0;
-            // Long multiply updates N and Z only; C and V are preserved.
-        }
-        Ok(())
-    }
-
     fn execute_data_processing(&mut self, address: u32, instruction: u32) -> Result<(), CpuError> {
         let immediate = instruction & (1 << 25) != 0;
         let opcode = (instruction >> 21) & 0xF;
