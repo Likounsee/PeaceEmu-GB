@@ -3738,8 +3738,13 @@ mod tests {
         let mut bus = bus_with_program(&[0xEF00_0011]);
         let source = 0x0200_0100;
         for (offset, byte) in [
-            (0, 0x10), (1, 3), (2, 0), (3, 0),
-            (4, 0x80), (5, 0x00), (6, 0x00),
+            (0, 0x10),
+            (1, 3),
+            (2, 0),
+            (3, 0),
+            (4, 0x80),
+            (5, 0x00),
+            (6, 0x00),
         ] {
             bus.write8(source + offset, byte);
         }
@@ -3774,8 +3779,14 @@ mod tests {
         let mut bus = bus_with_program(&[0xEF00_0012]);
         let source = 0x0200_0100;
         for (offset, byte) in [
-            (0, 0x10), (1, 3), (2, 0), (3, 0),
-            (4, 0), (5, b'G'), (6, b'B'), (7, b'A'),
+            (0, 0x10),
+            (1, 3),
+            (2, 0),
+            (3, 0),
+            (4, 0),
+            (5, b'G'),
+            (6, b'B'),
+            (7, b'A'),
         ] {
             bus.write8(source + offset, byte);
         }
