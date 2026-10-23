@@ -1152,6 +1152,34 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Runs until a DMA channel's completion IRQ flag is latched.
+    ///
+    /// The channel index must be 0 through 3. This checks the DMA IF bit,
+    /// independently of IE and IME, because the peripheral can complete while
+    /// the CPU's interrupt delivery is masked. Returns `Some(0)` if the flag
+    /// is already pending, `Some(n)` after a step latches it, or `None` for
+    /// an invalid channel or an exhausted step budget.
+    pub fn run_until_dma_interrupt(
+        &mut self,
+        channel: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if channel >= 4 {
+            return Ok(None);
+        }
+        let source = 1_u16 << (8 + channel);
+        if self.bus.interrupt_request_flags() & source != 0 {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.interrupt_request_flags() & source != 0 {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Returns how many additional sample bytes a FIFO can queue before
     /// reaching its Direct Sound refill threshold.
     ///
@@ -2099,6 +2127,30 @@ mod tests {
         machine.acknowledge_interrupts(1 << 3);
         assert_eq!(machine.pending_interrupts(), 0);
         assert!(!machine.interrupt_pending());
+    }
+
+    #[test]
+    fn dma_interrupt_runner_observes_hblank_completion_without_ie_or_ime() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0200_0000, 0xCAFE);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0xE000); // HBlank + IRQ + enable.
+
+        assert_eq!(machine.run_until_dma_interrupt(0, 2_000).unwrap(), Some(960));
+        assert_eq!(machine.bus().read16(0x0300_0000), 0xCAFE);
+        assert_eq!(machine.bus().interrupt_request_flags() & (1 << 8), 1 << 8);
+        assert!(!machine.interrupt_pending()); // IE/IME do not gate the latched IF bit.
+    }
+
+    #[test]
+    fn dma_interrupt_runner_handles_existing_flags_invalid_channels_and_zero_budget() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_dma_interrupt(4, 10).unwrap(), None);
+        assert_eq!(machine.run_until_dma_interrupt(0, 0).unwrap(), None);
+        machine.request_interrupt(1 << 10);
+        assert_eq!(machine.run_until_dma_interrupt(2, 0).unwrap(), Some(0));
     }
 
     #[test]
