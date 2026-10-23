@@ -209,7 +209,11 @@ impl GbaMachine {
     /// count can exceed the budget by the final instruction's estimated duration.
     /// A zero budget performs no work. Peripheral timing advances through
     /// `step` for every executed instruction.
-    /// Executes whole instructions until at least `cycle_budget` cycles have elapsed.\n    ///\n    /// Since instructions cannot be split, the returned count can exceed the requested budget\n    /// by the remaining cycles of the final instruction. A zero budget executes nothing.\n    pub fn run_for_cycles(&mut self, cycle_budget: u64) -> Result<u64, CpuError> {
+    /// Executes whole instructions until at least `cycle_budget` cycles have elapsed.
+    ///
+    /// Since instructions cannot be split, the returned count can exceed the requested budget
+    /// by the remaining cycles of the final instruction. A zero budget executes nothing.
+    pub fn run_for_cycles(&mut self, cycle_budget: u64) -> Result<u64, CpuError> {
         let mut elapsed = 0_u64;
         while elapsed < cycle_budget {
             elapsed = elapsed.saturating_add(u64::from(self.step()?));
