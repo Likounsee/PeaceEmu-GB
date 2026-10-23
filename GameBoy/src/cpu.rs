@@ -2193,7 +2193,19 @@ impl Cpu {
                     Self::decompress_bios_data(address, instruction, swi, source, bus)?
                 };
                 let vram = matches!(swi, 0x12 | 0x15);
-                if vram {
+                if swi == 0x13 {
+                    // HuffUnComp emits complete 32-bit words, including the
+                    // padded tail. Byte writes are ignored by GBA VRAM and
+                    // do not reproduce the BIOS bus access width.
+                    for (index, chunk) in output.chunks(4).enumerate() {
+                        let mut word = [0_u8; 4];
+                        word[..chunk.len()].copy_from_slice(chunk);
+                        bus.write32(
+                            destination.wrapping_add((index as u32) * 4) & !3,
+                            u32::from_le_bytes(word),
+                        );
+                    }
+                } else if vram {
                     for (index, chunk) in output.chunks(2).enumerate() {
                         let low = chunk[0];
                         let high = chunk.get(1).copied().unwrap_or(0);
@@ -2207,6 +2219,10 @@ impl Cpu {
                         bus.write8(destination.wrapping_add(index as u32), byte);
                     }
                 }
+            }
+            // GetBiosChecksum returns the checksum of the official GBA BIOS.
+            0x0D => {
+                self.registers[0] = 0xBAAE_187F;
             }
             // SoundBias selects the DAC midpoint while preserving non-bias register bits.
             0x19 => {
@@ -3725,6 +3741,46 @@ mod tests {
         cpu.set_register(2, 0);
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read16(0x0200_0200), 0xCAFE);
+    }
+
+    #[test]
+    fn bios_get_checksum_returns_official_value_in_arm_and_thumb_state() {
+        for thumb in [false, true] {
+            let mut bus = bus_with_program(&[]);
+            let mut cpu = Cpu::new();
+            cpu.reset(0x0200_0200);
+            cpu.set_execution_state(thumb);
+            cpu.set_register(0, 0xDEAD_BEEF);
+            cpu.execute_swi(
+                0x0200_0200,
+                if thumb { 0xDF0D } else { 0xEF00_000D },
+                0x0D,
+                thumb,
+                &mut bus,
+            )
+            .unwrap();
+            assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+        }
+    }
+
+    #[test]
+    fn bios_huffman_writes_padded_word_to_vram() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0600_0000;
+        bus.write32(source, 0x0000_0120);
+        bus.write8(source + 4, 1);
+        bus.write8(source + 5, 0xC0);
+        bus.write8(source + 7, b'X');
+        bus.write8(source + 8, b'Y');
+        bus.write32(source + 12, 0x0000_0000);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read32(destination), u32::from_le_bytes([b'X', 0, 0, 0]));
     }
 
     #[test]
