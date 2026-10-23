@@ -6824,4 +6824,106 @@ mod tests {
         assert_eq!(cpu.cpsr_flags(), 0xD000_0020);
         assert_eq!(cpu.snapshot().cpsr, 0xD000_0020);
     }
+
+    #[test]
+    fn mrs_reads_modeled_cpsr_flags_and_thumb_state() {
+        let mut bus = bus_with_program(&[0xE10F_0000]); // MRS r0, CPSR
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: true,
+            zero: false,
+            carry: true,
+            overflow: false,
+        });
+        cpu.set_execution_state(true);
+
+        let outcome = cpu.step(&mut bus).unwrap();
+
+        assert!(matches!(outcome, StepOutcome::Executed { .. }));
+        assert_eq!(cpu.register(0), Some(0xA000_0020));
+        assert_eq!(cpu.register(15), Some(0x0200_0002));
+    }
+
+    #[test]
+    fn msr_cpsr_flags_updates_only_the_modeled_condition_flags() {
+        let mut bus = bus_with_program(&[0xE128_F001]); // MSR CPSR_f, r1
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(1, 0x6000_0000);
+        cpu.set_execution_state(false);
+
+        cpu.step(&mut bus).unwrap();
+
+        assert_eq!(
+            cpu.flags(),
+            ConditionFlags {
+                negative: false,
+                zero: true,
+                carry: true,
+                overflow: false,
+            }
+        );
+        assert_eq!(cpu.cpsr_flags(), 0x6000_0000);
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn unsupported_spsr_mrs_rolls_back_registers_and_pc() {
+        let mut bus = bus_with_program(&[0xE14F_0000]); // MRS r0, SPSR (no exception modes yet)
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0x1234_5678);
+        let before = cpu.snapshot();
+
+        assert!(matches!(
+            cpu.step(&mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(cpu.snapshot(), before);
+    }
+
+    #[test]
+    fn invalid_debugger_register_write_is_side_effect_free() {
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0800_0000);
+        cpu.set_register(0, 0x1234_5678);
+        cpu.set_execution_state(true);
+        let before = cpu.snapshot();
+
+        assert!(!cpu.set_register(16, 0xFFFF_FFFF));
+        assert_eq!(cpu.snapshot(), before);
+    }
+
+    #[test]
+    fn reset_clears_thumb_flags_wait_states_and_registers() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0xCAFE_BABE);
+        cpu.set_condition_flags(ConditionFlags {
+            negative: true,
+            zero: true,
+            carry: true,
+            overflow: true,
+        });
+        cpu.set_execution_state(true);
+        cpu.execute_swi(0x0200_0000, 0xDF00, 0x02, true, &mut bus)
+            .unwrap();
+        assert!(cpu.is_halted());
+
+        cpu.reset(0x0800_0003);
+
+        assert_eq!(cpu.registers(), {
+            let mut registers = [0; 16];
+            registers[15] = 0x0800_0000;
+            registers
+        });
+        assert_eq!(cpu.flags(), ConditionFlags::default());
+        assert!(!cpu.is_thumb());
+        assert!(!cpu.is_halted());
+        assert!(!cpu.is_stopped());
+        assert_eq!(cpu.snapshot().bios_wait_mask, None);
+        assert_eq!(cpu.cpsr_flags(), 0);
+    }
 }

@@ -150,3 +150,7 @@ These methods return `Some(0)` when the requested condition is already true, `So
 ### CPU debugger state and snapshots
 
 The CPU debugger API treats program-counter edits and execution-state changes as explicit control-flow changes: they discard sequential-fetch hints, align the PC to the selected ARM/Thumb instruction width, and release BIOS wait states. CPU snapshots restore the modeled flags and instruction state; the reported CPSR is reconstructed from those supported fields, not from stale or unmodeled bits in a serialized snapshot. Banked registers, SPSRs, IRQ exception entry, and full CPSR mode/mask semantics remain future ARM7TDMI work.
+
+### CPU status-register regression coverage
+
+CPU tests now exercise MRS reads of the modeled CPSR flags and Thumb bit, MSR writes to the supported flag field, rejection of SPSR access without exception-mode banking, invalid debugger register writes, and reset cleanup across registers, flags, execution state, and BIOS waits.
