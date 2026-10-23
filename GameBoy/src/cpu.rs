@@ -3295,10 +3295,7 @@ mod tests {
         cpu.set_register(2, 3); // Three requested words round up to eight.
         cpu.step(&mut bus).unwrap();
         for index in 0..8_u32 {
-            assert_eq!(
-                bus.read32(0x0200_0200 + index * 4),
-                0xA500_0000 | index
-            );
+            assert_eq!(bus.read32(0x0200_0200 + index * 4), 0xA500_0000 | index);
         }
     }
 
