@@ -218,6 +218,15 @@ mod tests {
     }
 
     #[test]
+    fn signature_detection_requires_complete_markers_and_handles_boundaries() {
+        assert_eq!(SaveType::detect(b"SRAM_"), None);
+        assert_eq!(SaveType::detect(b"EEPROM_"), None);
+        assert_eq!(SaveType::detect(b"FLASH1M_"), None);
+        assert_eq!(SaveType::detect(b"prefix\0EEPROM_V\0suffix"), Some(SaveType::Eeprom));
+        assert_eq!(SaveType::detect(b"prefix\0FLASH512_V\0SRAM_V"), Some(SaveType::Flash64K));
+    }
+
+    #[test]
     fn detection_preserves_flash_priority_when_multiple_markers_are_present() {
         // ROM hacks can retain stale signatures from an earlier backup device.
         assert_eq!(

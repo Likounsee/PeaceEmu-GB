@@ -5077,6 +5077,21 @@ mod tests {
     }
 
     #[test]
+    fn direct_sound_mix_obeys_left_right_routing_and_master_enable() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0082, (1 << 9) | (1 << 8) | (1 << 2));
+        bus.write32(0x0400_00A0, 0x2020_2020);
+        bus.write32(0x0400_00A4, 0x1010_1010);
+        let (left, right) = bus.direct_sound_stereo_sample();
+        assert_ne!(left, 0);
+        assert_ne!(right, 0);
+
+        bus.write16(0x0400_0084, 0);
+        assert_eq!(bus.direct_sound_stereo_sample(), (0, 0));
+    }
+
+    #[test]
     fn direct_sound_fifo_is_little_endian_bounded_and_resettable() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080); // Enable master sound.

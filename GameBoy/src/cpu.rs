@@ -179,8 +179,11 @@ impl Cpu {
             return false;
         }
         if index == 15 {
-            // A debugger/loader PC edit breaks the previous fetch sequence.
+            // A debugger/loader PC edit breaks the previous fetch sequence and
+            // explicitly resumes execution from the new address.
             self.last_fetch_next = None;
+            self.halted = false;
+            self.bios_wait_mask = None;
         }
         self.registers[index] = if index == 15 {
             if self.thumb {
@@ -212,6 +215,10 @@ impl Cpu {
     /// Switching state aligns the stored PC to a halfword in Thumb state or
     /// a word in ARM state. Normal guest software should use BX to switch state.
     pub fn set_execution_state(&mut self, thumb: bool) {
+        // This API is for an external loader/debugger, not an instruction.
+        // A state change therefore also releases a BIOS wait at the old PC.
+        self.halted = false;
+        self.bios_wait_mask = None;
         self.thumb = thumb;
         self.last_fetch_next = None;
         self.registers[15] = if thumb {
@@ -3221,6 +3228,30 @@ mod tests {
         assert!(cpu.condition_passed_for(0xE));
         assert!(!cpu.condition_passed_for(0xF));
         assert!(!cpu.condition_passed_for(0x10));
+    }
+
+    #[test]
+    fn debugger_pc_edit_resumes_halt_and_clears_bios_wait_mask() {
+        let mut bus = bus_with_program(&[0xEF00_0002, 0xE3A0_0007]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(cpu.is_halted());
+
+        assert!(cpu.set_register(15, 0x0200_0004));
+        assert!(!cpu.is_halted());
+        let (outcome, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(outcome, StepOutcome::Executed { .. }));
+        assert_eq!(cpu.register(0), Some(7));
+
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 1);
+        cpu.set_register(1, 1 << 0);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0004, 0x04, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_halted());
+        cpu.set_execution_state(true);
+        assert!(!cpu.is_halted());
     }
 
     #[test]

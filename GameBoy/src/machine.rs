@@ -3402,6 +3402,23 @@ mod tests {
     }
 
     #[test]
+    fn loading_the_same_checkpoint_twice_replays_identical_machine_state() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write32(0x0200_0000, 0xE3A0_0001);
+        let checkpoint = machine.save_state();
+
+        machine.bus_mut().write32(0x0200_0000, 0xDEAD_BEEF);
+        machine.load_state(&checkpoint);
+        let first = machine.diagnostic_snapshot();
+        machine.bus_mut().write32(0x0200_0000, 0x1234_5678);
+        machine.load_state(&checkpoint);
+        let second = machine.diagnostic_snapshot();
+
+        assert_eq!(first, second);
+        assert_eq!(machine.bus().read32(0x0200_0000), 0xE3A0_0001);
+    }
+
+    #[test]
     fn zero_budget_interrupt_and_frame_waiters_do_not_advance_state() {
         let mut machine = GbaMachine::new(cartridge());
         let before = machine.diagnostic_snapshot();

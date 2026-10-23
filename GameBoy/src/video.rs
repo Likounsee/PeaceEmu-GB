@@ -3403,6 +3403,15 @@ mod tests {
     }
 
     #[test]
+    fn invalid_display_mode_is_rejected_without_forced_blank() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 6);
+        assert!(render_bitmap_frame(&bus).is_none());
+        bus.write16(0x0400_0000, 7);
+        assert!(render_bitmap_frame(&bus).is_none());
+    }
+
+    #[test]
     fn forced_blank_overrides_invalid_display_mode_and_ignores_vram_contents() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 7 | (1 << 7));
