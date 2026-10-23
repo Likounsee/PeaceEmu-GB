@@ -7303,6 +7303,7 @@ mod tests {
 
     #[test]
     fn bios_memory_hle_cycle_estimates_scale_with_transfer_size() {
+        let bus = bus_with_program(&[]);
         let mut cpu = Cpu::new();
 
         // CpuSet: four-word copy costs one setup cycle plus a read/write pair
