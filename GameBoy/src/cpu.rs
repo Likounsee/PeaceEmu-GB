@@ -93,6 +93,8 @@ pub struct CpuSnapshot {
     pub thumb: bool,
     /// Whether BIOS Halt is active and waiting for an enabled interrupt.
     pub halted: bool,
+    /// Interrupt sources selected by BIOS IntrWait/VBlankIntrWait, if any.
+    pub bios_wait_mask: Option<u16>,
     /// Stored program-counter value.
     pub pc: u32,
 }
@@ -239,6 +241,7 @@ impl Cpu {
             cpsr: self.cpsr_flags(),
             thumb: self.thumb,
             halted: self.halted,
+            bios_wait_mask: self.bios_wait_mask,
             pc: self.registers[15],
         }
     }
@@ -247,8 +250,9 @@ impl Cpu {
     ///
     /// The program counter is aligned to the restored instruction state and the
     /// sequential-fetch hint is discarded, so the next instruction starts a
-    /// fresh bus fetch sequence. The BIOS Halt state is preserved. Banked
-    /// registers, SPSRs, and unmodeled CPSR fields are not part of a snapshot.
+    /// fresh bus fetch sequence. BIOS Halt and its optional interrupt wait mask
+    /// are preserved. Banked registers, SPSRs, and unmodeled CPSR fields are not
+    /// part of a snapshot.
     pub fn restore_snapshot(&mut self, snapshot: CpuSnapshot) {
         self.registers = snapshot.registers;
         self.thumb = snapshot.thumb;
@@ -259,6 +263,7 @@ impl Cpu {
         };
         self.flags = snapshot.flags;
         self.halted = snapshot.halted;
+        self.bios_wait_mask = snapshot.bios_wait_mask;
         self.last_fetch_next = None;
     }
 
@@ -6106,6 +6111,34 @@ mod tests {
     }
 
     #[test]
+    fn cpu_snapshot_preserves_bios_interrupt_wait_mask() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0200, 1);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 1);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0004, 0x04, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_halted());
+        assert_eq!(cpu.snapshot().bios_wait_mask, Some(1));
+
+        let snapshot = cpu.snapshot();
+        let mut restored = Cpu::new();
+        restored.restore_snapshot(snapshot);
+        assert_eq!(restored.snapshot().bios_wait_mask, Some(1));
+
+        bus.request_interrupt(2);
+        assert_eq!(restored.step_with_cycles(&mut bus).unwrap().0, StepOutcome::Halted);
+        bus.request_interrupt(1);
+        assert!(!matches!(
+            restored.step_with_cycles(&mut bus).unwrap().0,
+            StepOutcome::Halted
+        ));
+        assert_eq!(bus.pending_interrupts(), 2);
+    }
+
+    #[test]
     fn restoring_arm_snapshot_aligns_pc_and_clears_thumb_state() {
         let mut cpu = Cpu::new();
         cpu.restore_snapshot(CpuSnapshot {
@@ -6114,6 +6147,7 @@ mod tests {
             cpsr: 0,
             thumb: false,
             halted: false,
+            bios_wait_mask: None,
             pc: 0x0800_0003,
         });
 
