@@ -1092,7 +1092,9 @@ impl MemoryBus {
         // Most instructions execute with all hardware timers disabled. In that
         // common case, jump between PPU transition edges instead of iterating
         // once per CPU cycle; HBlank/VBlank DMA and IRQ edges remain exact.
-        if self.timer_control.iter().all(|control| control & 0x0080 == 0) {
+        if self.timer_control.iter().all(|control| control & 0x0080 == 0)
+            && !self.has_video_timed_dma_enabled()
+        {
             self.advance_video_cycles_without_timers(cycles);
             return;
         }
@@ -1142,6 +1144,16 @@ impl MemoryBus {
                 }
             }
         }
+    }
+
+    /// Timed DMA can write timer registers at a PPU edge, so keep the
+    /// cycle-by-cycle path whenever a delayed transfer could activate a timer.
+    fn has_video_timed_dma_enabled(&self) -> bool {
+        (0..4).any(|channel| {
+            let offset = 0xB0 + channel * 12 + 10;
+            let control = u16::from_le_bytes([self.io[offset], self.io[offset + 1]]);
+            control & 0x8000 != 0 && (control >> 12) & 3 != 0
+        })
     }
 
     /// Advances PPU time in chunks when no enabled timer requires per-cycle work.
