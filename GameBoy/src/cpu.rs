@@ -1922,11 +1922,8 @@ impl Cpu {
                     (1 << 2, 0x0500_0000, 1024),
                     (1 << 3, 0x0600_0000, 96 * 1024),
                     (1 << 4, 0x0700_0000, 1024),
-                    // RegisterRamReset also exposes independent SIO and sound
-                    // reset flags. Keep these separate from the broad I/O reset
-                    // (flag 7), whose register-specific semantics need modeling.
+                    // SIO and sound have independent reset implementations.
                     (1 << 5, 0x0400_0120, 0x10),
-                    (1 << 6, 0x0400_0060, 0x50),
                     (1 << 8, 0x0E00_0000, 32 * 1024),
                 ];
                 for &(flag, base, length) in regions {
@@ -1935,6 +1932,9 @@ impl Cpu {
                             bus.write8(base.wrapping_add(offset), 0);
                         }
                     }
+                }
+                if flags & (1 << 6) != 0 {
+                    bus.reset_sound_registers();
                 }
                 if flags & (1 << 7) != 0 {
                     bus.reset_general_io_registers();
@@ -3361,6 +3361,27 @@ mod tests {
         assert_eq!(bus.read8(0x0200_0000), 0);
         assert_eq!(bus.read8(0x0300_0000), 0);
         assert_eq!(bus.read8(0x0500_0000), 0x3C);
+    }
+
+    #[test]
+    fn bios_register_ram_reset_sound_flag_clears_queued_audio() {
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        bus.write32(0x0400_00A4, 0x8877_6655);
+        assert_eq!(bus.audio_fifo_len(0), Some(4));
+        assert_eq!(bus.audio_fifo_len(1), Some(4));
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 1 << 6);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
+        assert_eq!(bus.read16(0x0400_0090), 0);
     }
 
     #[test]
