@@ -344,15 +344,17 @@ fn repeated_hblank_dma_reloads_destination_and_advances_source() {
 #[test]
 fn hblank_dma_does_not_fire_during_vblank_scanlines() {
     let mut bus = MemoryBus::new(cartridge());
+
+    // Enter VBlank before enabling the channel, so earlier visible HBlanks
+    // cannot legitimately consume the transfer.
+    bus.advance_cycles(160 * 1232);
+    assert_eq!(bus.video_scanline(), 160);
+
     bus.write16(0x0200_0000, 0xBEEF);
     bus.write32(0x0400_00B0, 0x0200_0000);
     bus.write32(0x0400_00B4, 0x0300_0000);
     bus.write16(0x0400_00B8, 1);
     bus.write16(0x0400_00BA, 0xA000); // Enabled, HBlank timing.
-
-    // Enter VBlank (line 160), then pass its HBlank boundary.
-    bus.advance_cycles(160 * 1232);
-    assert_eq!(bus.video_scanline(), 160);
     bus.advance_cycles(960);
     assert_eq!(bus.read16(0x0300_0000), 0);
     assert_eq!(bus.dma_enabled(0), Some(true));
