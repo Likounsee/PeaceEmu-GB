@@ -2131,7 +2131,15 @@ mod tests {
 
     #[test]
     fn dma_interrupt_runner_observes_hblank_completion_without_ie_or_ime() {
-        let mut machine = GbaMachine::new(cartridge());
+        let mut rom = vec![0; 0xC0];
+        rom[0..4].copy_from_slice(&0xEAFF_FFFE_u32.to_le_bytes()); // B to self.
+        rom[0xB2] = 0x96;
+        let sum = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0_u8, |sum, byte| sum.wrapping_add(*byte));
+        rom[0xBD] = 0_u8.wrapping_sub(sum).wrapping_sub(0x19);
+        let cartridge = GbaCartridge::parse(&rom).expect("synthetic GBA header should be valid");
+        let mut machine = GbaMachine::new(cartridge);
         machine.bus_mut().write16(0x0200_0000, 0xCAFE);
         machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
         machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
