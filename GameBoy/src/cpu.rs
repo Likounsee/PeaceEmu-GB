@@ -6129,7 +6129,10 @@ mod tests {
         assert_eq!(restored.snapshot().bios_wait_mask, Some(1));
 
         bus.request_interrupt(2);
-        assert_eq!(restored.step_with_cycles(&mut bus).unwrap().0, StepOutcome::Halted);
+        assert_eq!(
+            restored.step_with_cycles(&mut bus).unwrap().0,
+            StepOutcome::Halted
+        );
         bus.request_interrupt(1);
         assert!(!matches!(
             restored.step_with_cycles(&mut bus).unwrap().0,
