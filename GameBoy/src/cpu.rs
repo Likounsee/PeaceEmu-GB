@@ -3517,7 +3517,7 @@ mod tests {
             overflow: true,
         });
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(u32::MAX - 1)); // -6 + 5
+        assert_eq!(cpu.register(0), Some(u32::MAX)); // -6 + 5 = -1
         assert_eq!(cpu.register(1), Some(u32::MAX));
         assert!(cpu.flags().negative);
         assert!(!cpu.flags().zero);
