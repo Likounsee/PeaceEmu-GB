@@ -333,3 +333,44 @@ fn hblank_dma_does_not_fire_during_vblank_scanlines() {
     assert_eq!(bus.read16(0x0300_0000), 0);
     assert_eq!(bus.dma_enabled(0), Some(true));
 }
+
+#[test]
+fn keypad_input_is_active_low_and_irq_latches_only_on_new_condition_edges() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    assert_eq!(bus.read16(0x0400_0130), 0xFFFF);
+    bus.write16(0x0400_0132, 0x4001); // IRQ on A.
+    bus.set_button_pressed(gameboy::GbaButton::A, true);
+    assert_eq!(bus.read16(0x0400_0130), 0xFFFE);
+    assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
+
+    bus.write16(0x0400_0202, 1 << 12); // Clear the latched IRQ while A stays held.
+    bus.set_button_pressed(gameboy::GbaButton::A, true);
+    assert_eq!(bus.interrupt_request_flags() & (1 << 12), 0);
+
+    bus.set_button_pressed(gameboy::GbaButton::A, false);
+    assert_eq!(bus.read16(0x0400_0130), 0xFFFF);
+    bus.set_button_pressed(gameboy::GbaButton::A, true);
+    assert_eq!(bus.interrupt_request_flags() & (1 << 12), 1 << 12);
+}
+
+#[test]
+fn timer_overflow_deadline_tracks_reload_prescaler_phase_and_enable_state() {
+    let mut bus = MemoryBus::new(cartridge());
+
+    assert_eq!(bus.timer_cycles_until_overflow(0), None);
+    bus.write16(0x0400_0100, 0xFFFE);
+    bus.write16(0x0400_0102, 0x0081); // Enable TM0 with /64 prescaler.
+    assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
+
+    bus.advance_cycles(17);
+    assert_eq!(bus.timer_prescaler_phase(0), Some(17));
+    assert_eq!(bus.timer_cycles_until_overflow(0), Some(111));
+
+    bus.write16(0x0400_0102, 0x0001); // Disable; phase resets.
+    assert_eq!(bus.timer_cycles_until_overflow(0), None);
+    assert_eq!(bus.timer_prescaler_phase(0), Some(0));
+
+    bus.write16(0x0400_0102, 0x0081);
+    assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
+}
