@@ -1116,6 +1116,59 @@ impl GbaMachine {
         self.bus.audio_fifo_len(fifo)
     }
 
+    /// Runs until a Direct Sound FIFO contains at least `min_bytes` bytes.
+    ///
+    /// FIFO capacity is 32 bytes. Returns `Some(0)` when the condition is
+    /// already true, `Some(n)` after n instructions, or `None` for an
+    /// invalid FIFO, a threshold above capacity, or an exhausted budget.
+    /// Queue occupancy may change due to CPU writes, DMA, or timer-driven audio.
+    pub fn run_until_audio_fifo_at_least(
+        &mut self,
+        fifo: usize,
+        min_bytes: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if min_bytes > 32 || self.bus.audio_fifo_len(fifo).is_none() {
+            return Ok(None);
+        }
+        if self.bus.audio_fifo_len(fifo).is_some_and(|len| len >= min_bytes) {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.audio_fifo_len(fifo).is_some_and(|len| len >= min_bytes) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Runs until a Direct Sound FIFO contains at most `max_bytes` bytes.
+    ///
+    /// FIFO capacity is 32 bytes. Returns `Some(0)` when the condition is
+    /// already true, `Some(n)` after n instructions, or `None` for an
+    /// invalid FIFO, a threshold above capacity, or an exhausted budget.
+    pub fn run_until_audio_fifo_at_most(
+        &mut self,
+        fifo: usize,
+        max_bytes: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if max_bytes > 32 || self.bus.audio_fifo_len(fifo).is_none() {
+            return Ok(None);
+        }
+        if self.bus.audio_fifo_len(fifo).is_some_and(|len| len <= max_bytes) {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.audio_fifo_len(fifo).is_some_and(|len| len <= max_bytes) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Returns the most recently latched signed PCM sample for FIFO A (0) or B (1).
     pub fn audio_fifo_last_sample(&self, fifo: usize) -> Option<i8> {
         self.bus.audio_fifo_last_sample(fifo)
@@ -3291,6 +3344,25 @@ mod tests {
         assert_eq!(machine.interrupt_request_flags() & 0b0001, 0);
         assert_eq!(machine.interrupt_request_flags() & 0b0100, 0b0100);
         assert_eq!(machine.pending_interrupts() & 0b0101, 0b0100);
+    }
+
+    #[test]
+    fn audio_fifo_level_runners_validate_thresholds_and_observe_queue_state() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_audio_fifo_at_least(0, 0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_at_most(0, 0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_at_least(2, 1, 10).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_at_most(2, 0, 10).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_at_least(0, 33, 10).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_at_most(0, 33, 10).unwrap(), None);
+
+        machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
+        machine.bus_mut().write32(0x0400_00A0, 0x0506_0708);
+        assert_eq!(machine.audio_fifo_len(0), Some(8));
+        assert_eq!(machine.run_until_audio_fifo_at_least(0, 8, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_at_least(0, 9, 0).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_at_most(0, 8, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_at_most(0, 7, 0).unwrap(), None);
     }
 
     #[test]
