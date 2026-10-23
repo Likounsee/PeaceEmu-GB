@@ -346,7 +346,9 @@ impl Cpu {
         } else {
             bus.read32(address & !3)
         };
-        let estimated_cycles = self.estimate_cycles(instruction);
+        let estimated_cycles = self
+            .estimate_cycles(instruction)
+            .max(self.estimate_bios_swi_cycles(instruction, was_thumb, bus));
         let data_access = self.gamepak_data_access(instruction, was_thumb, address);
         // Capture the condition before execution. Comparing the resulting PC
         // with address+2 is insufficient: a taken backward branch can land
@@ -708,6 +710,86 @@ impl Cpu {
             3
         } else {
             4
+        }
+    }
+
+    /// Estimates time spent in high-level BIOS calls, including Thumb SWIs.
+    ///
+    /// The HLE routines execute synchronously, so charging only the SWI opcode
+    /// would freeze timer/video progress relative to large decompression and copy
+    /// operations. These estimates are deliberately conservative, not bus-exact.
+    fn estimate_bios_swi_cycles(
+        &self,
+        instruction: u32,
+        thumb: bool,
+        bus: &MemoryBus,
+    ) -> u32 {
+        let swi = if thumb {
+            let raw = instruction as u16;
+            if raw & 0xFF00 != 0xDF00 {
+                return 1;
+            }
+            u32::from(raw & 0x00FF)
+        } else {
+            if instruction & 0x0F00_0000 != 0x0F00_0000 {
+                return 1;
+            }
+            instruction & 0x00FF_FFFF
+        };
+
+        match swi {
+            0x01 => {
+                let flags = self.registers[0];
+                let bytes = [
+                    (1 << 0, 256_u32 * 1024),
+                    (1 << 1, 32 * 1024),
+                    (1 << 2, 1024),
+                    (1 << 3, 96 * 1024),
+                    (1 << 4, 1024),
+                    (1 << 8, 32 * 1024),
+                ]
+                .iter()
+                .filter(|(flag, _)| flags & flag != 0)
+                .fold(0_u32, |total, (_, length)| total.saturating_add(*length));
+                1_u32.saturating_add(bytes.saturating_mul(2))
+            }
+            0x0B | 0x0C => {
+                let control = self.registers[2];
+                let fill = control & (1 << 24) != 0;
+                let count = if swi == 0x0C {
+                    control & 0x001F_FFFF
+                } else {
+                    control & 0x001F_FFFF
+                };
+                1_u32.saturating_add(count.saturating_mul(if fill { 1 } else { 2 }))
+                    .saturating_add(u32::from(fill && count != 0))
+            }
+            0x10 => {
+                let info = self.registers[2];
+                let source_len = u32::from(bus.read16(info));
+                let source_width = u32::from(bus.read8(info.wrapping_add(2)));
+                let destination_width = u32::from(bus.read8(info.wrapping_add(3)));
+                if source_width == 0
+                    || source_width > 8
+                    || destination_width < source_width
+                    || destination_width > 32
+                {
+                    return 1;
+                }
+                let elements = source_len.saturating_mul(8) / source_width;
+                1_u32.saturating_add(elements.saturating_mul(destination_width.saturating_add(2)) / 8)
+            }
+            0x11..=0x17 => {
+                let source = self.registers[0];
+                let output_len = u32::from(bus.read8(source.wrapping_add(1)))
+                    | (u32::from(bus.read8(source.wrapping_add(2))) << 8)
+                    | (u32::from(bus.read8(source.wrapping_add(3))) << 16);
+                // Include output writes and decoder work. The real cost depends
+                // on compression ratio and VRAM's halfword write restrictions.
+                1_u32.saturating_add(output_len.saturating_mul(3))
+            }
+            0x0E | 0x0F => 1_u32.saturating_add(self.registers[2].min(0x1000).saturating_mul(24)),
+            _ => 1,
         }
     }
 
@@ -7323,6 +7405,36 @@ mod tests {
         ));
         assert_eq!(cpu.snapshot(), before);
         assert_eq!(bus.read32(0x0200_0100), 0xAABB_CCDD);
+    }
+
+    #[test]
+    fn bios_decompression_cycles_account_for_output_size_in_arm_and_thumb_state() {
+        let mut bus = bus_with_program(&[0xEF00_0011]);
+        let mut cpu = Cpu::new();
+        cpu.set_register(0, 0x0200_0000);
+        // BIOS compression headers encode the decompressed length in bytes 1–3.
+        bus.write8(0x0200_0001, 0x20);
+        bus.write8(0x0200_0002, 0x00);
+        bus.write8(0x0200_0003, 0x00);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_0011, false, &bus), 1 + 32 * 3);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xDF11, true, &bus), 1 + 32 * 3);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xE1A0_0000, false, &bus), 1);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0x2000, true, &bus), 1);
+    }
+
+    #[test]
+    fn bios_copy_and_unpack_cycle_estimates_use_operation_sizes() {
+        let mut bus = bus_with_program(&[0xEF00_0010]);
+        let mut cpu = Cpu::new();
+        cpu.set_register(2, 0x0200_0100);
+        bus.write16(0x0200_0100, 8); // 8 bytes of packed source data.
+        bus.write8(0x0200_0102, 2);
+        bus.write8(0x0200_0103, 8);
+        assert!(cpu.estimate_bios_swi_cycles(0xEF00_0010, false, &bus) > 1);
+
+        cpu.set_register(2, (1 << 24) | 16);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_000B, false, &bus), 18);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xDF0B, true, &bus), 18);
     }
 
     #[test]
