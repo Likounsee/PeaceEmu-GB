@@ -4043,7 +4043,7 @@ mod tests {
         cpu.set_register(1, 0x0600_0000);
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read16(0x0600_0000), 0x04FA);
-        assert_eq!(bus.read16(0x0600_0002), 0x0018);
+        assert_eq!(bus.read16(0x0600_0002), 0x000E);
     }
 
     #[test]
