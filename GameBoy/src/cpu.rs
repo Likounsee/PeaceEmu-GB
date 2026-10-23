@@ -6824,5 +6824,4 @@ mod tests {
         assert_eq!(cpu.cpsr_flags(), 0xD000_0020);
         assert_eq!(cpu.snapshot().cpsr, 0xD000_0020);
     }
-
 }
