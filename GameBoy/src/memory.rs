@@ -1730,6 +1730,22 @@ impl MemoryBus {
         }
         let address = address & !1;
 
+        // IE, IF, and IME need their register semantics on halfword writes too.
+        // Falling through to the generic I/O backing store leaves the modeled
+        // interrupt controller unchanged even though reads expose its live state.
+        if address == 0x0400_0200 {
+            self.interrupt_enable = value & 0x3FFF;
+            return;
+        }
+        if address == 0x0400_0202 {
+            self.acknowledge_interrupts(value);
+            return;
+        }
+        if address == 0x0400_0208 {
+            self.interrupt_master_enable = value & 1;
+            return;
+        }
+
         // KEYCNT is a single 16-bit register. Apply a halfword write atomically
         // so intermediate byte values cannot spuriously latch a keypad IRQ.
         if address == 0x0400_0132 {
@@ -4887,6 +4903,27 @@ mod tests {
         bus.write8(0x0400_0200, 0xFF);
         bus.write8(0x0400_0201, 0xFF);
         assert_eq!(bus.interrupt_enable_mask(), 0x3FFF);
+    }
+
+    #[test]
+    fn halfword_and_word_writes_update_interrupt_controller_registers() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        bus.write16(0x0400_0200, 0xFFFF);
+        assert_eq!(bus.interrupt_enable_mask(), 0x3FFF);
+        bus.write16(0x0400_0200, 0x0005);
+        assert_eq!(bus.interrupt_enable_mask(), 0x0005);
+
+        bus.request_interrupt((1 << 0) | (1 << 3) | (1 << 12));
+        bus.write16(0x0400_0202, (1 << 3) | (1 << 14));
+        assert_eq!(bus.interrupt_request_flags(), (1 << 0) | (1 << 12));
+
+        // IME is a one-bit register and must work for both STRH and STR.
+        bus.write16(0x0400_0208, 0xFFFF);
+        assert!(bus.interrupt_master_enabled());
+        bus.write32(0x0400_0208, 0xCAFE_0000);
+        assert!(!bus.interrupt_master_enabled());
+        assert_eq!(bus.read16(0x0400_0208), 0);
     }
 
     #[test]
