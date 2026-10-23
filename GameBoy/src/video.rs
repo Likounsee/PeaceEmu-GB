@@ -1289,7 +1289,8 @@ fn composite_bitmap_background_pixel(
         return source;
     }
     let control = bus.read16(0x0400_0050);
-    if (control >> 6) & 3 != 1 || control & (1 << 10) == 0 || control & (1 << 13) == 0 {
+    // BG2 is selected as a first target by bit 2; backdrop is second target bit 13.
+    if (control >> 6) & 3 != 1 || control & (1 << 2) == 0 || control & (1 << 13) == 0 {
         return source;
     }
     let coefficients = bus.read16(0x0400_0052);
@@ -3173,7 +3174,7 @@ mod tests {
             let mut bus = bus();
             bus.write16(0x0400_0000, mode | (1 << 10));
             bus.write16(PALETTE_BASE, 0);
-            bus.write16(0x0400_0050, (1 << 10) | (1 << 13) | (1 << 6));
+            bus.write16(0x0400_0050, (1 << 2) | (1 << 13) | (1 << 6));
             bus.write16(0x0400_0052, 8 | (8 << 8));
             match mode {
                 3 => bus.write16(VRAM_BASE, 0x001F),
@@ -3189,7 +3190,7 @@ mod tests {
             assert_eq!(frame.pixel(x, y), Some(0xFF7B_0000), "mode {mode}");
 
             // Removing the backdrop's second-target bit disables blending.
-            bus.write16(0x0400_0050, (1 << 10) | (1 << 6));
+            bus.write16(0x0400_0050, (1 << 2) | (1 << 6));
             let unblended = render_bitmap_frame(&bus).unwrap();
             assert_eq!(unblended.pixel(x, y), Some(0xFFFF_0000), "mode {mode}");
 
@@ -3204,7 +3205,7 @@ mod tests {
             bus.write16(0x0400_0044, (window_y_end << 8) | window_y_start);
             bus.write16(0x0400_0048, 1 << 2);
             bus.write16(0x0400_004A, (1 << 2) | (1 << 5));
-            bus.write16(0x0400_0050, (1 << 10) | (1 << 13) | (1 << 6));
+            bus.write16(0x0400_0050, (1 << 2) | (1 << 13) | (1 << 6));
             let windowed = render_bitmap_frame(&bus).unwrap();
             assert_eq!(windowed.pixel(x, y), Some(0xFFFF_0000), "mode {mode}");
         }
