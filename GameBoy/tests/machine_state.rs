@@ -39,3 +39,29 @@ fn zero_sized_run_budgets_do_not_advance_machine_state() {
     assert_eq!(machine.run_for_cycles(0).unwrap(), 0);
     assert_eq!(machine.diagnostic_snapshot(), before);
 }
+
+
+#[test]
+fn video_position_runner_reaches_requested_raster_offset() {
+    let mut machine = GbaMachine::new(looping_cartridge());
+
+    let executed = machine
+        .run_until_video_position(0, 12, 32)
+        .expect("valid video position should not produce a CPU error")
+        .expect("loop should reach the requested raster offset");
+
+    assert!(executed > 0);
+    let snapshot = machine.diagnostic_snapshot();
+    assert_eq!(snapshot.video_scanline, 0);
+    assert!(snapshot.video_cycles_into_scanline >= 12);
+}
+
+#[test]
+fn invalid_video_position_does_not_execute_instructions() {
+    let mut machine = GbaMachine::new(looping_cartridge());
+    let before = machine.diagnostic_snapshot();
+
+    assert_eq!(machine.run_until_video_position(228, 0, 100).unwrap(), None);
+    assert_eq!(machine.run_until_video_position(0, 1232, 100).unwrap(), None);
+    assert_eq!(machine.diagnostic_snapshot(), before);
+}
