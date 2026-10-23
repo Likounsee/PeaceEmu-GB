@@ -538,6 +538,34 @@ impl MemoryBus {
         self.interrupt_master_enable & 1 != 0
     }
 
+    /// Resets general-purpose I/O registers as BIOS RegisterRamReset flag 7 does.
+    ///
+    /// Sound registers and serial/SIO registers have independent BIOS reset flags
+    /// and are therefore preserved here. Live scanline timing is retained while
+    /// writable display controls, timer state, keypad control and IRQ state reset.
+    pub fn reset_general_io_registers(&mut self) {
+        for (offset, byte) in self.io.iter_mut().enumerate() {
+            if !(0x060..0x0B0).contains(&offset) && !(0x120..0x130).contains(&offset) {
+                *byte = 0;
+            }
+        }
+
+        self.key_control = 0;
+        self.interrupt_enable = 0;
+        self.interrupt_flags = 0;
+        self.interrupt_master_enable = 0;
+        self.wait_control = 0;
+        self.timer_reload = [0; 4];
+        self.timer_counter = [0; 4];
+        self.timer_control = [0; 4];
+        self.timer_prescaler_phase = [0; 4];
+
+        // Preserve live DISPSTAT status bits; reset its writable controls.
+        self.dispstat &= 0x0007;
+        self.io[0x04..0x06].copy_from_slice(&self.dispstat.to_le_bytes());
+        self.io[0x06..0x08].copy_from_slice(&self.vcount.to_le_bytes());
+    }
+
     /// Returns the currently configured Game Pak wait-state register (WAITCNT).
     pub fn gamepak_wait_control(&self) -> u16 {
         self.wait_control
