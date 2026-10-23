@@ -2022,6 +2022,10 @@ impl Cpu {
                     bus.write32(destination.wrapping_add((index as u32) * 4), word);
                 }
             }
+            // SoundBias initializes the DAC bias to the standard midpoint.
+            0x19 => {
+                bus.write16(0x0400_0088, 0x0200);
+            }
             // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
             // This is a compatibility value; it does not claim to emulate BIOS ROM.
             0x0D => {
@@ -7639,6 +7643,24 @@ mod tests {
         assert_eq!(cpu.register(0), Some(0xBAAE_187F));
         assert_eq!(cpu.register(1), Some(0x8765_4321));
         assert_eq!(cpu.register(2), Some(0xA5A5_5A5A));
+        assert_eq!(cpu.register(15), Some(0x0200_0204));
+    }
+
+    #[test]
+    fn bios_sound_bias_sets_midpoint_without_clobbering_registers() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0088, 0x03FF);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0x1234_5678);
+        cpu.set_register(1, 0x8765_4321);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_0019, 0x19, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(0x0400_0088), 0x0200);
+        assert_eq!(cpu.register(0), Some(0x1234_5678));
+        assert_eq!(cpu.register(1), Some(0x8765_4321));
         assert_eq!(cpu.register(15), Some(0x0200_0204));
     }
 
