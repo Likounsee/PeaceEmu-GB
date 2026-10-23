@@ -4933,7 +4933,7 @@ mod tests {
         // STR to IE writes its low halfword, while the high halfword is IF
         // with write-one-to-clear semantics rather than ordinary RAM storage.
         bus.request_interrupt((1 << 0) | (1 << 9) | (1 << 12));
-        bus.write32(0x0400_0200, 0x0000_0205);
+        bus.write32(0x0400_0200, 0x0200_0205);
         assert_eq!(bus.interrupt_enable_mask(), 0x0205);
         assert_eq!(bus.interrupt_request_flags(), (1 << 0) | (1 << 12));
 
