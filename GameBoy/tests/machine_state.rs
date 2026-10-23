@@ -94,3 +94,40 @@ fn video_position_runner_returns_zero_if_already_at_target() {
     assert_eq!(machine.run_until_video_position(0, 0, 10).unwrap(), Some(0));
     assert_eq!(machine.diagnostic_snapshot(), before);
 }
+
+#[test]
+fn save_state_preserves_stop_wait_and_keypad_wake_resumes_program() {
+    let mut rom = vec![0; 0xC0];
+    rom[0..4].copy_from_slice(&0xEF00_0003_u32.to_le_bytes()); // SWI Stop.
+    rom[4..8].copy_from_slice(&0xE3A0_0007_u32.to_le_bytes()); // MOV r0, #7.
+    rom[0xB2] = 0x96;
+    let sum = rom[0xA0..=0xBC]
+        .iter()
+        .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte));
+    rom[0xBD] = sum.wrapping_neg();
+    let cartridge = GbaCartridge::parse(&rom).expect("synthetic GBA header should be valid");
+    let mut machine = GbaMachine::new(cartridge);
+
+    machine.step().expect("Stop instruction should execute");
+    assert!(machine.diagnostic_snapshot().cpu.stopped);
+    let checkpoint = machine.save_state();
+
+    machine.bus_mut().write16(0x0400_0132, 0x4001); // KEYCNT: IRQ on A.
+    machine.bus_mut().write16(0x0400_0200, 1 << 12); // IE: keypad IRQ.
+    machine.set_button_pressed(gameboy::GbaButton::A, true);
+    machine.step().expect("keypad IRQ should wake Stop");
+    assert!(!machine.diagnostic_snapshot().cpu.stopped);
+    assert_eq!(machine.diagnostic_snapshot().cpu.registers[0], 7);
+
+    machine.load_state(&checkpoint);
+    assert!(machine.diagnostic_snapshot().cpu.stopped);
+    assert_eq!(machine.diagnostic_snapshot().cpu.pc, 0x0800_0004);
+
+    machine.bus_mut().write16(0x0400_0132, 0x4001);
+    machine.bus_mut().write16(0x0400_0200, 1 << 12);
+    machine.set_button_pressed(gameboy::GbaButton::A, true);
+    machine.step().expect("restored Stop should also wake");
+    assert!(!machine.diagnostic_snapshot().cpu.stopped);
+    assert_eq!(machine.diagnostic_snapshot().cpu.registers[0], 7);
+}
+
