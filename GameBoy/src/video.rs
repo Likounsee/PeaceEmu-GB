@@ -916,7 +916,14 @@ fn render_affine_background(
                     },
                 );
                 frame.pixels[destination] = if windows.effects_allowed(x, y) {
-                    composite_background_pixel(bus, bg, destination, color, layer_buffer, frame.pixels[destination])
+                    composite_background_pixel(
+                        bus,
+                        bg,
+                        destination,
+                        color,
+                        layer_buffer,
+                        frame.pixels[destination],
+                    )
                 } else {
                     color
                 };
@@ -1090,7 +1097,14 @@ fn render_text_background(
                     },
                 );
                 frame.pixels[destination] = if windows.effects_allowed(x, y) {
-                    composite_background_pixel(bus, bg, destination, color, layer_buffer, frame.pixels[destination])
+                    composite_background_pixel(
+                        bus,
+                        bg,
+                        destination,
+                        color,
+                        layer_buffer,
+                        frame.pixels[destination],
+                    )
                 } else {
                     color
                 };
