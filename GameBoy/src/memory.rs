@@ -3165,6 +3165,31 @@ mod tests {
     }
 
     #[test]
+    fn bios_sound_register_reset_clears_fifos_samples_and_sound_registers_only() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write16(0x0400_0080, 0xFFFF);
+        bus.write16(0x0400_0082, 0xFFFF);
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        bus.write32(0x0400_00A4, 0x8877_6655);
+        bus.audio_last_samples = [12, -34];
+        bus.write16(0x0400_0120, 0x1234);
+        bus.write16(0x0400_0200, 1);
+
+        bus.reset_sound_registers();
+
+        assert_eq!(bus.read16(0x0400_0080), 0);
+        assert_eq!(bus.read16(0x0400_0082), 0);
+        assert_eq!(bus.read16(0x0400_0090), 0);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(1), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
+        assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
+        assert_eq!(bus.read16(0x0400_0120), 0x1234);
+        assert_eq!(bus.interrupt_enable_mask(), 1);
+    }
+
+    #[test]
     fn disabling_sound_master_clears_both_fifos_samples_and_direct_sound_controls() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);
