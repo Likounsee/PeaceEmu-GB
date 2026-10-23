@@ -130,4 +130,3 @@ fn save_state_preserves_stop_wait_and_keypad_wake_resumes_program() {
     assert!(!machine.diagnostic_snapshot().cpu.stopped);
     assert_eq!(machine.diagnostic_snapshot().cpu.registers[0], 7);
 }
-
