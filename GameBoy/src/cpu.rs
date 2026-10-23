@@ -2947,6 +2947,26 @@ mod tests {
     }
 
     #[test]
+    fn bios_halt_ignores_requests_without_an_enabled_interrupt_and_reset_wakes_cpu() {
+        let mut bus = bus_with_program(&[0xEF00_0002, 0xE3A0_0007]); // Halt; MOV r0, #7.
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(cpu.is_halted());
+
+        bus.request_interrupt(1 << 0); // IF set, but IE remains clear.
+        let (idle, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(idle, StepOutcome::Halted);
+        assert_eq!(cycles, 1);
+        assert!(cpu.is_halted());
+
+        cpu.reset(0x0200_0004);
+        assert!(!cpu.is_halted());
+        cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(7));
+    }
+
+    #[test]
     fn bios_halt_stops_instruction_fetch_until_enabled_interrupt_is_pending() {
         let mut bus = bus_with_program(&[0xEF00_0002, 0xE3A0_0007]);
         let mut cpu = Cpu::new();
