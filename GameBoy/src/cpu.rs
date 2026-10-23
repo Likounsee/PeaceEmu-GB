@@ -6361,5 +6361,4 @@ mod tests {
         assert!(!cpu.is_halted());
         assert_eq!(bus.pending_interrupts(), 1 << 1);
     }
-
 }
