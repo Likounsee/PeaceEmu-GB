@@ -151,6 +151,10 @@ These methods return `Some(0)` when the requested condition is already true, `So
 
 The CPU debugger API treats program-counter edits and execution-state changes as explicit control-flow changes: they discard sequential-fetch hints, align the PC to the selected ARM/Thumb instruction width, and release BIOS wait states. CPU snapshots restore the modeled flags and instruction state; the reported CPSR is reconstructed from those supported fields, not from stale or unmodeled bits in a serialized snapshot. Banked registers, SPSRs, IRQ exception entry, and full CPSR mode/mask semantics remain future ARM7TDMI work.
 
+### BIOS HLE coverage
+
+The BIOS HLE includes SWI `0x19` SoundBias handling: zero selects bias `0x000`, nonzero selects `0x200`, and unrelated register bits are preserved. Regression tests cover both values and return-PC behavior.
+
 ### CPU status-register regression coverage
 
 CPU tests exercise MRS reads of modeled CPSR flags, MSR writes to the supported flag field, Thumb-bit snapshot reporting, rejection of SPSR access without exception-mode banking, invalid debugger register writes, and reset cleanup across registers, flags, execution state, and BIOS waits. SWP/SWPB tests cover word and byte exchanges, preservation of condition flags, and rollback of unaligned word swaps.

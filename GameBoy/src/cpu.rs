@@ -2073,6 +2073,12 @@ impl Cpu {
                     }
                 }
             }
+            // SoundBias selects the DAC midpoint while preserving non-bias register bits.
+            0x19 => {
+                let current = bus.read16(0x0400_0088);
+                let level = if self.registers[0] == 0 { 0 } else { 0x0200 };
+                bus.write16(0x0400_0088, (current & !0x03FF) | level);
+            }
             // CpuFastSet copies/fills words in groups of eight; count rounds up.
             0x0C => {
                 let source = self.registers[0] & !3;
@@ -6951,6 +6957,36 @@ mod tests {
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(cpu.flags(), flags);
         assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn bios_sound_bias_selects_zero_level_and_preserves_upper_bits() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0088, 0xC155);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_0019, 0x19, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(0x0400_0088), 0xC000);
+        assert_eq!(cpu.register(15), Some(0x0200_0204));
+    }
+
+    #[test]
+    fn bios_sound_bias_selects_midpoint_for_nonzero_input() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0088, 0x8155);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 1);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_0019, 0x19, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(0x0400_0088), 0x8200);
+        assert_eq!(cpu.register(15), Some(0x0200_0204));
     }
 
     #[test]
