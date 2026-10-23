@@ -720,6 +720,15 @@ impl Cpu {
     /// would freeze timer/video progress relative to large decompression and copy
     /// operations. These estimates are deliberately conservative, not bus-exact.
     fn estimate_bios_swi_cycles(&self, instruction: u32, thumb: bool, bus: &MemoryBus) -> u32 {
+        // A condition-failed ARM SWI never enters the BIOS handler. Avoid
+        // charging its full HLE workload when the instruction is skipped.
+        if !thumb
+            && ((instruction >> 28) == 0xF
+                || !self.condition_passed(instruction >> 28))
+        {
+            return 1;
+        }
+
         let swi = if thumb {
             let raw = instruction as u16;
             if raw & 0xFF00 != 0xDF00 {
@@ -822,6 +831,15 @@ impl Cpu {
     }
 
     fn estimate_cycles(&self, instruction: u32) -> u32 {
+        // Conditional ARM instructions that fail still consume their fetch
+        // cycle, but must not be charged for data transfers or pipeline work.
+        if !self.thumb
+            && ((instruction >> 28) == 0xF
+                || !self.condition_passed(instruction >> 28))
+        {
+            return 1;
+        }
+
         if self.thumb {
             let raw = instruction as u16;
             // Conditional/unconditional branches and BL may refill the pipeline.
@@ -4451,6 +4469,29 @@ mod tests {
         assert_eq!(cpu.estimate_cycles(0xC00E), 4);
         // Thumb POP {r0-r2,pc}: fetch, four transfers and pipeline refill.
         assert_eq!(cpu.estimate_cycles(0xBD07), 7);
+    }
+
+    #[test]
+    fn failed_arm_swi_condition_does_not_charge_bios_hle_work() {
+        // SWIEQ CpuSet: EQ is false with the default Z flag, so the HLE copy
+        // must not run and its estimated transfer cycles must not elapse.
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0300_0000, 0x0F00_000B);
+        bus.write32(0x0200_0100, 0x1234_5678);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0300_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.set_register(2, (1 << 26) | 32);
+
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x00C0);
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+
+        assert!(matches!(outcome, StepOutcome::ConditionFailed { .. }));
+        assert_eq!(cycles, 1);
+        assert_eq!(bus.read32(0x0200_0200), 0);
+        assert_eq!(bus.read16(0x0400_0202) & (1 << 3), 1 << 3);
     }
 
     #[test]
