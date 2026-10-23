@@ -2462,12 +2462,9 @@ mod tests {
         );
         assert_eq!(callbacks, 0);
         let after = machine.diagnostic_snapshot();
-        assert_eq!(after.instructions_executed, before.instructions_executed);
-        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
-        assert_eq!(after.video_scanline, before.video_scanline);
         assert_eq!(
-            after.video_cycles_into_scanline,
-            before.video_cycles_into_scanline
+            after, before,
+            "rejecting invalid FIFO wait arguments must leave the entire diagnostic snapshot unchanged"
         );
     }
 
