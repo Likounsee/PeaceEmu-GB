@@ -1729,8 +1729,10 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
-            // Halt: stop fetching instructions until an enabled interrupt is requested.
-            0x02 => {
+            // Halt and Sleep: stop fetching instructions until an enabled interrupt is requested.
+            // Sleep (SWI 0x03) enters the same observable wait state in this HLE
+            // core; low-power timing and IRQ exception entry are modeled separately.
+            0x02 | 0x03 => {
                 self.bios_wait_mask = None;
                 self.halted = true;
             }
@@ -3057,6 +3059,32 @@ mod tests {
         cpu.reset(0x0200_0004);
         assert!(!cpu.is_halted());
         cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(7));
+    }
+
+    #[test]
+    fn bios_sleep_waits_for_enabled_interrupt_like_halt() {
+        let mut bus = bus_with_program(&[0xEF00_0003, 0xE3A0_0007]); // Sleep; MOV r0, #7.
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+
+        let (sleep, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(sleep, StepOutcome::Executed { .. }));
+        assert!(cpu.is_halted());
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+
+        // An IF request alone cannot wake the CPU while the source is disabled.
+        bus.request_interrupt(1 << 0);
+        let (idle, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(idle, StepOutcome::Halted);
+        assert_eq!(cycles, 1);
+        assert_eq!(cpu.register(0), Some(0));
+
+        // Enabling the pending source wakes Sleep and resumes at the next instruction.
+        bus.write16(0x0400_0200, 1 << 0);
+        let (resumed, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(resumed, StepOutcome::Executed { .. }));
+        assert!(!cpu.is_halted());
         assert_eq!(cpu.register(0), Some(7));
     }
 
