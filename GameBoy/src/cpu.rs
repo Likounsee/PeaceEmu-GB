@@ -2073,10 +2073,6 @@ impl Cpu {
                     }
                 }
             }
-            // BIOS checksum SWI returns the fixed checksum of the original GBA BIOS.
-            0x0D => {
-                self.registers[0] = 0xBAAE_187F;
-            }
             // SoundBias selects the DAC midpoint while preserving non-bias register bits.
             0x19 => {
                 let current = bus.read16(0x0400_0088);
@@ -6983,6 +6979,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+        assert_eq!(cpu.register(15), Some(0x0200_0204));
+    }
+
+    #[test]
+    fn bios_checksum_returns_constant_without_clobbering_other_registers() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0x1234_5678);
+        cpu.set_register(1, 0x8765_4321);
+        cpu.set_register(2, 0xA5A5_5A5A);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_000D, 0x0D, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+        assert_eq!(cpu.register(1), Some(0x8765_4321));
+        assert_eq!(cpu.register(2), Some(0xA5A5_5A5A));
         assert_eq!(cpu.register(15), Some(0x0200_0204));
     }
 
