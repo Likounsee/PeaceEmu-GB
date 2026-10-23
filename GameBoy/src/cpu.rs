@@ -6646,5 +6646,4 @@ mod tests {
         cpu.set_register(0, 1);
         assert_eq!(cpu.estimate_cycles(0xEF00_0001), 1 + 2 * 256 * 1024);
     }
-
 }
