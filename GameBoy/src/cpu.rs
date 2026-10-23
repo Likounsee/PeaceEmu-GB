@@ -2090,7 +2090,9 @@ impl Cpu {
                 let stride = self.registers[3].max(2);
                 for index in 0..count {
                     let src = source.wrapping_add(index * 8);
-                    let dst = destination.wrapping_add(index * 2);
+                    // Each OBJ matrix occupies four coefficient strides; advancing
+                    // by only one halfword overlaps the preceding matrix when count > 1.
+                    let dst = destination.wrapping_add(index.wrapping_mul(stride).wrapping_mul(4));
                     let scale_x = bus.read16(src) as i16 as f64 / 256.0;
                     let scale_y = bus.read16(src.wrapping_add(2)) as i16 as f64 / 256.0;
                     let theta = bus.read16(src.wrapping_add(4));
@@ -3215,14 +3217,21 @@ mod tests {
         cpu.set_register(3, 8);
         cpu.execute_swi(0x0200_0200, 0xEF00_000F, 0x0F, false, &mut bus)
             .unwrap();
+        // First matrix occupies coefficient offsets 0, 8, 16, and 24.
         assert_eq!(bus.read16(destination) as i16, 256);
         assert_eq!(bus.read16(destination + 8) as i16, 0);
         assert_eq!(bus.read16(destination + 16) as i16, 0);
         assert_eq!(bus.read16(destination + 24) as i16, 256);
-        assert_eq!(bus.read16(destination + 2) as i16, 0);
-        assert_eq!(bus.read16(destination + 10) as i16, -128);
-        assert_eq!(bus.read16(destination + 18) as i16, 512);
-        assert_eq!(bus.read16(destination + 26) as i16, 0);
+        // The second matrix starts after all four strides, not after one halfword.
+        assert_eq!(bus.read16(destination + 32) as i16, 0);
+        assert_eq!(bus.read16(destination + 40) as i16, -128);
+        assert_eq!(bus.read16(destination + 48) as i16, 512);
+        assert_eq!(bus.read16(destination + 56) as i16, 0);
+        // Inter-matrix gaps remain untouched instead of being overwritten.
+        assert_eq!(bus.read16(destination + 2), 0);
+        assert_eq!(bus.read16(destination + 10), 0);
+        assert_eq!(bus.read16(destination + 18), 0);
+        assert_eq!(bus.read16(destination + 26), 0);
     }
 
     #[test]
