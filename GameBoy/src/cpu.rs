@@ -6836,13 +6836,14 @@ mod tests {
             carry: true,
             overflow: false,
         });
-        cpu.set_execution_state(true);
+        cpu.set_execution_state(false);
 
         let outcome = cpu.step(&mut bus).unwrap();
 
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
-        assert_eq!(cpu.register(0), Some(0xA000_0020));
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(0), Some(0xA000_0000));
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.cpsr_flags() & (1 << 5), 0);
     }
 
     #[test]
