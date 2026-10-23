@@ -315,7 +315,6 @@ fn timer_byte_control_writes_clear_phase_and_restart_from_reload() {
     assert_eq!(bus.timer_counter(0), Some(0xFFFD));
 }
 
-
 #[test]
 fn repeated_hblank_dma_reloads_destination_and_advances_source() {
     let mut bus = MemoryBus::new(cartridge());
