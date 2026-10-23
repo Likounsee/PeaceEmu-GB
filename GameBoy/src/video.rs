@@ -1289,10 +1289,7 @@ fn composite_bitmap_background_pixel(
         return source;
     }
     let control = bus.read16(0x0400_0050);
-    if (control >> 6) & 3 != 1
-        || control & (1 << 10) == 0
-        || control & (1 << 13) == 0
-    {
+    if (control >> 6) & 3 != 1 || control & (1 << 10) == 0 || control & (1 << 13) == 0 {
         return source;
     }
     let coefficients = bus.read16(0x0400_0052);
