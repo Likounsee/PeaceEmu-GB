@@ -1152,6 +1152,35 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Runs until a Direct Sound FIFO has been refilled above its low-water mark.
+    ///
+    /// Returns `Some(0)` if the FIFO already contains more than 16 bytes,
+    /// `Some(n)` after a step reaches that level, or `None` for an invalid FIFO
+    /// index or exhausted budget. This observes queue occupancy; it does not
+    /// guarantee that the samples came from DMA rather than software writes.
+    pub fn run_until_audio_fifo_refilled(
+        &mut self,
+        fifo: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        let Some(status) = self.bus.audio_fifo_status(fifo) else {
+            return Ok(None);
+        };
+        if status.queued_bytes > 16 {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            let Some(status) = self.bus.audio_fifo_status(fifo) else {
+                return Ok(None);
+            };
+            if status.queued_bytes > 16 {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Runs until a DMA channel's completion IRQ flag is latched.
     ///
     /// The channel index must be 0 through 3. This checks the DMA IF bit,
@@ -1538,6 +1567,21 @@ mod tests {
             .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
             .wrapping_neg();
         GbaCartridge::parse(&rom).unwrap()
+    }
+
+    #[test]
+    fn audio_fifo_refill_runner_distinguishes_low_water_from_refilled_state() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_audio_fifo_refilled(2, 10).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_refilled(0, 0).unwrap(), None);
+
+        // Five FIFO words queue 20 bytes, safely above the 16-byte refill point.
+        for word in [0x0102_0304, 0x0506_0708, 0x090A_0B0C, 0x0D0E_0F10, 0x1112_1314] {
+            machine.bus_mut().write32(0x0400_00A0, word);
+        }
+        assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(4));
+        assert_eq!(machine.run_until_audio_fifo_refilled(0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_refilled(1, 0).unwrap(), None);
     }
 
     #[test]
