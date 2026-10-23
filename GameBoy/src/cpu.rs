@@ -743,6 +743,7 @@ impl Cpu {
                     (1 << 4, 1024),
                     (1 << 5, 0x10),
                     (1 << 6, 0x50),
+                    (1 << 7, 0x3A0),
                     (1 << 8, 32 * 1024),
                 ]
                 .iter()
@@ -1934,6 +1935,9 @@ impl Cpu {
                             bus.write8(base.wrapping_add(offset), 0);
                         }
                     }
+                }
+                if flags & (1 << 7) != 0 {
+                    bus.reset_general_io_registers();
                 }
             }
             // Div: signed R0 / R1 -> quotient R0, remainder R1, |quotient| R3.
@@ -6911,6 +6915,34 @@ mod tests {
         assert_eq!(bus.read32(0x0300_0100), 0x2345_6789);
         assert_eq!(bus.read16(0x0600_0010), 0x4567);
         assert_eq!(bus.read16(0x0700_0010), 0x5678);
+    }
+
+    #[test]
+    fn bios_register_ram_reset_flag_seven_resets_general_io_but_preserves_sound_and_sio() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0000, 0x1234); // DISPCNT
+        bus.write16(0x0400_0100, 0x0080); // Timer 0 control
+        bus.write16(0x0400_0200, 0x0001); // IE
+        bus.request_interrupt(1);
+        bus.write16(0x0400_0204, 0x4017); // WAITCNT
+        bus.write16(0x0400_0208, 1); // IME
+        bus.write16(0x0400_0090, 0x1234); // Wave RAM (sound range)
+        bus.write16(0x0400_0120, 0x5678); // SIO data register
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, 1 << 7);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(0x0400_0000), 0);
+        assert_eq!(bus.read16(0x0400_0102), 0);
+        assert_eq!(bus.interrupt_enable_mask(), 0);
+        assert_eq!(bus.interrupt_request_flags(), 0);
+        assert!(!bus.interrupt_master_enabled());
+        assert_eq!(bus.gamepak_wait_control(), 0);
+        assert_eq!(bus.read16(0x0400_0090), 0x1234);
+        assert_eq!(bus.read16(0x0400_0120), 0x5678);
     }
 
     #[test]
