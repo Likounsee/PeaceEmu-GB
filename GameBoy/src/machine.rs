@@ -1269,6 +1269,57 @@ impl GbaMachine {
         self.bus.audio_fifo_bytes_until_refill(fifo)
     }
 
+    /// Runs until a Direct Sound FIFO contains at least one queued sample byte.
+    ///
+    /// Returns `Some(0)` if the FIFO is already non-empty, `Some(n)` if it
+    /// becomes non-empty after n instructions, or `None` for an invalid FIFO
+    /// index or an exhausted step budget. Peripheral timers advance normally.
+    pub fn run_until_audio_fifo_nonempty(
+        &mut self,
+        fifo: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if self.bus.audio_fifo_len(fifo).is_none() {
+            return Ok(None);
+        }
+        if self.bus.audio_fifo_len(fifo) != Some(0) {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.audio_fifo_len(fifo).is_some_and(|len| len > 0) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Runs until a Direct Sound FIFO has no queued sample bytes remaining.
+    ///
+    /// Returns `Some(0)` if the FIFO is already empty, `Some(n)` if it
+    /// empties after n instructions, or `None` for an invalid FIFO index or
+    /// an exhausted step budget. A FIFO only drains when its selected timer
+    /// clocks Direct Sound; this helper does not synthesize timer events.
+    pub fn run_until_audio_fifo_empty(
+        &mut self,
+        fifo: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if self.bus.audio_fifo_len(fifo).is_none() {
+            return Ok(None);
+        }
+        if self.bus.audio_fifo_len(fifo) == Some(0) {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.audio_fifo_len(fifo) == Some(0) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
     /// The mix reflects SOUNDCNT_H volume and left/right routing. The result
@@ -3240,6 +3291,21 @@ mod tests {
         assert_eq!(machine.interrupt_request_flags() & 0b0001, 0);
         assert_eq!(machine.interrupt_request_flags() & 0b0100, 0b0100);
         assert_eq!(machine.pending_interrupts() & 0b0101, 0b0100);
+    }
+
+    #[test]
+    fn audio_fifo_queue_runners_handle_empty_nonempty_invalid_and_zero_budget() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_audio_fifo_nonempty(0, 0).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_empty(0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_nonempty(2, 10).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_empty(2, 10).unwrap(), None);
+
+        machine.bus_mut().write32(0x0400_00A0, 0x1234_5678);
+        assert_eq!(machine.audio_fifo_len(0), Some(4));
+        assert_eq!(machine.run_until_audio_fifo_nonempty(0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_audio_fifo_empty(0, 0).unwrap(), None);
+        assert_eq!(machine.audio_fifo_len(0), Some(4));
     }
 
     #[test]
