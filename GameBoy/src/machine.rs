@@ -3363,6 +3363,26 @@ mod tests {
     }
 
     #[test]
+    fn invalid_audio_fifo_level_waiters_do_not_advance_machine_state() {
+        let mut machine = GbaMachine::new(cartridge());
+        let before = machine.diagnostic_snapshot();
+
+        assert_eq!(machine.run_until_audio_fifo_at_least(2, 1, 64).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_at_most(2, 0, 64).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_at_least(0, 33, 64).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_at_most(0, 33, 64).unwrap(), None);
+
+        let after = machine.diagnostic_snapshot();
+        assert_eq!(after.instructions_executed, before.instructions_executed);
+        assert_eq!(after.cycles_elapsed, before.cycles_elapsed);
+        assert_eq!(after.video_scanline, before.video_scanline);
+        assert_eq!(
+            after.video_cycles_into_scanline,
+            before.video_cycles_into_scanline
+        );
+    }
+
+    #[test]
     fn audio_fifo_level_runners_validate_thresholds_and_observe_queue_state() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(

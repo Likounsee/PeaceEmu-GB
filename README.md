@@ -137,3 +137,12 @@ Bug fixes and focused hardware-accuracy improvements are welcome. See [CONTRIBUT
 
 This project is distributed under the MIT License; see [LICENSE](LICENSE). Copyright remains with each respective rights holder for their own contributions.
 \n\nRecent regression coverage also checks that a failed ARM condition leaves flags unchanged while advancing the PC sequentially, and that disabling a timer clears its partial prescaler phase before the next enable. These checks guard CPU control-flow and peripheral reconfiguration semantics without implying cycle-accurate CPU/peripheral scheduling. The integration suite also exercises VBlank DMA at the line-160 boundary, byte-wide DISPSTAT compare/IRQ programming with read-only VCOUNT behavior, and WAITCNT-sensitive ROM word-access timing across wait-state regions. Additional cases cover byte-wide IE/IF/IME semantics, WAITCNT reserved-bit masking, ROM-burst restarts at bank boundaries, and timer prescaler reset after byte-wide control writes. Direct Sound DMA regression tests also cover FIFO B routing through DMA2 and reject a special-timing FIFO setup with an incompatible fixed-source mode. Additional bus tests cover the exact 16-byte FIFO refill threshold and keypad IRQ rising edges in both selected-key AND mode and single-key OR mode, including active-low KEYINPUT reads. A boundary regression also verifies that Direct Sound DMA wraps its source register at the GBA's 28-bit address limit.\n
+### Direct Sound FIFO wait helpers
+
+The Rust `GbaMachine` facade exposes read-only FIFO status queries (`audio_fifo_len`, `audio_fifo_status`, and `audio_fifo_bytes_until_refill`) plus bounded waiters for common test/frontend synchronization:
+
+- `run_until_audio_fifo_nonempty(fifo, max_steps)` and `run_until_audio_fifo_empty(fifo, max_steps)` wait for empty/nonempty transitions.
+- `run_until_audio_fifo_refilled(fifo, max_steps)` waits for the FIFO's refill threshold.
+- `run_until_audio_fifo_at_least(fifo, min_bytes, max_steps)` and `run_until_audio_fifo_at_most(fifo, max_bytes, max_steps)` wait for explicit occupancy bounds (0–32 bytes).
+
+These methods return `Some(0)` when the requested condition is already true, `Some(n)` when it becomes true after executing `n` steps, or `None` for an invalid FIFO/threshold or an exhausted budget. Invalid arguments are rejected before executing guest instructions. They are bounded test/frontend helpers, not a replacement for timer-driven audio emulation.
