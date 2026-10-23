@@ -3345,7 +3345,7 @@ mod tests {
     fn bios_register_ram_reset_clears_sio_and_sound_only_when_selected() {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0120, 0x1234); // SIOCNT.
-        bus.write16(0x0400_0082, 0x1234); // SOUNDCNT_H.
+        bus.write16(0x0400_0090, 0x1234); // Wave RAM.
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0100);
 
@@ -3353,13 +3353,13 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
             .unwrap();
         assert_eq!(bus.read16(0x0400_0120), 0);
-        assert_eq!(bus.read16(0x0400_0082), 0x1234);
+        assert_eq!(bus.read16(0x0400_0090), 0x1234);
 
         bus.write16(0x0400_0120, 0x1234);
         cpu.set_register(0, 1 << 6);
         cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0082), 0);
+        assert_eq!(bus.read16(0x0400_0090), 0);
         assert_eq!(bus.read16(0x0400_0120), 0x1234);
     }
 
