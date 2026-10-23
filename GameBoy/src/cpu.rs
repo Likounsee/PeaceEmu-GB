@@ -782,10 +782,16 @@ impl Cpu {
                     } else {
                         control & 0x001F_FFFF
                     };
-                    // A fill reads one source element; a copy reads each
-                    // element. Every output element also incurs a write.
+                    // A fill reads its source once, then writes each output
+                    // element. A copy reads and writes every element. The base
+                    // cycle is instruction/HLE overhead, not the first source read.
                     let per_element = if fill { 1 } else { 2 };
-                    return 1_u32.saturating_add(count.saturating_mul(per_element));
+                    let source_read = u32::from(fill && count != 0);
+                    return 1_u32.saturating_add(
+                        count
+                            .saturating_mul(per_element)
+                            .saturating_add(source_read),
+                    );
                 }
                 _ => {}
             }
@@ -6640,6 +6646,16 @@ mod tests {
         // CpuFastSet rounds a one-word request up to eight words.
         cpu.set_register(2, 1);
         assert_eq!(cpu.estimate_cycles(0xEF00_000C), 17);
+
+        // Fill mode performs one source read plus one write per element.
+        cpu.set_register(2, (1 << 24) | 4);
+        assert_eq!(cpu.estimate_cycles(0xEF00_000B), 6);
+        cpu.set_register(2, 1 << 24); // A zero-count fill performs no transfer.
+        assert_eq!(cpu.estimate_cycles(0xEF00_000B), 1);
+
+        // CpuFastSet also reads the fill value only once for its rounded burst.
+        cpu.set_register(2, (1 << 24) | 1);
+        assert_eq!(cpu.estimate_cycles(0xEF00_000C), 10);
 
         // RegisterRamReset's EWRAM flag clears 256 KiB; its timing estimate
         // must account for that work instead of treating it like a tiny SWI.
