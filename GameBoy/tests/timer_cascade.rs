@@ -314,3 +314,47 @@ fn timer_byte_control_writes_clear_phase_and_restart_from_reload() {
     bus.advance_cycles(1);
     assert_eq!(bus.timer_counter(0), Some(0xFFFD));
 }
+
+
+#[test]
+fn repeated_hblank_dma_reloads_destination_and_advances_source() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0200_0000, 0x1111);
+    bus.write16(0x0200_0002, 0x2222);
+    bus.write32(0x0400_00B0, 0x0200_0000); // DMA0 source
+    bus.write32(0x0400_00B4, 0x0300_0000); // DMA0 destination
+    bus.write16(0x0400_00B8, 1);
+    // Enable + HBlank timing + repeat + destination reload.
+    bus.write16(0x0400_00BA, 0xA260);
+
+    bus.advance_cycles(960);
+    assert_eq!(bus.read16(0x0300_0000), 0x1111);
+    assert_eq!(bus.dma_enabled(0), Some(true));
+    assert_eq!(bus.dma_source_address(0), Some(0x0200_0002));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+
+    // Reach the next visible-line HBlank edge; the second halfword replaces
+    // the first at the reloaded destination while the source keeps advancing.
+    bus.advance_cycles(1232);
+    assert_eq!(bus.read16(0x0300_0000), 0x2222);
+    assert_eq!(bus.dma_enabled(0), Some(true));
+    assert_eq!(bus.dma_source_address(0), Some(0x0200_0004));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0300_0000));
+}
+
+#[test]
+fn hblank_dma_does_not_fire_during_vblank_scanlines() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0200_0000, 0xBEEF);
+    bus.write32(0x0400_00B0, 0x0200_0000);
+    bus.write32(0x0400_00B4, 0x0300_0000);
+    bus.write16(0x0400_00B8, 1);
+    bus.write16(0x0400_00BA, 0xA000); // Enabled, HBlank timing.
+
+    // Enter VBlank (line 160), then pass its HBlank boundary.
+    bus.advance_cycles(160 * 1232);
+    assert_eq!(bus.video_scanline(), 160);
+    bus.advance_cycles(960);
+    assert_eq!(bus.read16(0x0300_0000), 0);
+    assert_eq!(bus.dma_enabled(0), Some(true));
+}
