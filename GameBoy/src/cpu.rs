@@ -718,12 +718,7 @@ impl Cpu {
     /// The HLE routines execute synchronously, so charging only the SWI opcode
     /// would freeze timer/video progress relative to large decompression and copy
     /// operations. These estimates are deliberately conservative, not bus-exact.
-    fn estimate_bios_swi_cycles(
-        &self,
-        instruction: u32,
-        thumb: bool,
-        bus: &MemoryBus,
-    ) -> u32 {
+    fn estimate_bios_swi_cycles(&self, instruction: u32, thumb: bool, bus: &MemoryBus) -> u32 {
         let swi = if thumb {
             let raw = instruction as u16;
             if raw & 0xFF00 != 0xDF00 {
@@ -762,7 +757,8 @@ impl Cpu {
                 } else {
                     raw_count
                 };
-                1_u32.saturating_add(count.saturating_mul(if fill { 1 } else { 2 }))
+                1_u32
+                    .saturating_add(count.saturating_mul(if fill { 1 } else { 2 }))
                     .saturating_add(u32::from(fill && count != 0))
             }
             0x10 => {
@@ -778,7 +774,9 @@ impl Cpu {
                     return 1;
                 }
                 let elements = source_len.saturating_mul(8) / source_width;
-                1_u32.saturating_add(elements.saturating_mul(destination_width.saturating_add(2)) / 8)
+                1_u32.saturating_add(
+                    elements.saturating_mul(destination_width.saturating_add(2)) / 8,
+                )
             }
             0x11..=0x17 => {
                 let source = self.registers[0];
@@ -7417,7 +7415,10 @@ mod tests {
         bus.write8(0x0200_0001, 0x20);
         bus.write8(0x0200_0002, 0x00);
         bus.write8(0x0200_0003, 0x00);
-        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_0011, false, &bus), 1 + 32 * 3);
+        assert_eq!(
+            cpu.estimate_bios_swi_cycles(0xEF00_0011, false, &bus),
+            1 + 32 * 3
+        );
         assert_eq!(cpu.estimate_bios_swi_cycles(0xDF11, true, &bus), 1 + 32 * 3);
         assert_eq!(cpu.estimate_bios_swi_cycles(0xE1A0_0000, false, &bus), 1);
         assert_eq!(cpu.estimate_bios_swi_cycles(0x2000, true, &bus), 1);
