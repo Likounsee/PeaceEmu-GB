@@ -756,10 +756,11 @@ impl Cpu {
             0x0B | 0x0C => {
                 let control = self.registers[2];
                 let fill = control & (1 << 24) != 0;
+                let raw_count = control & 0x001F_FFFF;
                 let count = if swi == 0x0C {
-                    control & 0x001F_FFFF
+                    raw_count.saturating_add(7) & !7
                 } else {
-                    control & 0x001F_FFFF
+                    raw_count
                 };
                 1_u32.saturating_add(count.saturating_mul(if fill { 1 } else { 2 }))
                     .saturating_add(u32::from(fill && count != 0))
