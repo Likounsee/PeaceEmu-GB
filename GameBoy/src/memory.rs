@@ -1092,7 +1092,10 @@ impl MemoryBus {
         // Most instructions execute with all hardware timers disabled. In that
         // common case, jump between PPU transition edges instead of iterating
         // once per CPU cycle; HBlank/VBlank DMA and IRQ edges remain exact.
-        if self.timer_control.iter().all(|control| control & 0x0080 == 0)
+        if self
+            .timer_control
+            .iter()
+            .all(|control| control & 0x0080 == 0)
             && !self.has_video_timed_dma_enabled()
         {
             self.advance_video_cycles_without_timers(cycles);
@@ -3115,7 +3118,10 @@ mod tests {
             assert_eq!(fast.video_cycles_in_line, reference.video_cycles_in_line);
             assert_eq!(fast.vcount, reference.vcount);
             assert_eq!(fast.dispstat, reference.dispstat);
-            assert_eq!(fast.interrupt_request_flags(), reference.interrupt_request_flags());
+            assert_eq!(
+                fast.interrupt_request_flags(),
+                reference.interrupt_request_flags()
+            );
         }
     }
 
