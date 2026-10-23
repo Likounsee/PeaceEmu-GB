@@ -543,7 +543,10 @@ impl MemoryBus {
     /// FIFO ports are write-only and ignore ordinary byte stores, so clearing the
     /// MMIO byte range alone is insufficient to reset the emulated audio queues.
     pub fn reset_sound_registers(&mut self) {
-        self.io[0x060..0x0B0].fill(0);
+        // Wave RAM (04000090h–0400009Fh) is not part of the BIOS sound
+        // register reset and must retain sample data across this operation.
+        self.io[0x060..0x090].fill(0);
+        self.io[0x0A0..0x0B0].fill(0);
         for fifo in &mut self.audio_fifos {
             fifo.clear();
         }
