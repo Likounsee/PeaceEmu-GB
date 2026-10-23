@@ -3090,6 +3090,31 @@ mod tests {
     }
 
     #[test]
+    fn bios_division_handles_signed_overflow_and_div_arm_operand_order() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+
+        // ARM's signed division edge case wraps INT_MIN / -1 to INT_MIN.
+        cpu.set_register(0, i32::MIN as u32);
+        cpu.set_register(1, u32::MAX);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0006, 0x06, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(i32::MIN as u32));
+        assert_eq!(cpu.register(1), Some(0));
+        assert_eq!(cpu.register(3), Some(0x8000_0000));
+
+        // DivArm swaps R0/R1 before dividing.
+        cpu.set_register(0, 3);
+        cpu.set_register(1, 10);
+        cpu.execute_swi(0x0200_0104, 0xEF00_0007, 0x07, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(3));
+        assert_eq!(cpu.register(1), Some(1));
+        assert_eq!(cpu.register(3), Some(3));
+    }
+
+    #[test]
     fn bios_division_by_zero_returns_sign_sentinel_and_preserves_numerator() {
         let mut bus = bus_with_program(&[]);
         let mut cpu = Cpu::new();
