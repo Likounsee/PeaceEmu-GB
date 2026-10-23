@@ -4495,6 +4495,25 @@ mod tests {
     }
 
     #[test]
+    fn failed_arm_block_transfer_does_not_charge_register_transfer_cycles() {
+        // LDMEQIA r0!, {r0-r15}: a large conditional transfer is skipped.
+        let mut bus = bus_with_program(&[]);
+        bus.write32(0x0300_0000, 0x08B0_FFFF);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0300_0000);
+        cpu.set_register(0, 0x0200_0000);
+
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x00C0);
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+
+        assert!(matches!(outcome, StepOutcome::ConditionFailed { .. }));
+        assert_eq!(cycles, 1);
+        assert_eq!(cpu.register(0), Some(0x0200_0000));
+        assert_eq!(bus.read16(0x0400_0202) & (1 << 3), 1 << 3);
+    }
+
+    #[test]
     fn failed_arm_condition_advances_peripherals_by_one_cycle() {
         // Keep this test focused on condition handling, not Game Pak wait states.
         let mut bus = bus_with_program(&[0x03A0_002A]); // MOVEQ r0, #42 (EQ fails after reset).
