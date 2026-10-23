@@ -722,10 +722,7 @@ impl Cpu {
     fn estimate_bios_swi_cycles(&self, instruction: u32, thumb: bool, bus: &MemoryBus) -> u32 {
         // A condition-failed ARM SWI never enters the BIOS handler. Avoid
         // charging its full HLE workload when the instruction is skipped.
-        if !thumb
-            && ((instruction >> 28) == 0xF
-                || !self.condition_passed(instruction >> 28))
-        {
+        if !thumb && ((instruction >> 28) == 0xF || !self.condition_passed(instruction >> 28)) {
             return 1;
         }
 
@@ -833,10 +830,7 @@ impl Cpu {
     fn estimate_cycles(&self, instruction: u32) -> u32 {
         // Conditional ARM instructions that fail still consume their fetch
         // cycle, but must not be charged for data transfers or pipeline work.
-        if !self.thumb
-            && ((instruction >> 28) == 0xF
-                || !self.condition_passed(instruction >> 28))
-        {
+        if !self.thumb && ((instruction >> 28) == 0xF || !self.condition_passed(instruction >> 28)) {
             return 1;
         }
 
