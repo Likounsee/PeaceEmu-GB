@@ -3734,6 +3734,62 @@ mod tests {
     }
 
     #[test]
+    fn bios_lz77_rejects_backreferences_before_any_output_exists() {
+        let mut bus = bus_with_program(&[0xEF00_0011]);
+        let source = 0x0200_0100;
+        for (offset, byte) in [
+            (0, 0x10), (1, 3), (2, 0), (3, 0),
+            (4, 0x80), (5, 0x00), (6, 0x00),
+        ] {
+            bus.write8(source + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, 0x0200_0200);
+
+        assert!(cpu.step(&mut bus).is_err());
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(bus.read8(0x0200_0200), 0);
+    }
+
+    #[test]
+    fn bios_lz77_zero_length_does_not_read_payload_or_touch_destination() {
+        let mut bus = bus_with_program(&[0xEF00_0011]);
+        let source = 0x0200_0100;
+        bus.write32(source, 0x0000_0010);
+        bus.write8(0x0200_0200, 0xA5);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, 0x0200_0200);
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read8(0x0200_0200), 0xA5);
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn bios_lz77_vram_decompression_packs_odd_output_length() {
+        let mut bus = bus_with_program(&[0xEF00_0012]);
+        let source = 0x0200_0100;
+        for (offset, byte) in [
+            (0, 0x10), (1, 3), (2, 0), (3, 0),
+            (4, 0), (5, b'G'), (6, b'B'), (7, b'A'),
+        ] {
+            bus.write8(source + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, 0x0600_0000);
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read16(0x0600_0000), u16::from_le_bytes([b'G', b'B']));
+        assert_eq!(bus.read16(0x0600_0002) & 0x00FF, u16::from(b'A'));
+    }
+
+    #[test]
     fn thumb_bios_hle_swi_returns_to_next_halfword() {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0200_0000, 0xDF08);
