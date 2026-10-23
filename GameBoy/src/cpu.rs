@@ -6757,4 +6757,70 @@ mod tests {
         cpu.set_register(0, 1);
         assert_eq!(cpu.estimate_cycles(0xEF00_0001), 1 + 2 * 256 * 1024);
     }
+
+    #[test]
+    fn debugger_pc_edit_releases_bios_halt_and_clears_wait_mask() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 0);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0002, 0x02, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_halted());
+
+        assert!(cpu.set_register(15, 0x0800_0003));
+        assert!(!cpu.is_halted());
+        assert_eq!(cpu.register(15), Some(0x0800_0000));
+        assert_eq!(cpu.snapshot().bios_wait_mask, None);
+    }
+
+    #[test]
+    fn debugger_execution_state_switch_aligns_pc_and_releases_wait_state() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0003, 0x03, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_stopped());
+
+        cpu.set_register(15, 0x0800_0003);
+        cpu.set_execution_state(true);
+        assert!(cpu.is_thumb());
+        assert!(!cpu.is_stopped());
+        assert_eq!(cpu.register(15), Some(0x0800_0002));
+
+        cpu.set_execution_state(false);
+        assert!(!cpu.is_thumb());
+        assert_eq!(cpu.register(15), Some(0x0800_0000));
+    }
+
+    #[test]
+    fn restoring_thumb_snapshot_rebuilds_cpsr_from_modeled_state() {
+        let snapshot = CpuSnapshot {
+            registers: [0; 16],
+            flags: ConditionFlags {
+                negative: true,
+                zero: true,
+                carry: false,
+                overflow: true,
+            },
+            // Snapshot CPSR is derived from the modeled flags and Thumb bit;
+            // stale or unsupported bits must not leak into the restored CPU.
+            cpsr: u32::MAX,
+            thumb: true,
+            halted: false,
+            stopped: false,
+            bios_wait_mask: None,
+            pc: 0x0800_0003,
+        };
+        let mut cpu = Cpu::new();
+        cpu.restore_snapshot(snapshot);
+
+        assert!(cpu.is_thumb());
+        assert_eq!(cpu.register(15), Some(0x0800_0002));
+        assert_eq!(cpu.cpsr_flags(), 0xF000_0020);
+        assert_eq!(cpu.snapshot().cpsr, 0xF000_0020);
+    }
+
 }

@@ -146,3 +146,7 @@ The Rust `GbaMachine` facade exposes read-only FIFO status queries (`audio_fifo_
 - `run_until_audio_fifo_at_least(fifo, min_bytes, max_steps)` and `run_until_audio_fifo_at_most(fifo, max_bytes, max_steps)` wait for explicit occupancy bounds (0–32 bytes).
 
 These methods return `Some(0)` when the requested condition is already true, `Some(n)` when it becomes true after executing `n` steps, or `None` for an invalid FIFO/threshold or an exhausted budget. Invalid arguments are rejected before executing guest instructions. They are bounded test/frontend helpers, not a replacement for timer-driven audio emulation.
+
+### CPU debugger state and snapshots
+
+The CPU debugger API treats program-counter edits and execution-state changes as explicit control-flow changes: they discard sequential-fetch hints, align the PC to the selected ARM/Thumb instruction width, and release BIOS wait states. CPU snapshots restore the modeled flags and instruction state; the reported CPSR is reconstructed from those supported fields, not from stale or unmodeled bits in a serialized snapshot. Banked registers, SPSRs, IRQ exception entry, and full CPSR mode/mask semantics remain future ARM7TDMI work.
