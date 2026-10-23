@@ -410,4 +410,3 @@ fn immediate_word_dma_aligns_bus_addresses_and_latches_completion_irq() {
     assert_eq!(bus.interrupt_request_flags() & (1 << 8), 1 << 8);
     assert_eq!(bus.dma_enabled(0), Some(false));
 }
-
