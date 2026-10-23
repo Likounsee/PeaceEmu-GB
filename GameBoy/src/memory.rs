@@ -561,6 +561,14 @@ impl MemoryBus {
         }
     }
 
+    /// Resets the serial communication register window for BIOS flag 5.
+    ///
+    /// Directly clearing the register backing store avoids register-specific write
+    /// masks preventing the BIOS reset operation from restoring default values.
+    pub fn reset_sio_registers(&mut self) {
+        self.io[0x120..0x130].fill(0);
+    }
+
     /// Resets sound registers and Direct Sound FIFO state for BIOS flag 6.
     ///
     /// FIFO ports are write-only and ignore ordinary byte stores, so clearing the
@@ -3280,6 +3288,22 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(0), Some(4));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0x22));
         assert_eq!(bus.read16(0x0400_0084), 0x0080);
+    }
+
+    #[test]
+    fn bios_sio_register_reset_clears_window_without_touching_neighboring_io() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0120, 0x1234);
+        bus.write16(0x0400_0128, 0x5678);
+        bus.write16(0x0400_011E, 0xABCD);
+        bus.write16(0x0400_0130, 0xDCBA);
+
+        bus.reset_sio_registers();
+
+        assert_eq!(bus.read16(0x0400_0120), 0);
+        assert_eq!(bus.read16(0x0400_0128), 0);
+        assert_eq!(bus.read16(0x0400_011E), 0xABCD);
+        assert_eq!(bus.read16(0x0400_0130), 0xDCBA);
     }
 
     #[test]
