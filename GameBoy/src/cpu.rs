@@ -7000,5 +7000,4 @@ mod tests {
         assert_eq!(cpu.cpsr_flags() & (1 << 5), 1 << 5);
         assert_eq!(cpu.snapshot().cpsr & (1 << 5), 1 << 5);
     }
-
 }
