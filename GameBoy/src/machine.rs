@@ -1576,11 +1576,20 @@ mod tests {
         assert_eq!(machine.run_until_audio_fifo_refilled(0, 0).unwrap(), None);
 
         // Five FIFO words queue 20 bytes, safely above the 16-byte refill point.
-        for word in [0x0102_0304, 0x0506_0708, 0x090A_0B0C, 0x0D0E_0F10, 0x1112_1314] {
+        for word in [
+            0x0102_0304,
+            0x0506_0708,
+            0x090A_0B0C,
+            0x0D0E_0F10,
+            0x1112_1314,
+        ] {
             machine.bus_mut().write32(0x0400_00A0, word);
         }
         assert_eq!(machine.audio_fifo_bytes_until_refill(0), Some(4));
-        assert_eq!(machine.run_until_audio_fifo_refilled(0, 0).unwrap(), Some(0));
+        assert_eq!(
+            machine.run_until_audio_fifo_refilled(0, 0).unwrap(),
+            Some(0)
+        );
         assert_eq!(machine.run_until_audio_fifo_refilled(1, 0).unwrap(), None);
     }
 
