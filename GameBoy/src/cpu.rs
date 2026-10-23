@@ -3283,6 +3283,54 @@ mod tests {
     }
 
     #[test]
+    fn bios_cpufastset_rounds_copy_count_up_to_eight_words() {
+        let mut bus = bus_with_program(&[0xEF00_000C]);
+        for index in 0..8_u32 {
+            bus.write32(0x0200_0100 + index * 4, 0xA500_0000 | index);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.set_register(2, 3); // Three requested words round up to eight.
+        cpu.step(&mut bus).unwrap();
+        for index in 0..8_u32 {
+            assert_eq!(
+                bus.read32(0x0200_0200 + index * 4),
+                0xA500_0000 | index
+            );
+        }
+    }
+
+    #[test]
+    fn bios_cpufastset_fill_reuses_first_word_for_rounded_count() {
+        let mut bus = bus_with_program(&[0xEF00_000C]);
+        bus.write32(0x0200_0100, 0xDEAD_BEEF);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.set_register(2, (1 << 24) | 1); // Fill, rounded to eight words.
+        cpu.step(&mut bus).unwrap();
+        for index in 0..8_u32 {
+            assert_eq!(bus.read32(0x0200_0200 + index * 4), 0xDEAD_BEEF);
+        }
+    }
+
+    #[test]
+    fn bios_cpuset_zero_count_leaves_destination_untouched() {
+        let mut bus = bus_with_program(&[0xEF00_000B]);
+        bus.write16(0x0200_0200, 0xCAFE);
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.set_register(2, 0);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read16(0x0200_0200), 0xCAFE);
+    }
+
+    #[test]
     fn bios_huffman_decompression_decodes_eight_bit_symbols_msb_first() {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
