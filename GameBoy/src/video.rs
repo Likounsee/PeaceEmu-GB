@@ -907,7 +907,7 @@ fn render_affine_background(
             let palette_index = u32::from(pixels[pixel_offset]);
             if palette_index != 0 && windows.allows(x, y, bg as u16) {
                 let destination = y * SCREEN_WIDTH + x;
-                frame.pixels[destination] = apply_brightness_effect(
+                let color = apply_brightness_effect(
                     palette[palette_index as usize],
                     if windows.effects_allowed(x, y) {
                         brightness_effect
@@ -915,6 +915,11 @@ fn render_affine_background(
                         None
                     },
                 );
+                frame.pixels[destination] = if windows.effects_allowed(x, y) {
+                    composite_background_pixel(bus, bg, destination, color, layer_buffer, frame.pixels[destination])
+                } else {
+                    color
+                };
                 layer_buffer[destination] = bg as u8;
             }
         }
@@ -1076,7 +1081,7 @@ fn render_text_background(
             // makes its absolute palette index nonzero.
             if !transparent && windows.allows(x, y, bg as u16) {
                 let destination = y * SCREEN_WIDTH + x;
-                frame.pixels[destination] = apply_brightness_effect(
+                let color = apply_brightness_effect(
                     palette[palette_index as usize],
                     if windows.effects_allowed(x, y) {
                         brightness_effect
@@ -1084,6 +1089,11 @@ fn render_text_background(
                         None
                     },
                 );
+                frame.pixels[destination] = if windows.effects_allowed(x, y) {
+                    composite_background_pixel(bus, bg, destination, color, layer_buffer, frame.pixels[destination])
+                } else {
+                    color
+                };
                 layer_buffer[destination] = bg as u8;
             }
         }
@@ -1290,6 +1300,40 @@ fn bitmap_brightness_effect(
         _ => return None,
     };
     Some((brighten, (bus.read16(0x0400_0054) & 0x1F).min(16)))
+}
+
+/// Composites a first-target tiled background over the currently visible layer.
+///
+/// BLDCNT alpha mode blends a BG pixel only when its layer is selected as a
+/// first target and the pixel immediately behind it is selected as a second
+/// target. The backdrop uses target bit 13; BG0..BG3 use bits 8..11.
+fn composite_background_pixel(
+    bus: &MemoryBus,
+    bg: u32,
+    destination: usize,
+    source: u32,
+    layer_buffer: &[u8],
+    target_color: u32,
+) -> u32 {
+    let control = bus.read16(0x0400_0050);
+    if (control >> 6) & 3 != 1 || control & (1 << bg) == 0 {
+        return source;
+    }
+    let Some(&target_layer) = layer_buffer.get(destination) else {
+        return source;
+    };
+    let target_mask = if target_layer == 5 {
+        control & (1 << 13) != 0
+    } else {
+        control & (1 << (8 + target_layer)) != 0
+    };
+    if !target_mask {
+        return source;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    let eva = (coefficients & 0x1F).min(16);
+    let evb = ((coefficients >> 8) & 0x1F).min(16);
+    blend_argb555(source, target_color, eva, evb)
 }
 
 /// Applies GBA BLDY brightness or darkness to an opaque RGB555-derived color.
@@ -1878,6 +1922,29 @@ mod tests {
             bus.write16(0x0700_0000 + index * 8, 1 << 9);
         }
         bus
+    }
+
+    #[test]
+    fn tiled_background_alpha_blending_obeys_first_and_second_target_masks() {
+        let mut bus = bus();
+        // Alpha mode, BG0 as first target, backdrop as second target.
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 0) | (1 << 13));
+        bus.write16(0x0400_0052, 8 | (8 << 8));
+        let layers = vec![5_u8];
+        assert_eq!(
+            composite_background_pixel(&bus, 0, 0, 0xFFFF_0000, &layers, 0xFF00_0000),
+            0xFF7B_0000
+        );
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 0));
+        assert_eq!(
+            composite_background_pixel(&bus, 0, 0, 0xFFFF_0000, &layers, 0xFF00_0000),
+            0xFFFF_0000
+        );
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 13));
+        assert_eq!(
+            composite_background_pixel(&bus, 0, 0, 0xFFFF_0000, &layers, 0xFF00_0000),
+            0xFFFF_0000
+        );
     }
 
     #[test]
