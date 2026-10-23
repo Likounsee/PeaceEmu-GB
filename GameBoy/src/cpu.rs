@@ -1916,13 +1916,11 @@ impl Cpu {
             // RegisterRamReset: clear the selected memory regions by BIOS flag.
             0x01 => {
                 let flags = self.registers[0];
+                // RAM-like regions are cleared through their physical backing
+                // stores. This matters for OAM, where ordinary byte writes are ignored.
+                bus.reset_bios_memory_regions(flags);
                 let regions: &[(u32, u32, u32)] = &[
-                    (1 << 0, 0x0200_0000, 256 * 1024),
-                    (1 << 1, 0x0300_0000, 32 * 1024),
-                    (1 << 2, 0x0500_0000, 1024),
-                    (1 << 3, 0x0600_0000, 96 * 1024),
-                    (1 << 4, 0x0700_0000, 1024),
-                    // SIO and sound have independent reset implementations.
+                    // SIO and cartridge save memory retain their device write semantics.
                     (1 << 5, 0x0400_0120, 0x10),
                     (1 << 8, 0x0E00_0000, 32 * 1024),
                 ];
@@ -6937,6 +6935,24 @@ mod tests {
         assert_eq!(bus.read32(0x0300_0100), 0x2345_6789);
         assert_eq!(bus.read16(0x0600_0010), 0x4567);
         assert_eq!(bus.read16(0x0700_0010), 0x5678);
+    }
+
+    #[test]
+    fn bios_register_ram_reset_oam_flag_clears_oam_despite_byte_write_restrictions() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0700_0010, 0x5678);
+        bus.write16(0x0600_0010, 0x4567);
+        bus.write32(0x0200_0010, 0x1234_5678);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 1 << 4);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0001, 0x01, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(0x0700_0010), 0);
+        assert_eq!(bus.read16(0x0600_0010), 0x4567);
+        assert_eq!(bus.read32(0x0200_0010), 0x1234_5678);
     }
 
     #[test]
