@@ -153,4 +153,4 @@ The CPU debugger API treats program-counter edits and execution-state changes as
 
 ### CPU status-register regression coverage
 
-CPU tests now exercise MRS reads of the modeled CPSR flags and Thumb bit, MSR writes to the supported flag field, rejection of SPSR access without exception-mode banking, invalid debugger register writes, and reset cleanup across registers, flags, execution state, and BIOS waits.
+CPU tests exercise MRS reads of modeled CPSR flags, MSR writes to the supported flag field, Thumb-bit snapshot reporting, rejection of SPSR access without exception-mode banking, invalid debugger register writes, and reset cleanup across registers, flags, execution state, and BIOS waits. SWP/SWPB tests cover word and byte exchanges, preservation of condition flags, and rollback of unaligned word swaps.

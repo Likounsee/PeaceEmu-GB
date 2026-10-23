@@ -6826,7 +6826,7 @@ mod tests {
     }
 
     #[test]
-    fn mrs_reads_modeled_cpsr_flags_and_thumb_state() {
+    fn mrs_reads_modeled_cpsr_flags_in_arm_state() {
         let mut bus = bus_with_program(&[0xE10F_0000]); // MRS r0, CPSR
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
@@ -6927,4 +6927,78 @@ mod tests {
         assert_eq!(cpu.snapshot().bios_wait_mask, None);
         assert_eq!(cpu.cpsr_flags(), 0);
     }
+
+    #[test]
+    fn swp_word_exchanges_memory_and_register_without_changing_flags() {
+        let mut bus = bus_with_program(&[0xE102_0091]); // SWP r0, r1, [r2]
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0xDEAD_BEEF);
+        cpu.set_register(1, 0x1122_3344);
+        cpu.set_register(2, 0x0200_0100);
+        bus.write32(0x0200_0100, 0xAABB_CCDD);
+        let flags = ConditionFlags {
+            negative: true,
+            zero: false,
+            carry: true,
+            overflow: true,
+        };
+        cpu.set_condition_flags(flags);
+
+        cpu.step(&mut bus).unwrap();
+
+        assert_eq!(cpu.register(0), Some(0xAABB_CCDD));
+        assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
+        assert_eq!(cpu.flags(), flags);
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn swpb_exchanges_only_the_selected_memory_byte() {
+        let mut bus = bus_with_program(&[0xE142_0091]); // SWPB r0, r1, [r2]
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0xDEAD_BEEF);
+        cpu.set_register(1, 0x1234_56AB);
+        cpu.set_register(2, 0x0200_0101);
+        bus.write32(0x0200_0100, 0x1122_3344);
+        let flags = cpu.flags();
+
+        cpu.step(&mut bus).unwrap();
+
+        assert_eq!(cpu.register(0), Some(0x22));
+        assert_eq!(bus.read8(0x0200_0101), 0xAB);
+        assert_eq!(bus.read32(0x0200_0100), 0x1122_AB44);
+        assert_eq!(cpu.flags(), flags);
+    }
+
+    #[test]
+    fn unaligned_word_swp_is_rejected_without_cpu_state_changes() {
+        let mut bus = bus_with_program(&[0xE102_0091]); // SWP r0, r1, [r2]
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0xCAFE_BABE);
+        cpu.set_register(1, 0x1234_5678);
+        cpu.set_register(2, 0x0200_0101);
+        bus.write32(0x0200_0100, 0xAABB_CCDD);
+        let before = cpu.snapshot();
+
+        assert!(matches!(
+            cpu.step(&mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(cpu.snapshot(), before);
+        assert_eq!(bus.read32(0x0200_0100), 0xAABB_CCDD);
+    }
+
+    #[test]
+    fn thumb_snapshot_reports_the_thumb_cpsr_bit() {
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_execution_state(true);
+
+        assert_eq!(cpu.cpsr_flags() & (1 << 5), 1 << 5);
+        assert_eq!(cpu.snapshot().cpsr & (1 << 5), 1 << 5);
+    }
+
 }
