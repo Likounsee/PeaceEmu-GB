@@ -4034,7 +4034,15 @@ mod tests {
     fn bios_diff8_vram_filter_packs_byte_deltas_into_halfword_writes() {
         let mut bus = bus_with_program(&[0xEF00_0017]);
         let source = 0x0200_0100;
-        for (offset, byte) in [(0, 0x80), (1, 3), (2, 0), (3, 0), (4, 250), (5, 10), (6, 10)] {
+        for (offset, byte) in [
+            (0, 0x80),
+            (1, 3),
+            (2, 0),
+            (3, 0),
+            (4, 250),
+            (5, 10),
+            (6, 10),
+        ] {
             bus.write8(source + offset, byte);
         }
         let mut cpu = Cpu::new();
