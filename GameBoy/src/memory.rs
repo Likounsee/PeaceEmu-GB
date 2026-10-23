@@ -538,6 +538,29 @@ impl MemoryBus {
         self.interrupt_master_enable & 1 != 0
     }
 
+    /// Clears physical memory regions selected by BIOS RegisterRamReset flags 0–4.
+    ///
+    /// This intentionally clears the backing arrays directly: in particular, OAM
+    /// ignores byte stores on the GBA, so implementing BIOS flag 4 as a loop of
+    /// ordinary byte writes would leave OAM unchanged.
+    pub fn reset_bios_memory_regions(&mut self, flags: u32) {
+        if flags & (1 << 0) != 0 {
+            self.ewram.fill(0);
+        }
+        if flags & (1 << 1) != 0 {
+            self.iwram.fill(0);
+        }
+        if flags & (1 << 2) != 0 {
+            self.palette.fill(0);
+        }
+        if flags & (1 << 3) != 0 {
+            self.vram.fill(0);
+        }
+        if flags & (1 << 4) != 0 {
+            self.oam.fill(0);
+        }
+    }
+
     /// Resets sound registers and Direct Sound FIFO state for BIOS flag 6.
     ///
     /// FIFO ports are write-only and ignore ordinary byte stores, so clearing the
@@ -3089,6 +3112,24 @@ mod tests {
         assert_eq!(bus.read8(0x0E00_0001), 0xAB);
         bus.write32(0x0E00_0003, 0x7654_3210);
         assert_eq!(bus.read8(0x0E00_0003), 0x76);
+    }
+
+    #[test]
+    fn bios_memory_region_reset_clears_only_selected_physical_regions() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0200_0010, 0x1122_3344);
+        bus.write32(0x0300_0010, 0x2233_4455);
+        bus.write16(0x0500_0010, 0x3344);
+        bus.write16(0x0600_0010, 0x4455);
+        bus.write16(0x0700_0010, 0x5566);
+
+        bus.reset_bios_memory_regions((1 << 2) | (1 << 4));
+
+        assert_eq!(bus.read16(0x0500_0010), 0);
+        assert_eq!(bus.read16(0x0700_0010), 0);
+        assert_eq!(bus.read32(0x0200_0010), 0x1122_3344);
+        assert_eq!(bus.read32(0x0300_0010), 0x2233_4455);
+        assert_eq!(bus.read16(0x0600_0010), 0x4455);
     }
 
     #[test]
