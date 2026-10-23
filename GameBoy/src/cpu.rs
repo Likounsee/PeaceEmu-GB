@@ -6968,6 +6968,40 @@ mod tests {
     }
 
     #[test]
+    fn bios_register_ram_reset_combines_sound_sio_and_general_io_flags() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0000, 0x1234);
+        bus.write16(0x0400_0100, 0xABCD);
+        bus.write16(0x0400_0120, 0x5678);
+        bus.write16(0x0400_0090, 0xCAFE);
+        bus.write16(0x0400_0080, 0xFFFF);
+        bus.write16(0x0400_0082, 0xFFFF);
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        bus.request_interrupt(1);
+        bus.write16(0x0400_0200, 1);
+        bus.write16(0x0400_0208, 1);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(0, (1 << 5) | (1 << 6) | (1 << 7));
+        cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(0x0400_0000), 0);
+        assert_eq!(bus.read16(0x0400_0100), 0);
+        assert_eq!(bus.read16(0x0400_0120), 0);
+        assert_eq!(bus.read16(0x0400_0080), 0);
+        assert_eq!(bus.read16(0x0400_0082), 0);
+        assert_eq!(bus.read16(0x0400_0084), 0);
+        assert_eq!(bus.read16(0x0400_0090), 0xCAFE);
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.interrupt_enable_mask(), 0);
+        assert_eq!(bus.interrupt_request_flags(), 0);
+        assert!(!bus.interrupt_master_enabled());
+    }
+
+    #[test]
     fn bios_register_ram_reset_zero_flags_leave_memory_untouched() {
         let mut bus = bus_with_program(&[]);
         bus.write32(0x0200_0100, 0xCAFE_BABE);
