@@ -742,7 +742,7 @@ impl Cpu {
                     (1 << 3, 96 * 1024),
                     (1 << 4, 1024),
                     (1 << 5, 0x10),
-                    (1 << 6, 0x40),
+                    (1 << 6, 0x30),
                     (1 << 7, 0x3A0),
                     (1 << 8, 32 * 1024),
                 ]
@@ -7391,7 +7391,7 @@ mod tests {
         cpu.set_register(0, 1 << 6);
         assert_eq!(
             cpu.estimate_bios_swi_cycles(0xEF00_0001, false, &bus),
-            1 + 2 * 0x40
+            1 + 2 * 0x30
         );
 
         // General I/O reset covers 0x400 bytes minus sound and SIO windows.
