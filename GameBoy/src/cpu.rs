@@ -6966,7 +6966,7 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
 
-        assert_eq!(cpu.register(0), Some(0x22));
+        assert_eq!(cpu.register(0), Some(0x33));
         assert_eq!(bus.read8(0x0200_0101), 0xAB);
         assert_eq!(bus.read32(0x0200_0100), 0x1122_AB44);
         assert_eq!(cpu.flags(), flags);
