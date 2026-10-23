@@ -3305,11 +3305,11 @@ mod tests {
         // VBlank can be enabled and pending, but it must not wake STOP.
         bus.write16(0x0400_0200, 1 << 0);
         bus.request_interrupt(1 << 0);
-        let video_before = (bus.video_scanline(), bus.video_cycle());
+        let video_before = (bus.video_scanline(), bus.video_cycles_into_scanline());
         let (idle, cycles) = restored.step_with_cycles(&mut bus).unwrap();
         assert_eq!(idle, StepOutcome::Halted);
         assert_eq!(cycles, 0);
-        assert_eq!((bus.video_scanline(), bus.video_cycle()), video_before);
+        assert_eq!((bus.video_scanline(), bus.video_cycles_into_scanline()), video_before);
         assert!(restored.is_stopped());
         assert_eq!(restored.register(0), Some(0));
 
