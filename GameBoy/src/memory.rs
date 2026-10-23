@@ -538,6 +538,18 @@ impl MemoryBus {
         self.interrupt_master_enable & 1 != 0
     }
 
+    /// Resets sound registers and Direct Sound FIFO state for BIOS flag 6.
+    ///
+    /// FIFO ports are write-only and ignore ordinary byte stores, so clearing the
+    /// MMIO byte range alone is insufficient to reset the emulated audio queues.
+    pub fn reset_sound_registers(&mut self) {
+        self.io[0x060..0x0B0].fill(0);
+        for fifo in &mut self.audio_fifos {
+            fifo.clear();
+        }
+        self.audio_last_samples = [0; 2];
+    }
+
     /// Resets general-purpose I/O registers as BIOS RegisterRamReset flag 7 does.
     ///
     /// Sound registers and serial/SIO registers have independent BIOS reset flags
