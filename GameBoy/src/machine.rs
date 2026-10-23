@@ -1131,12 +1131,20 @@ impl GbaMachine {
         if min_bytes > 32 || self.bus.audio_fifo_len(fifo).is_none() {
             return Ok(None);
         }
-        if self.bus.audio_fifo_len(fifo).is_some_and(|len| len >= min_bytes) {
+        if self
+            .bus
+            .audio_fifo_len(fifo)
+            .is_some_and(|len| len >= min_bytes)
+        {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
             self.step()?;
-            if self.bus.audio_fifo_len(fifo).is_some_and(|len| len >= min_bytes) {
+            if self
+                .bus
+                .audio_fifo_len(fifo)
+                .is_some_and(|len| len >= min_bytes)
+            {
                 return Ok(Some(executed + 1));
             }
         }
@@ -1157,12 +1165,20 @@ impl GbaMachine {
         if max_bytes > 32 || self.bus.audio_fifo_len(fifo).is_none() {
             return Ok(None);
         }
-        if self.bus.audio_fifo_len(fifo).is_some_and(|len| len <= max_bytes) {
+        if self
+            .bus
+            .audio_fifo_len(fifo)
+            .is_some_and(|len| len <= max_bytes)
+        {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
             self.step()?;
-            if self.bus.audio_fifo_len(fifo).is_some_and(|len| len <= max_bytes) {
+            if self
+                .bus
+                .audio_fifo_len(fifo)
+                .is_some_and(|len| len <= max_bytes)
+            {
                 return Ok(Some(executed + 1));
             }
         }
@@ -3349,19 +3365,46 @@ mod tests {
     #[test]
     fn audio_fifo_level_runners_validate_thresholds_and_observe_queue_state() {
         let mut machine = GbaMachine::new(cartridge());
-        assert_eq!(machine.run_until_audio_fifo_at_least(0, 0, 0).unwrap(), Some(0));
-        assert_eq!(machine.run_until_audio_fifo_at_most(0, 0, 0).unwrap(), Some(0));
-        assert_eq!(machine.run_until_audio_fifo_at_least(2, 1, 10).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_at_most(2, 0, 10).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_at_least(0, 33, 10).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_at_most(0, 33, 10).unwrap(), None);
+        assert_eq!(
+            machine.run_until_audio_fifo_at_least(0, 0, 0).unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_most(0, 0, 0).unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_least(2, 1, 10).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_most(2, 0, 10).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_least(0, 33, 10).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_most(0, 33, 10).unwrap(),
+            None
+        );
 
         machine.bus_mut().write32(0x0400_00A0, 0x0102_0304);
         machine.bus_mut().write32(0x0400_00A0, 0x0506_0708);
         assert_eq!(machine.audio_fifo_len(0), Some(8));
-        assert_eq!(machine.run_until_audio_fifo_at_least(0, 8, 0).unwrap(), Some(0));
-        assert_eq!(machine.run_until_audio_fifo_at_least(0, 9, 0).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_at_most(0, 8, 0).unwrap(), Some(0));
+        assert_eq!(
+            machine.run_until_audio_fifo_at_least(0, 8, 0).unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_least(0, 9, 0).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_at_most(0, 8, 0).unwrap(),
+            Some(0)
+        );
         assert_eq!(machine.run_until_audio_fifo_at_most(0, 7, 0).unwrap(), None);
     }
 
