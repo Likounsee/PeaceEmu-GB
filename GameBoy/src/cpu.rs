@@ -6177,4 +6177,90 @@ mod tests {
         assert!(!cpu.condition_passed_for(0x10));
         assert!(!cpu.condition_passed_for(u8::MAX));
     }
+
+
+    #[test]
+    fn bios_sqrt_handles_zero_perfect_squares_and_u32_max() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+
+        for (input, expected) in [
+            (0, 0),
+            (1, 1),
+            (2, 1),
+            (15, 3),
+            (16, 4),
+            (81, 9),
+            (u32::MAX, 65_535),
+        ] {
+            cpu.set_register(0, input);
+            cpu.execute_swi(0x0200_0200, 0xEF00_0008, 0x08, false, &mut bus)
+                .unwrap();
+            assert_eq!(cpu.register(0), Some(expected), "sqrt({input})");
+        }
+    }
+
+    #[test]
+    fn bios_cpu_set_copies_halfwords_and_repeats_the_first_value_for_fill() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        for (index, value) in [0x1234_u16, 0xABCD, 0x00FF].into_iter().enumerate() {
+            bus.write16(source + index as u32 * 2, value);
+        }
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 3);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000B, 0x0B, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read16(destination), 0x1234);
+        assert_eq!(bus.read16(destination + 2), 0xABCD);
+        assert_eq!(bus.read16(destination + 4), 0x00FF);
+
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination + 0x10);
+        cpu.set_register(2, (1 << 24) | 3);
+        cpu.execute_swi(0x0200_0204, 0xEF00_000B, 0x0B, false, &mut bus)
+            .unwrap();
+        for offset in (0..6).step_by(2) {
+            assert_eq!(bus.read16(destination + 0x10 + offset), 0x1234);
+        }
+    }
+
+    #[test]
+    fn bios_cpu_fast_set_rounds_count_up_to_eight_words() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        for index in 0..8_u32 {
+            bus.write32(source + index * 4, 0xA000_0000 | index);
+        }
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 3); // A request for three words copies one full 8-word block.
+        cpu.execute_swi(0x0200_0200, 0xEF00_000C, 0x0C, false, &mut bus)
+            .unwrap();
+        for index in 0..8_u32 {
+            assert_eq!(
+                bus.read32(destination + index * 4),
+                0xA000_0000 | index,
+                "word {index}"
+            );
+        }
+
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination + 0x40);
+        cpu.set_register(2, (1 << 24) | 1); // Fill mode also rounds to eight words.
+        cpu.execute_swi(0x0200_0204, 0xEF00_000C, 0x0C, false, &mut bus)
+            .unwrap();
+        for index in 0..8_u32 {
+            assert_eq!(bus.read32(destination + 0x40 + index * 4), 0xA000_0000);
+        }
+    }
+
 }
