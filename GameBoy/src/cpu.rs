@@ -108,6 +108,8 @@ pub struct Cpu {
     thumb: bool,
     /// True after BIOS Halt (SWI 0x02) until an enabled interrupt is pending.
     halted: bool,
+    /// Interrupt mask awaited by BIOS IntrWait/VBlankIntrWait, if any.
+    bios_wait_mask: Option<u16>,
     /// Expected address of the next sequential instruction fetch and its state.
     last_fetch_next: Option<(u32, bool)>,
 }
@@ -128,6 +130,7 @@ impl Cpu {
             flags: ConditionFlags::default(),
             thumb: false,
             halted: false,
+            bios_wait_mask: None,
             last_fetch_next: None,
         }
     }
@@ -139,6 +142,7 @@ impl Cpu {
         self.flags = ConditionFlags::default();
         self.thumb = false;
         self.halted = false;
+        self.bios_wait_mask = None;
         self.last_fetch_next = None;
     }
 
@@ -276,7 +280,18 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(StepOutcome, u32), CpuError> {
         if self.halted {
-            if bus.pending_interrupts() == 0 {
+            let pending = bus.pending_interrupts();
+            if let Some(mask) = self.bios_wait_mask {
+                let matched = pending & mask;
+                if matched == 0 {
+                    bus.advance_cycles(1);
+                    return Ok((StepOutcome::Halted, 1));
+                }
+                // IntrWait consumes the interrupt flags it waited for. This
+                // models the BIOS wait contract, not IRQ exception entry.
+                bus.acknowledge_interrupts(matched);
+                self.bios_wait_mask = None;
+            } else if pending == 0 {
                 bus.advance_cycles(1);
                 return Ok((StepOutcome::Halted, 1));
             }
@@ -1658,7 +1673,28 @@ impl Cpu {
         match swi {
             // Halt: stop fetching instructions until an enabled interrupt is requested.
             0x02 => {
+                self.bios_wait_mask = None;
                 self.halted = true;
+            }
+            // IntrWait: R0 requests clearing old IF flags; R1 selects sources.
+            0x04 | 0x05 => {
+                let (discard_old, mask) = if swi == 0x05 {
+                    (true, 1_u16)
+                } else {
+                    (self.registers[0] != 0, self.registers[1] as u16 & 0x3FFF)
+                };
+                if discard_old {
+                    bus.acknowledge_interrupts(mask);
+                }
+                let matched = bus.pending_interrupts() & mask;
+                if matched != 0 {
+                    bus.acknowledge_interrupts(matched);
+                    self.bios_wait_mask = None;
+                    self.halted = false;
+                } else {
+                    self.bios_wait_mask = Some(mask);
+                    self.halted = true;
+                }
             }
             // RegisterRamReset: clear the selected memory regions by BIOS flag.
             0x01 => {
@@ -6261,4 +6297,75 @@ mod tests {
             assert_eq!(bus.read32(destination + 0x40 + index * 4), 0xA000_0000);
         }
     }
+
+    #[test]
+    fn bios_intr_wait_ignores_unselected_interrupts_and_consumes_match() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
+        bus.request_interrupt(1 << 1);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 1 << 0);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0004, 0x04, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_halted());
+
+        bus.request_interrupt(1 << 0);
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(outcome, StepOutcome::Executed {
+            address: 0x0200_0200,
+            instruction: 0,
+        });
+        assert!(cycles >= 1);
+        assert_eq!(bus.pending_interrupts(), 1 << 1);
+        assert!(!cpu.is_halted());
+    }
+
+    #[test]
+    fn bios_intr_wait_discard_old_clears_selected_flags_before_waiting() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
+        bus.request_interrupt((1 << 0) | (1 << 1));
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 1);
+        cpu.set_register(1, 1 << 0);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0004, 0x04, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_halted());
+        assert_eq!(bus.pending_interrupts(), 1 << 1);
+
+        let (outcome, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(outcome, StepOutcome::Halted);
+        assert!(cpu.is_halted());
+    }
+
+    #[test]
+    fn bios_vblank_intr_wait_uses_vblank_mask_and_discards_old_request() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
+        bus.request_interrupt((1 << 0) | (1 << 1));
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0005, 0x05, false, &mut bus)
+            .unwrap();
+        assert!(cpu.is_halted());
+        assert_eq!(bus.pending_interrupts(), 1 << 1);
+
+        bus.request_interrupt(1 << 1);
+        let (outcome, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(outcome, StepOutcome::Halted);
+        assert!(cpu.is_halted());
+
+        bus.request_interrupt(1 << 0);
+        let (outcome, _) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(outcome, StepOutcome::Executed {
+            address: 0x0200_0200,
+            instruction: 0,
+        });
+        assert!(!cpu.is_halted());
+        assert_eq!(bus.pending_interrupts(), 1 << 1);
+    }
+
 }
