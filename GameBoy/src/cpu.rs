@@ -2079,6 +2079,16 @@ impl Cpu {
                 let level = if self.registers[0] == 0 { 0 } else { 0x0200 };
                 bus.write16(0x0400_0088, (current & !0x03FF) | level);
             }
+            // MidiKey2Freq converts WaveData.freq (+4) to the requested MIDI key.
+            // The BIOS fixed-point lookup table is approximated by its semitone exponent.
+            0x1F => {
+                let wave_frequency = bus.read32(self.registers[0].wrapping_add(4));
+                let midi_key = (self.registers[1] & 0xFF) as i32;
+                let fine = (self.registers[2] & 0xFF) as i32;
+                let semitones = f64::from(midi_key - 180) + f64::from(fine) / 256.0;
+                let frequency = f64::from(wave_frequency) * 2.0_f64.powf(semitones / 12.0);
+                self.registers[0] = frequency.round().clamp(0.0, f64::from(u32::MAX)) as u32;
+            }
             // CpuFastSet copies/fills words in groups of eight; count rounds up.
             0x0C => {
                 let source = self.registers[0] & !3;
@@ -6957,6 +6967,47 @@ mod tests {
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(cpu.flags(), flags);
         assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn bios_midi_key_to_frequency_returns_reference_frequency_and_octaves() {
+        let mut bus = bus_with_program(&[]);
+        let wave = 0x0200_1000;
+        bus.write32(wave.wrapping_add(4), 48_000);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, wave);
+        cpu.set_register(1, 180);
+        cpu.set_register(2, 0);
+        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(48_000));
+        assert_eq!(cpu.register(15), Some(0x0200_0204));
+
+        cpu.set_register(0, wave);
+        cpu.set_register(1, 168);
+        cpu.execute_swi(0x0200_0204, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(24_000));
+
+        cpu.set_register(0, wave);
+        cpu.set_register(1, 192);
+        cpu.execute_swi(0x0200_0208, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        assert_eq!(cpu.register(0), Some(96_000));
+    }
+
+    #[test]
+    fn bios_midi_key_to_frequency_applies_fine_adjustment() {
+        let mut bus = bus_with_program(&[]);
+        let wave = 0x0200_1000;
+        bus.write32(wave.wrapping_add(4), 12_000);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, wave);
+        cpu.set_register(1, 180);
+        cpu.set_register(2, 128);
+        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus).unwrap();
+        let actual = cpu.register(0).unwrap();
+        let expected = (12_000.0_f64 * 2.0_f64.powf(0.5 / 12.0)).round() as u32;
+        assert_eq!(actual, expected);
     }
 
     #[test]
