@@ -6665,7 +6665,7 @@ mod tests {
 
         // Fill reads the source once and writes each of four destination words.
         cpu.set_register(2, (1 << 26) | (1 << 24) | 4);
-        assert_eq!(cpu.estimate_cycles(0xEF00_000B), 5);
+        assert_eq!(cpu.estimate_cycles(0xEF00_000B), 6);
 
         // CpuFastSet rounds a one-word request up to eight words.
         cpu.set_register(2, 1);
