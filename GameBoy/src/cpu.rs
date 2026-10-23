@@ -2029,10 +2029,6 @@ impl Cpu {
                     bus.write32(destination.wrapping_add((index as u32) * 4), word);
                 }
             }
-            // SoundBias initializes the DAC bias to the standard midpoint.
-            0x19 => {
-                bus.write16(0x0400_0088, 0x0200);
-            }
             // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
             // This is a compatibility value; it does not claim to emulate BIOS ROM.
             0x0D => {
