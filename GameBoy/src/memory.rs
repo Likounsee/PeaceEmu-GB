@@ -5105,5 +5105,4 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0102) & 0x00C3, 0x00C3);
         assert_eq!(bus.read16(0x0400_0102) & !0x00C3, 0);
     }
-
 }

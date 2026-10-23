@@ -6548,12 +6548,8 @@ mod tests {
             .unwrap();
 
         for index in 0..16 {
-            assert_eq!(
-                bus.read32(0x0300_0000 + index * 4),
-                0xCAFE_0000 | index
-            );
+            assert_eq!(bus.read32(0x0300_0000 + index * 4), 0xCAFE_0000 | index);
         }
         assert_eq!(bus.read32(0x0300_0040), 0xDEAD_BEEF);
     }
-
 }

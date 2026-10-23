@@ -3389,11 +3389,17 @@ mod tests {
         let mut bus = bus();
         bus.write16(0x0400_0000, 3 | (1 << 10));
         bus.write16(VRAM_BASE, 0x001F);
-        bus.write16(VRAM_BASE + ((SCREEN_WIDTH * SCREEN_HEIGHT - 1) * 2) as u32, 0x7C00);
+        bus.write16(
+            VRAM_BASE + ((SCREEN_WIDTH * SCREEN_HEIGHT - 1) * 2) as u32,
+            0x7C00,
+        );
 
         let frame = render_bitmap_frame(&bus).expect("mode 3 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
-        assert_eq!(frame.pixel(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1), Some(0xFF00_00FF));
+        assert_eq!(
+            frame.pixel(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1),
+            Some(0xFF00_00FF)
+        );
     }
 
     #[test]
@@ -3408,5 +3414,4 @@ mod tests {
             Some(0xFFFF_FFFF)
         );
     }
-
 }
