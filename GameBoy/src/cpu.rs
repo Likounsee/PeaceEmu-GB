@@ -7455,8 +7455,6 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.set_register(0, 7);
         cpu.set_register(1, 2);
-        assert!(cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus)
-            < cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus) + 1);
         let small_div = cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus);
         cpu.set_register(0, i32::MIN as u32);
         let large_div = cpu.estimate_bios_swi_cycles(0xEF00_0006, false, &bus);
