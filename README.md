@@ -153,7 +153,7 @@ The CPU debugger API treats program-counter edits and execution-state changes as
 
 ### BIOS HLE coverage
 
-The BIOS HLE includes SWI `0x0D` BiosChecksum (returning the original BIOS checksum `0xBAAE187F`), SWI `0x19` SoundBias handling: zero selects bias `0x000`, nonzero selects `0x200`, and unrelated register bits are preserved. SWI `0x1F` MidiKey2Freq reads the wave reference frequency from `WaveData + 4` and calculates the requested MIDI pitch, including fine adjustment. The pitch calculation uses floating-point semitone exponentiation as an approximation of the BIOS fixed-point lookup table; tests cover reference pitch, octave shifts, fine adjustment, and return-PC behavior.
+The BIOS HLE includes SWI `0x0D` BiosChecksum (returning the original BIOS checksum `0xBAAE187F`), SWI `0x19` SoundBias handling: zero selects bias `0x000`, nonzero selects `0x200`, and unrelated register bits are preserved. SWI `0x1F` MidiKey2Freq reads the wave reference frequency from `WaveData + 4` and calculates the requested MIDI pitch, including fine adjustment. The pitch calculation uses floating-point semitone exponentiation as an approximation of the BIOS fixed-point lookup table; tests cover reference pitch, octave shifts, fine adjustment, argument masking, saturation, and return-PC behavior.
 
 ### CPU status-register regression coverage
 

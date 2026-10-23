@@ -7015,6 +7015,40 @@ mod tests {
     }
 
     #[test]
+    fn bios_midi_key_to_frequency_ignores_high_argument_bits() {
+        let mut bus = bus_with_program(&[]);
+        let wave: u32 = 0x0200_1000;
+        bus.write32(wave.wrapping_add(4), 48_000);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, wave);
+        cpu.set_register(1, 0xABCD_00B4);
+        cpu.set_register(2, 0x1234_5600);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), Some(48_000));
+    }
+
+    #[test]
+    fn bios_midi_key_to_frequency_saturates_extreme_result() {
+        let mut bus = bus_with_program(&[]);
+        let wave: u32 = 0x0200_1000;
+        bus.write32(wave.wrapping_add(4), u32::MAX);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, wave);
+        cpu.set_register(1, 255);
+        cpu.set_register(2, 255);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), Some(u32::MAX));
+    }
+
+    #[test]
     fn bios_midi_key_to_frequency_applies_fine_adjustment() {
         let mut bus = bus_with_program(&[]);
         let wave: u32 = 0x0200_1000;
