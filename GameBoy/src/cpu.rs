@@ -995,8 +995,6 @@ impl Cpu {
             let target = self.registers[rm];
             self.thumb = target & 1 != 0;
             self.registers[15] = if self.thumb { target & !1 } else { target & !3 };
-        } else if instruction & 0x0F80_00F0 == 0x0080_0090 {
-            self.execute_long_multiply(address, instruction)?;
         } else if instruction & 0x0FC0_00F0 == 0x0000_0090 {
             self.execute_multiply(address, instruction)?;
         } else if instruction & 0x0E00_0000 == 0x0A00_0000 {
