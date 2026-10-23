@@ -568,6 +568,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 bitmap_brightness_effect(bus, display_control, 5),
                 &windows,
             );
+            let backdrop_color = rgb555(bus.read16(PALETTE_BASE));
             for y in 0..SCREEN_HEIGHT {
                 for x in 0..SCREEN_WIDTH {
                     let Some((source_x, source_y)) = transform.source_coordinates(x, y) else {
@@ -575,13 +576,17 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     };
                     let address = VRAM_BASE + ((source_y * SCREEN_WIDTH + source_x) * 2) as u32;
                     if windows.allows(x, y, 2) {
-                        frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                        let effects_allowed = windows.effects_allowed(x, y);
+                        let color = apply_brightness_effect(
                             rgb555(bus.read16(address)),
-                            if windows.effects_allowed(x, y) {
-                                bitmap_effect
-                            } else {
-                                None
-                            },
+                            if effects_allowed { bitmap_effect } else { None },
+                        );
+                        let destination = y * SCREEN_WIDTH + x;
+                        frame.pixels[destination] = composite_bitmap_background_pixel(
+                            bus,
+                            color,
+                            backdrop_color,
+                            effects_allowed,
                         );
                     }
                 }
@@ -625,13 +630,17 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                         VRAM_BASE + page_offset + (source_y * SCREEN_WIDTH + source_x) as u32;
                     let index = usize::from(bus.read8(address));
                     if windows.allows(x, y, 2) {
-                        frame.pixels[y * SCREEN_WIDTH + x] = apply_brightness_effect(
+                        let effects_allowed = windows.effects_allowed(x, y);
+                        let color = apply_brightness_effect(
                             palette[index],
-                            if windows.effects_allowed(x, y) {
-                                bitmap_effect
-                            } else {
-                                None
-                            },
+                            if effects_allowed { bitmap_effect } else { None },
+                        );
+                        let destination = y * SCREEN_WIDTH + x;
+                        frame.pixels[destination] = composite_bitmap_background_pixel(
+                            bus,
+                            color,
+                            palette[0],
+                            effects_allowed,
                         );
                     }
                 }
@@ -666,6 +675,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 mosaic_height,
                 bg2_control & (1 << 13) != 0,
             );
+            let backdrop_color = rgb555(bus.read16(PALETTE_BASE));
             for y in 0..MODE_5_HEIGHT {
                 for x in 0..MODE_5_WIDTH {
                     let Some((source_x, source_y)) = transform.source_coordinates(x, y) else {
@@ -679,13 +689,16 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                     let screen_x = x + (SCREEN_WIDTH - MODE_5_WIDTH) / 2;
                     let screen_y = y + (SCREEN_HEIGHT - MODE_5_HEIGHT) / 2;
                     if windows.allows(screen_x, screen_y, 2) {
-                        frame.pixels[target] = apply_brightness_effect(
+                        let effects_allowed = windows.effects_allowed(screen_x, screen_y);
+                        let color = apply_brightness_effect(
                             rgb555(bus.read16(address)),
-                            if windows.effects_allowed(screen_x, screen_y) {
-                                bitmap_effect
-                            } else {
-                                None
-                            },
+                            if effects_allowed { bitmap_effect } else { None },
+                        );
+                        frame.pixels[target] = composite_bitmap_background_pixel(
+                            bus,
+                            color,
+                            backdrop_color,
+                            effects_allowed,
                         );
                     }
                 }
@@ -1261,6 +1274,31 @@ fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 12
     }
 
     allowed_lines
+}
+
+/// Alpha-composites a bitmap BG2 pixel with the backdrop when BLDCNT selects
+/// alpha mode and both layers are selected as first/second targets. Window
+/// color-effect permission is checked per pixel by the caller.
+fn composite_bitmap_background_pixel(
+    bus: &MemoryBus,
+    source: u32,
+    backdrop: u32,
+    effects_allowed: bool,
+) -> u32 {
+    if !effects_allowed {
+        return source;
+    }
+    let control = bus.read16(0x0400_0050);
+    if (control >> 6) & 3 != 1
+        || control & (1 << 10) == 0
+        || control & (1 << 13) == 0
+    {
+        return source;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    let eva = (coefficients & 0x1F).min(16);
+    let evb = ((coefficients >> 8) & 0x1F).min(16);
+    blend_argb555(source, backdrop, eva, evb)
 }
 
 /// Returns EVA/EVB when bitmap modes show the backdrop instead of BG2 and
@@ -3130,6 +3168,44 @@ mod tests {
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
         assert_eq!(frame.pixel(0, 8), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn bitmap_modes_alpha_blend_bg2_with_backdrop_only_when_targets_and_window_allow() {
+        for mode in [3_u16, 4, 5] {
+            let mut bus = bus();
+            bus.write16(0x0400_0000, mode | (1 << 10));
+            bus.write16(PALETTE_BASE, 0);
+            bus.write16(0x0400_0050, (1 << 10) | (1 << 13) | (1 << 6));
+            bus.write16(0x0400_0052, 8 | (8 << 8));
+            match mode {
+                3 => bus.write16(VRAM_BASE, 0x001F),
+                4 => {
+                    bus.write8(VRAM_BASE, 1);
+                    bus.write16(PALETTE_BASE + 2, 0x001F);
+                }
+                5 => bus.write16(VRAM_BASE + 0x5000, 0x001F),
+                _ => unreachable!(),
+            }
+            let frame = render_bitmap_frame(&bus).expect("bitmap mode should render");
+            let (x, y) = if mode == 5 { (40, 16) } else { (0, 0) };
+            assert_eq!(frame.pixel(x, y), Some(0xFF7B_0000), "mode {mode}");
+
+            // Removing the backdrop's second-target bit disables blending.
+            bus.write16(0x0400_0050, (1 << 10) | (1 << 6));
+            let unblended = render_bitmap_frame(&bus).unwrap();
+            assert_eq!(unblended.pixel(x, y), Some(0xFFFF_0000), "mode {mode}");
+
+            // A window can independently prohibit effects at the target pixel.
+            bus.write16(0x0400_0000, mode | (1 << 10) | (1 << 13));
+            bus.write16(0x0400_0040, 8 << 8);
+            bus.write16(0x0400_0044, 1 << 8);
+            bus.write16(0x0400_0048, 1 << 2);
+            bus.write16(0x0400_004A, (1 << 2) | (1 << 5));
+            bus.write16(0x0400_0050, (1 << 10) | (1 << 13) | (1 << 6));
+            let windowed = render_bitmap_frame(&bus).unwrap();
+            assert_eq!(windowed.pixel(x, y), Some(0xFFFF_0000), "mode {mode}");
+        }
     }
 
     #[test]
