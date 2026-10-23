@@ -2546,6 +2546,20 @@ mod tests {
     }
 
     #[test]
+    fn immediate_dma_masks_reserved_address_bits_and_keeps_data_transfer() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0200_0000, 0x1234_5678);
+        bus.write32(0x0400_00B0, 0xF200_0000);
+        bus.write32(0x0400_00B4, 0xF300_0000);
+        bus.write16(0x0400_00B8, 1);
+        bus.write16(0x0400_00BA, 0x8400);
+
+        assert_eq!(bus.read32(0x0300_0000), 0x1234_5678);
+        assert_eq!(bus.dma_source_address(0), Some(0x0200_0004));
+        assert_eq!(bus.dma_destination_address(0), Some(0x0300_0004));
+    }
+
+    #[test]
     fn immediate_dma_copies_halfwords_and_raises_optional_irq() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0200_0000, 0x1234);
