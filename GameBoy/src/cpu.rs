@@ -2087,7 +2087,9 @@ impl Cpu {
                 let source = self.registers[0];
                 let destination = self.registers[1];
                 let count = self.registers[2].min(0x1000);
-                let stride = self.registers[3].max(2);
+                // The BIOS parameter is the byte stride between coefficients;
+                // callers may request packed (2-byte) or interleaved (8-byte) matrices.
+                let stride = self.registers[3];
                 for index in 0..count {
                     let src = source.wrapping_add(index * 8);
                     // Each OBJ matrix occupies four coefficient strides; advancing
@@ -3232,6 +3234,36 @@ mod tests {
         assert_eq!(bus.read16(destination + 10), 0);
         assert_eq!(bus.read16(destination + 18), 0);
         assert_eq!(bus.read16(destination + 26), 0);
+    }
+
+    #[test]
+    fn bios_obj_affine_set_supports_packed_two_byte_stride() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        // Two identity matrices in the BIOS ObjAffineSet input format.
+        for index in 0..2 {
+            let src = source + index * 8;
+            bus.write16(src, 0x0100);
+            bus.write16(src + 2, 0x0100);
+            bus.write16(src + 4, 0);
+        }
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 2);
+        cpu.set_register(3, 2);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000F, 0x0F, false, &mut bus)
+            .unwrap();
+
+        for matrix in 0..2 {
+            let base = destination + matrix * 8;
+            assert_eq!(bus.read16(base) as i16, 256);
+            assert_eq!(bus.read16(base + 2) as i16, 0);
+            assert_eq!(bus.read16(base + 4) as i16, 0);
+            assert_eq!(bus.read16(base + 6) as i16, 256);
+        }
     }
 
     #[test]
