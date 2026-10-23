@@ -4148,6 +4148,54 @@ mod tests {
     }
 
     #[test]
+    fn gamepak_width_timing_covers_rom_sram_and_boundary_rejection() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // Default WAITCNT: ROM0 non-sequential=4, sequential=2; a word
+        // consists of one non-sequential and one sequential halfword.
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 1),
+            Some(4)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, true, 2),
+            Some(2)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
+            Some(6)
+        );
+
+        // SRAM is byte-wide, so halfword and word accesses multiply its wait.
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 2),
+            Some(8)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0E00_0000, true, 4),
+            Some(16)
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0FFF_FFFF, false, 2),
+            None
+        );
+
+        // Aligned ROM word accesses cannot straddle WAITCNT regions.
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 4),
+            None
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0BFF_FFFF, false, 4),
+            None
+        );
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0C00_0000, false, 3),
+            None
+        );
+    }
+
+    #[test]
     fn waitcnt_byte_writes_preserve_other_fields_and_mask_reserved_bits() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0204, 0x7FFF);
