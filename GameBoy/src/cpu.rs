@@ -6178,7 +6178,6 @@ mod tests {
         assert!(!cpu.condition_passed_for(u8::MAX));
     }
 
-
     #[test]
     fn bios_sqrt_handles_zero_perfect_squares_and_u32_max() {
         let mut bus = bus_with_program(&[]);
@@ -6262,5 +6261,4 @@ mod tests {
             assert_eq!(bus.read32(destination + 0x40 + index * 4), 0xA000_0000);
         }
     }
-
 }
