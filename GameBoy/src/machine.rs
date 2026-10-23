@@ -1180,6 +1180,58 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Runs until a DMA channel becomes enabled.
+    ///
+    /// Returns `Some(0)` if the channel is already enabled, `Some(n)` after
+    /// a CPU step enables it, or `None` for an invalid channel or exhausted
+    /// instruction budget. This observes the channel's enable bit; it does not
+    /// imply that a transfer has completed.
+    pub fn run_until_dma_enabled(
+        &mut self,
+        channel: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if channel >= 4 {
+            return Ok(None);
+        }
+        if self.bus.dma_enabled(channel) == Some(true) {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.dma_enabled(channel) == Some(true) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Runs until a DMA channel is disabled, usually after a one-shot transfer.
+    ///
+    /// Returns `Some(0)` if the channel is already disabled, `Some(n)` after
+    /// a CPU step observes it disabled, or `None` for an invalid channel or an
+    /// exhausted budget. Repeating DMA channels remain enabled after each burst,
+    /// so this method is intended for one-shot transfers.
+    pub fn run_until_dma_disabled(
+        &mut self,
+        channel: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        if channel >= 4 {
+            return Ok(None);
+        }
+        if self.bus.dma_enabled(channel) == Some(false) {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            self.step()?;
+            if self.bus.dma_enabled(channel) == Some(false) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Returns how many additional sample bytes a FIFO can queue before
     /// reaching its Direct Sound refill threshold.
     ///
@@ -2127,6 +2179,35 @@ mod tests {
         machine.acknowledge_interrupts(1 << 3);
         assert_eq!(machine.pending_interrupts(), 0);
         assert!(!machine.interrupt_pending());
+    }
+
+    #[test]
+    fn dma_state_runners_wait_for_hblank_transfer_and_report_initial_state() {
+        let mut rom = vec![0; 0xC0];
+        rom[0..4].copy_from_slice(&0xEAFF_FFFE_u32.to_le_bytes()); // B to self.
+        rom[0xB2] = 0x96;
+        let sum = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0_u8, |sum, byte| sum.wrapping_add(*byte));
+        rom[0xBD] = 0_u8.wrapping_sub(sum).wrapping_sub(0x19);
+        let cartridge = GbaCartridge::parse(&rom).expect("synthetic GBA header should be valid");
+        let mut machine = GbaMachine::new(cartridge);
+
+        assert_eq!(machine.run_until_dma_enabled(4, 10).unwrap(), None);
+        assert_eq!(machine.run_until_dma_disabled(4, 10).unwrap(), None);
+        assert_eq!(machine.run_until_dma_disabled(0, 0).unwrap(), Some(0));
+
+        machine.bus_mut().write16(0x0200_0000, 0xBEEF);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0xA000); // One-shot HBlank DMA.
+
+        assert_eq!(machine.run_until_dma_enabled(0, 0).unwrap(), Some(0));
+        let steps = machine.run_until_dma_disabled(0, 2_000).unwrap();
+        assert!(matches!(steps, Some(count) if count > 0 && count <= 2_000));
+        assert_eq!(machine.bus().read16(0x0300_0000), 0xBEEF);
+        assert_eq!(machine.bus().dma_enabled(0), Some(false));
     }
 
     #[test]
