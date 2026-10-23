@@ -6460,10 +6460,7 @@ mod tests {
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
         assert_eq!(cycles, 9); // Base + one read and one write per word.
         for index in 0..4 {
-            assert_eq!(
-                bus.read32(0x0200_0200 + index * 4),
-                0x1234_0000 + index
-            );
+            assert_eq!(bus.read32(0x0200_0200 + index * 4), 0x1234_0000 + index);
         }
         assert_eq!(bus.read16(0x0400_0100), 0xFFFF);
         assert!(bus.timer_counter(0).unwrap() >= 0xFFFF);
