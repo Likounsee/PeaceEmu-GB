@@ -6113,7 +6113,7 @@ mod tests {
     #[test]
     fn cpu_snapshot_preserves_bios_interrupt_wait_mask() {
         let mut bus = bus_with_program(&[]);
-        bus.write16(0x0400_0200, 1);
+        bus.write16(0x0400_0200, 3);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
         cpu.set_register(0, 0);
