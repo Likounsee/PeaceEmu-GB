@@ -4180,14 +4180,15 @@ mod tests {
             None
         );
 
-        // Aligned ROM word accesses cannot straddle WAITCNT regions.
+        // Unaligned ROM word addresses align down to the last word within
+        // their original WAITCNT region, rather than crossing the boundary.
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x09FF_FFFF, false, 4),
-            None
+            Some(6)
         );
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0BFF_FFFF, false, 4),
-            None
+            Some(8)
         );
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0C00_0000, false, 3),
