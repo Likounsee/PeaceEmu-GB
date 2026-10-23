@@ -198,7 +198,11 @@ impl GbaMachine {
     pub fn run_for_instructions(&mut self, instruction_budget: usize) -> Result<u64, CpuError> {
         let mut elapsed = 0_u64;
         for _ in 0..instruction_budget {
-            elapsed = elapsed.saturating_add(u64::from(self.step()?));
+            let step_cycles = self.step()?;
+            if step_cycles == 0 {
+                break;
+            }
+            elapsed = elapsed.saturating_add(u64::from(step_cycles));
         }
         Ok(elapsed)
     }
@@ -446,7 +450,11 @@ impl GbaMachine {
     pub fn run_steps(&mut self, count: usize) -> Result<u64, CpuError> {
         let mut cycles = 0_u64;
         for _ in 0..count {
-            cycles = cycles.saturating_add(u64::from(self.step()?));
+            let step_cycles = self.step()?;
+            if step_cycles == 0 {
+                break;
+            }
+            cycles = cycles.saturating_add(u64::from(step_cycles));
         }
         Ok(cycles)
     }
