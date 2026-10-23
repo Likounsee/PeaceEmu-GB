@@ -3366,6 +3366,7 @@ mod tests {
     #[test]
     fn bios_register_ram_reset_sound_flag_clears_queued_audio() {
         let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0090, 0xCAFE); // Wave RAM survives BIOS sound reset.
         bus.write32(0x0400_00A0, 0x4433_2211);
         bus.write32(0x0400_00A4, 0x8877_6655);
         assert_eq!(bus.audio_fifo_len(0), Some(4));
@@ -3381,7 +3382,7 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(1), Some(0));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0));
         assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
-        assert_eq!(bus.read16(0x0400_0090), 0);
+        assert_eq!(bus.read16(0x0400_0090), 0xCAFE);
     }
 
     #[test]
@@ -3402,7 +3403,7 @@ mod tests {
         cpu.set_register(0, 1 << 6);
         cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0090), 0);
+        assert_eq!(bus.read16(0x0400_0090), 0x1234);
         assert_eq!(bus.read16(0x0400_0120), 0x1234);
     }
 
