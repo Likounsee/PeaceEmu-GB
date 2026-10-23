@@ -6322,6 +6322,7 @@ mod tests {
             cpsr: 0,
             thumb: false,
             halted: false,
+            stopped: false,
             bios_wait_mask: None,
             pc: 0x0800_0003,
         });
