@@ -3303,7 +3303,10 @@ mod tests {
 
         machine.bus_mut().write32(0x0400_00A0, 0x1234_5678);
         assert_eq!(machine.audio_fifo_len(0), Some(4));
-        assert_eq!(machine.run_until_audio_fifo_nonempty(0, 0).unwrap(), Some(0));
+        assert_eq!(
+            machine.run_until_audio_fifo_nonempty(0, 0).unwrap(),
+            Some(0)
+        );
         assert_eq!(machine.run_until_audio_fifo_empty(0, 0).unwrap(), None);
         assert_eq!(machine.audio_fifo_len(0), Some(4));
     }
