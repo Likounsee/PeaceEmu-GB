@@ -374,3 +374,40 @@ fn timer_overflow_deadline_tracks_reload_prescaler_phase_and_enable_state() {
     bus.write16(0x0400_0102, 0x0081);
     assert_eq!(bus.timer_cycles_until_overflow(0), Some(128));
 }
+
+#[test]
+fn cascaded_timer_overflow_latches_each_configured_irq() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write16(0x0400_0100, 0xFFFF);
+    bus.write16(0x0400_0102, 0x00C0); // TM0 enabled with IRQ.
+    bus.write16(0x0400_0104, 0xFFFF);
+    bus.write16(0x0400_0106, 0x00C4); // TM1 cascade enabled with IRQ.
+
+    bus.advance_cycles(1);
+
+    assert_eq!(bus.timer_counter(0), Some(0xFFFF));
+    assert_eq!(bus.timer_counter(1), Some(0xFFFF));
+    assert_eq!(
+        bus.interrupt_request_flags() & ((1 << 3) | (1 << 4)),
+        (1 << 3) | (1 << 4)
+    );
+}
+
+#[test]
+fn immediate_word_dma_aligns_bus_addresses_and_latches_completion_irq() {
+    let mut bus = MemoryBus::new(cartridge());
+    bus.write32(0x0200_0000, 0x1234_ABCD);
+    bus.write32(0x0200_0004, 0xDEAD_BEEF);
+    // DMA0 word transfer: source/destination address low bits are ignored.
+    bus.write32(0x0400_00B0, 0x0200_0001);
+    bus.write32(0x0400_00B4, 0x0300_0003);
+    bus.write16(0x0400_00B8, 1);
+    bus.write16(0x0400_00BA, 0xC400); // Enable, word width, completion IRQ.
+
+    assert_eq!(bus.read32(0x0300_0000), 0x1234_ABCD);
+    assert_eq!(bus.dma_source_address(0), Some(0x0200_0004));
+    assert_eq!(bus.dma_destination_address(0), Some(0x0300_0004));
+    assert_eq!(bus.interrupt_request_flags() & (1 << 8), 1 << 8);
+    assert_eq!(bus.dma_enabled(0), Some(false));
+}
+
