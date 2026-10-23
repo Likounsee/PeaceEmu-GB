@@ -246,7 +246,10 @@ impl GbaMachine {
         let already_passed = current_scanline == target_scanline && current_cycle > target_cycle;
         let mut left_current_occurrence = !already_passed;
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             let scanline = self.bus.video_scanline();
             let cycle = self.bus.video_cycles_into_scanline();
             if scanline != target_scanline {
@@ -279,7 +282,10 @@ impl GbaMachine {
         let mut left_current_occurrence =
             current_scanline != target_scanline || current_cycle < target_cycle;
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             let scanline = self.bus.video_scanline();
             let cycle = self.bus.video_cycles_into_scanline();
             if scanline != target_scanline {
@@ -309,7 +315,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.bus.video_scanline() == target_scanline {
                 return Ok(Some(executed + 1));
             }
@@ -336,7 +345,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if at_target(self) {
                 return Ok(Some(executed + 1));
             }
@@ -361,7 +373,10 @@ impl GbaMachine {
         };
         let mut left_target = !at_target(self);
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if !at_target(self) {
                 left_target = true;
             } else if left_target {
@@ -386,7 +401,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.cycles_elapsed >= target_cycles {
                 return Ok(Some(executed + 1));
             }
@@ -410,7 +428,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.instructions_executed >= target_count {
                 return Ok(Some(executed + 1));
             }
@@ -587,7 +608,10 @@ impl GbaMachine {
             return Ok(0);
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             if selected_pending(self) {
                 return Ok(executed + 1);
             }
@@ -604,7 +628,10 @@ impl GbaMachine {
     pub fn run_until_next_frame(&mut self, max_steps: usize) -> Result<Option<usize>, CpuError> {
         let mut previous_scanline = self.bus.video_scanline();
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             let scanline = self.bus.video_scanline();
             if scanline < previous_scanline {
                 return Ok(Some(executed + 1));
@@ -629,7 +656,10 @@ impl GbaMachine {
         }
         let mut left_target = self.bus.video_scanline() != target_scanline;
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             let scanline = self.bus.video_scanline();
             if scanline != target_scanline {
                 left_target = true;
@@ -647,7 +677,10 @@ impl GbaMachine {
     pub fn run_until_next_vcount_match(&mut self, max_steps: usize) -> Result<usize, CpuError> {
         let mut saw_match_end = !self.bus.video_vcount_match();
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             let matches = self.bus.video_vcount_match();
             if !matches {
                 saw_match_end = true;
@@ -685,7 +718,10 @@ impl GbaMachine {
         };
         let mut saw_clear = !selected_pending(self);
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             let pending = selected_pending(self);
             if !pending {
                 saw_clear = true;
@@ -704,7 +740,10 @@ impl GbaMachine {
     pub fn run_until_next_vblank(&mut self, max_steps: usize) -> Result<usize, CpuError> {
         let mut saw_vblank_end = !self.bus.video_in_vblank();
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             let in_vblank = self.bus.video_in_vblank();
             if !in_vblank {
                 saw_vblank_end = true;
@@ -723,7 +762,10 @@ impl GbaMachine {
     pub fn run_until_next_hblank(&mut self, max_steps: usize) -> Result<usize, CpuError> {
         let mut saw_hblank_end = !self.bus.video_in_hblank();
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             let in_hblank = self.bus.video_in_hblank();
             if !in_hblank {
                 saw_hblank_end = true;
@@ -745,7 +787,10 @@ impl GbaMachine {
             return Ok(0);
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             if self.bus.video_in_vblank() {
                 return Ok(executed + 1);
             }
@@ -764,7 +809,10 @@ impl GbaMachine {
             return Ok(0);
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             if self.bus.video_in_hblank() {
                 return Ok(executed + 1);
             }
@@ -782,7 +830,10 @@ impl GbaMachine {
             return Ok(0);
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(executed);
+            }
             if self.bus.video_vcount_match() {
                 return Ok(executed + 1);
             }
@@ -1001,7 +1052,10 @@ impl GbaMachine {
         }
         let starting_cycles = self.cycles_elapsed;
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.cycles_elapsed.saturating_sub(starting_cycles) >= cycles_to_overflow {
                 return Ok(Some(executed + 1));
             }
@@ -1140,7 +1194,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self
                 .bus
                 .audio_fifo_len(fifo)
@@ -1174,7 +1231,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self
                 .bus
                 .audio_fifo_len(fifo)
@@ -1211,7 +1271,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             let Some(status) = self.bus.audio_fifo_status(fifo) else {
                 return Ok(None);
             };
@@ -1240,7 +1303,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             let Some(status) = self.bus.audio_fifo_status(fifo) else {
                 return Ok(None);
             };
@@ -1271,7 +1337,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.bus.interrupt_request_flags() & source != 0 {
                 return Ok(Some(executed + 1));
             }
@@ -1297,7 +1366,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.bus.dma_enabled(channel) == Some(true) {
                 return Ok(Some(executed + 1));
             }
@@ -1323,7 +1395,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.bus.dma_enabled(channel) == Some(false) {
                 return Ok(Some(executed + 1));
             }
@@ -1356,7 +1431,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.bus.audio_fifo_len(fifo).is_some_and(|len| len > 0) {
                 return Ok(Some(executed + 1));
             }
@@ -1382,7 +1460,10 @@ impl GbaMachine {
             return Ok(Some(0));
         }
         for executed in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             if self.bus.audio_fifo_len(fifo) == Some(0) {
                 return Ok(Some(executed + 1));
             }
@@ -1411,7 +1492,10 @@ impl GbaMachine {
     pub fn run_frame(&mut self, max_steps: usize) -> Result<Option<VideoFrame>, CpuError> {
         let mut saw_vblank_end = !self.bus.video_in_vblank();
         for _ in 0..max_steps {
-            self.step()?;
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
             let in_vblank = self.bus.video_in_vblank();
             if !in_vblank {
                 saw_vblank_end = true;
@@ -1756,6 +1840,14 @@ mod tests {
             machine.bus().video_cycles_into_scanline(),
         );
         assert_eq!(machine.run_for_cycles(100).unwrap(), 0);
+        assert_eq!(machine.cycles_elapsed(), cycles_before);
+        // Event-driven runners must stop immediately when STOP freezes the clock,
+        // rather than burning their entire instruction budget without progress.
+        assert_eq!(machine.run_until_next_frame(100).unwrap(), None);
+        assert_eq!(machine.run_until_video_position(1, 0, 100).unwrap(), None);
+        assert_eq!(machine.run_until_pc(0x0200_0000, 100).unwrap(), None);
+        assert_eq!(machine.run_until_interrupt_mask(1, 100).unwrap(), 0);
+        assert_eq!(machine.run_until_audio_fifo_nonempty(0, 100).unwrap(), None);
         assert_eq!(machine.cycles_elapsed(), cycles_before);
         assert_eq!(
             (
