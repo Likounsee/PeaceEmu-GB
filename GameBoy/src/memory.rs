@@ -2731,8 +2731,8 @@ mod tests {
         assert_eq!(fast_8.read16(0x0400_0128) & (1 << 7), 0);
 
         let mut normal_32 = MemoryBus::new(cartridge());
-        normal_32.write16(0x0400_0128, 1 << 12);
-        normal_32.write16(0x0400_0128, (1 << 12) | (1 << 7));
+        normal_32.write16(0x0400_0128, (1 << 12) | 1);
+        normal_32.write16(0x0400_0128, (1 << 12) | (1 << 7) | 1);
         normal_32.advance_cycles(2047);
         assert_ne!(normal_32.read16(0x0400_0128) & (1 << 7), 0);
         normal_32.advance_cycles(1);
@@ -4320,10 +4320,11 @@ mod tests {
             bus.gamepak_access_cycles_for_width(0x0802_0000, true, 2),
             Some(3)
         );
-        // A 32-bit access straddling the boundary has S then N bus beats.
+        // Word accesses are aligned to four bytes, so they cannot straddle
+        // a 128 KiB boundary; both halfwords remain in the preceding block.
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0801_FFFE, true, 4),
-            Some(4)
+            Some(2)
         );
         // Entering the block boundary during a burst also restarts N timing.
         assert_eq!(
