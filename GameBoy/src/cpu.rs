@@ -263,10 +263,14 @@ impl Cpu {
     }
 
     /// Returns the current ARM processor mode bits from CPSR.
-    pub fn processor_mode(&self) -> u32 { self.mode }
+    pub fn processor_mode(&self) -> u32 {
+        self.mode
+    }
 
     /// Returns whether IRQ exceptions are masked by CPSR.I.
-    pub fn irq_disabled(&self) -> bool { self.irq_disabled }
+    pub fn irq_disabled(&self) -> bool {
+        self.irq_disabled
+    }
 
     /// Enters IRQ mode and saves the interrupted CPSR in SPSR_irq.
     pub(crate) fn enter_irq(&mut self) -> bool {
@@ -289,7 +293,9 @@ impl Cpu {
     }
 
     fn switch_mode(&mut self, mode: u32) {
-        if self.mode == mode { return; }
+        if self.mode == mode {
+            return;
+        }
         if self.mode == 0x12 {
             self.irq_sp_lr = [self.registers[13], self.registers[14]];
         } else {
@@ -306,7 +312,9 @@ impl Cpu {
     }
 
     fn restore_irq_exception_state(&mut self) -> bool {
-        if self.mode != 0x12 || !self.spsr_irq_valid { return false; }
+        if self.mode != 0x12 || !self.spsr_irq_valid {
+            return false;
+        }
         let saved = self.spsr_irq;
         let target_mode = saved & 0x1F;
         if target_mode != 0x1F && target_mode != 0x10 && target_mode != 0x12 {
@@ -322,7 +330,11 @@ impl Cpu {
         self.irq_disabled = saved & (1 << 7) != 0;
         self.thumb = saved & (1 << 5) != 0;
         self.spsr_irq_valid = false;
-        self.registers[15] = if self.thumb { self.registers[15] & !1 } else { self.registers[15] & !3 };
+        self.registers[15] = if self.thumb {
+            self.registers[15] & !1
+        } else {
+            self.registers[15] & !3
+        };
         self.last_fetch_next = None;
         true
     }
@@ -1916,8 +1928,7 @@ impl Cpu {
         let field_mask = (instruction >> 16) & 0xF;
         let immediate = instruction & (1 << 25) != 0;
 
-        if (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid))
-            || field_mask & !0x8 != 0
+        if (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid)) || field_mask & !0x8 != 0
         {
             return Err(CpuError::UnsupportedInstruction {
                 address,
@@ -1958,9 +1969,16 @@ impl Cpu {
         let rd = ((instruction >> 12) & 0xF) as usize;
         let saved_status = instruction & (1 << 22) != 0;
         if rd == 15 || (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid)) {
-            return Err(CpuError::UnsupportedInstruction { address, instruction });
+            return Err(CpuError::UnsupportedInstruction {
+                address,
+                instruction,
+            });
         }
-        self.registers[rd] = if saved_status { self.spsr_irq } else { self.cpsr_flags() };
+        self.registers[rd] = if saved_status {
+            self.spsr_irq
+        } else {
+            self.cpsr_flags()
+        };
         Ok(())
     }
 
@@ -2834,7 +2852,11 @@ impl Cpu {
         };
 
         if write_result {
-            self.registers[rd] = if rd == 15 && !set_flags { result & !3 } else { result };
+            self.registers[rd] = if rd == 15 && !set_flags {
+                result & !3
+            } else {
+                result
+            };
         }
 
         if set_flags && rd == 15 {
@@ -8172,7 +8194,7 @@ mod tests {
 
     #[test]
     fn irq_mrs_reads_spsr_and_msr_updates_saved_condition_flags() {
-        let mut bus = bus_with_program(&[0xE14F_0000, 0xE169_F000]);
+        let mut bus = bus_with_program(&[0xE14F_0000, 0xE168_F001]);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
         assert!(cpu.enter_irq());
@@ -8184,6 +8206,4 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.spsr_irq & 0xF000_0000, 0xA000_0000);
     }
-
-
 }
