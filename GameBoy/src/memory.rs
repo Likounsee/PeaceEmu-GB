@@ -137,6 +137,16 @@ pub struct MemoryBus {
     psg: crate::sound::Psg,
     /// Completed DMA bursts per channel since the last power cycle.
     dma_completed_transfers: [u64; 4],
+    /// Serial data registers: SIOMULTI0..3 / SIODATA32 share 0x120..0x127.
+    sio_multi: [u16; 4],
+    /// Normal 8-bit serial data register (SIODATA8).
+    sio_data8: u8,
+    /// Normal 32-bit serial data register (SIODATA32).
+    sio_data32: u32,
+    /// Serial control register (SIOCNT), with reserved bits masked.
+    sio_control: u16,
+    /// General-purpose I/O / serial mode control register (RCNT).
+    sio_rcnt: u16,
     /// Pending HALTCNT requests consumed by the CPU at the next step boundary.
     halt_requested: bool,
     stop_requested: bool,
@@ -203,6 +213,11 @@ impl MemoryBus {
             audio_fifo_samples_consumed: [0; 2],
             psg: crate::sound::Psg::default(),
             dma_completed_transfers: [0; 4],
+            sio_multi: [0xFFFF; 4],
+            sio_data8: 0,
+            sio_data32: 0,
+            sio_control: 0,
+            sio_rcnt: 0,
             halt_requested: false,
             stop_requested: false,
         }
@@ -1121,6 +1136,32 @@ impl MemoryBus {
             }
         }
 
+        // SIO data/control registers. The multiplayer receive slots power
+        // up idle/high; link-cable transfers are not clocked by this bus yet.
+        if (0x0400_0120..=0x0400_0127).contains(&address) {
+            let offset = (address - 0x0400_0120) as usize;
+            let value = if (self.sio_control >> 12) & 3 == 1 {
+                self.sio_data32
+            } else {
+                u32::from(self.sio_multi[offset / 2])
+            };
+            let shift = if (self.sio_control >> 12) & 3 == 1 {
+                offset * 8
+            } else {
+                (offset & 1) * 8
+            };
+            return ((value >> shift) & 0xFF) as u8;
+        }
+        if address == 0x0400_012A {
+            return self.sio_data8;
+        }
+        if (0x0400_0128..=0x0400_0129).contains(&address) {
+            return ((self.sio_control >> ((address - 0x0400_0128) * 8)) & 0xFF) as u8;
+        }
+        if (0x0400_0134..=0x0400_0135).contains(&address) {
+            return ((self.sio_rcnt >> ((address - 0x0400_0134) * 8)) & 0xFF) as u8;
+        }
+
         // KEYINPUT (0x04000130) is active-low and read-only. Bits 0..9 map
         // to A, B, Select, Start, Right, Left, Up, Down, R and L. The six
         // unused upper bits read as ones on hardware, rather than zero.
@@ -1820,6 +1861,23 @@ impl MemoryBus {
         }
         // WAITCNT exposes SRAM/Game Pak wait-state, PHI, and prefetch controls;
         // bit 15 reads as zero; the modeled timing and high-byte controls are preserved.
+        // SIO control and transmit data registers are writable halfwords.
+        if (address == 0x0400_0128) {
+            self.sio_control = value & 0x700F;
+            return;
+        }
+        if address == 0x0400_012A {
+            self.sio_data8 = value as u8;
+            return;
+        }
+        if address == 0x0400_0134 {
+            self.sio_rcnt = value & 0xC00F;
+            return;
+        }
+        if (address & !3) == 0x0400_0120 && self.sio_control >> 12 & 3 == 1 {
+            self.sio_data32 = value as u32;
+            return;
+        }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
             let shift = (address - 0x0400_0204) * 8;
             let byte_mask = 0xFF_u16 << shift;
@@ -1883,6 +1941,35 @@ impl MemoryBus {
 
         // Sound FIFO ports are write-only and only accept 32-bit pushes.
         if (0x0400_00A0..=0x0400_00A7).contains(&address) {
+            return;
+        }
+
+        // SIO receive slots are read-only. Data/control transmit registers
+        // accept byte writes while preserving the untouched lane.
+        if (0x0400_0120..=0x0400_0127).contains(&address) {
+            if (self.sio_control >> 12 & 3 == 1) {
+                let shift = (address - 0x0400_0120) * 8;
+                let mask = 0xFF_u32 << shift;
+                self.sio_data32 = (self.sio_data32 & !mask) | (u32::from(value) << shift);
+            }
+            return;
+        }
+        if address == 0x0400_012A {
+            self.sio_data8 = value;
+            return;
+        }
+        if (0x0400_0128..=0x0400_0129).contains(&address) {
+            let shift = (address - 0x0400_0128) * 8;
+            let mask = 0xFF_u16 << shift;
+            self.sio_control = (self.sio_control & !mask) | (u16::from(value) << shift);
+            self.sio_control &= 0x700F;
+            return;
+        }
+        if (0x0400_0134..=0x0400_0135).contains(&address) {
+            let shift = (address - 0x0400_0134) * 8;
+            let mask = (if address == 0x0400_0134 { 0x00FF } else { 0xFF00 }) as u16;
+            self.sio_rcnt = (self.sio_rcnt & !mask) | (u16::from(value) << shift & mask);
+            self.sio_rcnt &= 0xC00F;
             return;
         }
 
@@ -2469,6 +2556,33 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0204), 0x7FA5);
         assert_eq!(bus.read8(0x0400_0204), 0xA5);
         assert_eq!(bus.read8(0x0400_0205), 0x7F);
+    }
+
+    #[test]
+    fn sio_registers_expose_idle_multiplayer_slots_and_mask_control_bits() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.read16(0x0400_0120), 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0122), 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0124), 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0126), 0xFFFF);
+
+        bus.write16(0x0400_0128, 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0128), 0x700F);
+        bus.write16(0x0400_0134, 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0134), 0xC00F);
+    }
+
+    #[test]
+    fn sio_normal_8_bit_and_32_bit_transmit_registers_are_independent() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_012A, 0x12AB);
+        assert_eq!(bus.read8(0x0400_012A), 0xAB);
+
+        bus.write16(0x0400_0128, 1 << 12);
+        bus.write32(0x0400_0120, 0x1234_5678);
+        assert_eq!(bus.read32(0x0400_0120), 0x1234_5678);
+        bus.write8(0x0400_0121, 0xAA);
+        assert_eq!(bus.read32(0x0400_0120), 0x1234_AA78);
     }
 
     #[test]
