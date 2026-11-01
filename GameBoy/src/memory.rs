@@ -1875,7 +1875,10 @@ impl MemoryBus {
             return;
         }
         if (address & !3) == 0x0400_0120 && self.sio_control >> 12 & 3 == 1 {
-            self.sio_data32 = value as u32;
+            let shift = (address & 2) * 8;
+            let mask = 0xFFFF_u32 << shift;
+            self.sio_data32 =
+                (self.sio_data32 & !mask) | (u32::from(value) << shift);
             return;
         }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
@@ -2214,6 +2217,10 @@ impl MemoryBus {
 
     /// Writes a little-endian word, aligned down to a four-byte boundary.
     pub fn write32(&mut self, address: u32, value: u32) {
+        if (address & !3) == 0x0400_0120 && self.sio_control >> 12 & 3 == 1 {
+            self.sio_data32 = value;
+            return;
+        }
         if (0x0400_00A0..=0x0400_00A7).contains(&address) {
             let fifo = usize::from(address >= 0x0400_00A4);
             self.write_audio_fifo_word(fifo, value);
