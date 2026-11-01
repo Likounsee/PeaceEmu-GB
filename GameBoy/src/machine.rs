@@ -155,6 +155,7 @@ impl GbaMachine {
     pub fn new(cartridge: GbaCartridge) -> Self {
         let mut cpu = Cpu::new();
         cpu.reset(CARTRIDGE_ENTRY_POINT);
+        cpu.initialize_gba_stacks();
         Self {
             cpu,
             bus: MemoryBus::new(cartridge),
@@ -1927,6 +1928,7 @@ impl GbaMachine {
     /// not a full power-cycle reset.
     pub fn reset_cpu(&mut self) {
         self.cpu.reset(CARTRIDGE_ENTRY_POINT);
+        self.cpu.initialize_gba_stacks();
         self.instructions_executed = 0;
         self.cycles_elapsed = 0;
     }
@@ -1976,6 +1978,56 @@ mod tests {
             Some(0)
         );
         assert_eq!(machine.run_until_audio_fifo_refilled(1, 0).unwrap(), None);
+    }
+
+    #[test]
+    fn machine_starts_with_bios_compatible_system_and_irq_stacks() {
+        let mut machine = GbaMachine::new(cartridge());
+        let snapshot = machine.cpu().snapshot();
+        assert_eq!(snapshot.registers[13], 0x0300_7F00);
+        assert_eq!(snapshot.user_sp_lr, [0x0300_7F00, 0]);
+        assert_eq!(snapshot.irq_sp_lr, [0x0300_7FA0, 0]);
+
+        machine.power_cycle();
+        let powered = machine.cpu().snapshot();
+        assert_eq!(powered.registers[13], 0x0300_7F00);
+        assert_eq!(powered.irq_sp_lr[0], 0x0300_7FA0);
+
+        machine.restore_cpu_snapshot({
+            let mut state = machine.cpu_snapshot();
+            state.registers[13] = 0;
+            state.pc = CARTRIDGE_ENTRY_POINT;
+            state
+        });
+        machine.reset_cpu();
+        assert_eq!(machine.cpu().register(13), Some(0x0300_7F00));
+        assert_eq!(machine.cpu().snapshot().irq_sp_lr[0], 0x0300_7FA0);
+    }
+
+    #[test]
+    fn machine_dispatches_enabled_irq_before_fetch_and_enters_banked_irq_mode() {
+        let mut machine = GbaMachine::new(cartridge());
+        let mut state = machine.cpu_snapshot();
+        state.pc = CARTRIDGE_ENTRY_POINT;
+        machine.restore_cpu_snapshot(state);
+        let irq = 1_u16 << 4; // Timer 0.
+        machine.bus_mut().write16(0x0400_0200, irq); // IE
+        machine.request_interrupt(irq); // IF
+        machine.bus_mut().write16(0x0400_0208, 1); // IME
+
+        let cycles = machine.step().unwrap();
+        let cpu = machine.cpu().snapshot();
+        assert_eq!(cycles, 3);
+        assert_eq!(cpu.processor_mode, 0x12);
+        assert!(cpu.irq_disabled);
+        assert!(!cpu.thumb);
+        assert_eq!(cpu.pc, 0x18);
+        assert_eq!(cpu.registers[13], 0x0300_7FA0);
+        assert_eq!(cpu.registers[14], CARTRIDGE_ENTRY_POINT + 4);
+        assert_eq!(cpu.user_sp_lr[0], 0x0300_7F00);
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 3);
+        assert_eq!(machine.interrupt_request_flags() & irq, irq);
     }
 
     #[test]

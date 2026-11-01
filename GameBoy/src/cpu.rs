@@ -290,6 +290,19 @@ impl Cpu {
         self.irq_disabled = disabled;
     }
 
+    /// Initializes the User/System and IRQ stack pointers to the GBA BIOS
+    /// post-startup layout used when launching a cartridge without executing
+    /// the original BIOS ROM.
+    pub(crate) fn initialize_gba_stacks(&mut self) {
+        self.user_sp_lr[0] = 0x0300_7F00;
+        self.irq_sp_lr[0] = 0x0300_7FA0;
+        if self.mode == 0x12 {
+            self.registers[13] = self.irq_sp_lr[0];
+        } else {
+            self.registers[13] = self.user_sp_lr[0];
+        }
+    }
+
     /// Enters IRQ mode and saves the interrupted CPSR in SPSR_irq.
     pub(crate) fn enter_irq(&mut self) -> bool {
         if self.irq_disabled || self.mode == 0x12 || (self.stopped && !self.halted) {
@@ -462,7 +475,7 @@ impl Cpu {
                 return Ok((StepOutcome::Halted, 1));
             }
             // HALT wakes on an enabled IE/IF source even if IME is clear.
-            // Full IRQ exception entry and vectoring are separate work.
+            // GbaMachine performs IRQ exception entry first when IME is set.
             self.halted = false;
             self.last_fetch_next = None;
         }
