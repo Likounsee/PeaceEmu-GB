@@ -831,7 +831,11 @@ impl MemoryBus {
                     4 => address & !3,
                     _ => address,
                 };
-                let first = self.gamepak_access_cycles(bus_address, sequential)?;
+                // Each 128 KiB Game Pak ROM block begins with a
+                // non-sequential access, even when the caller's bus stream
+                // would otherwise qualify as sequential.
+                let first_sequential = sequential && bus_address & 0x1_FFFF != 0;
+                let first = self.gamepak_access_cycles(bus_address, first_sequential)?;
                 let last_address = bus_address.checked_add(u32::from(width_bytes) - 1)?;
                 // A physical access must not cross into a different WAITCNT
                 // ROM region after the address has been aligned.
@@ -841,7 +845,10 @@ impl MemoryBus {
                 }
                 if width_bytes == 4 {
                     let second_address = bus_address.checked_add(2)?;
-                    first.checked_add(self.gamepak_access_cycles(second_address, true)?)
+                    let second_sequential = second_address & 0x1_FFFF != 0;
+                    first.checked_add(
+                        self.gamepak_access_cycles(second_address, second_sequential)?,
+                    )
                 } else {
                     Some(first)
                 }
@@ -866,8 +873,10 @@ impl MemoryBus {
                     }
                     let first = self.gamepak_access_cycles(bus_address, sequential)?;
                     if width_bytes == 4 {
+                        let second_address = bus_address.checked_add(2)?;
+                        let second_sequential = second_address & 0x1_FFFF != 0;
                         first.checked_add(
-                            self.gamepak_access_cycles(bus_address.checked_add(2)?, true)?,
+                            self.gamepak_access_cycles(second_address, second_sequential)?,
                         )
                     } else {
                         Some(first)
@@ -913,11 +922,14 @@ impl MemoryBus {
             // Sequential ROM timing cannot carry across a ROM-bank boundary.
             // Start a new non-sequential access when a burst enters another
             // WAITCNT region; SRAM ignores the sequential flag in its decoder.
-            let sequential = if index == 0 {
-                first_sequential
-            } else {
-                previous_region == Some(region)
-            };
+            let is_rom = (0x0800_0000..=0x0DFF_FFFF).contains(&current);
+            let at_rom_block_start = is_rom && current & 0x1_FFFF == 0;
+            let sequential = !at_rom_block_start
+                && if index == 0 {
+                    first_sequential
+                } else {
+                    previous_region == Some(region)
+                };
             let cycles = self.gamepak_access_cycles_for_width(current, sequential, width_bytes)?;
             total = total.checked_add(u64::from(cycles))?;
             previous_region = Some(region);
@@ -1296,7 +1308,7 @@ impl MemoryBus {
         // Read-only status bits are synthesized when the register is read.
         self.sio_control = value & 0x7F8B;
         self.sio_cycles_remaining = 0;
-        if self.sio_control & (1 << 7) == 0 || self.sio_rcnt & 0xC000 != 0 {
+        if self.sio_control & (1 << 7) == 0 || self.sio_rcnt & 0x8000 != 0 {
             return;
         }
 
@@ -4258,6 +4270,34 @@ mod tests {
         assert_eq!(
             bus.gamepak_sequence_cycles(0x09FF_FFFC, false, 4, 2),
             Some(12)
+        );
+    }
+
+    #[test]
+    fn gamepak_rom_sequences_restart_at_each_128k_block_boundary() {
+        let mut bus = MemoryBus::new(cartridge());
+        // ROM0 non-sequential=4, sequential=1.
+        bus.write16(0x0400_0204, (1 << 2) | (1 << 4));
+
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0801_FFFE, false, 2, 2),
+            Some(5)
+        );
+        // A caller cannot claim sequential timing for the first halfword
+        // of a newly entered 128 KiB block.
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0802_0000, true, 2),
+            Some(4)
+        );
+        // A 32-bit access straddling the boundary has S then N bus beats.
+        assert_eq!(
+            bus.gamepak_access_cycles_for_width(0x0801_FFFE, true, 4),
+            Some(5)
+        );
+        // Entering the block boundary during a burst also restarts N timing.
+        assert_eq!(
+            bus.gamepak_sequence_cycles(0x0801_FFFC, false, 2, 3),
+            Some(6)
         );
     }
 
