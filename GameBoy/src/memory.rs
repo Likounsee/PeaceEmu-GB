@@ -659,6 +659,10 @@ impl MemoryBus {
             fifo.clear();
         }
         self.audio_last_samples = [0; 2];
+        // RegisterRamReset flag 6 resets the PSG channel generators as well
+        // as their MMIO registers. Clearing only the I/O mirror left active
+        // oscillators audible after a BIOS sound reset.
+        self.psg.set_master_enabled(false);
     }
 
     /// Resets general-purpose I/O registers as BIOS RegisterRamReset flag 7 does.
@@ -682,6 +686,10 @@ impl MemoryBus {
         self.timer_counter = [0; 4];
         self.timer_control = [0; 4];
         self.timer_prescaler_phase = [0; 4];
+        // Resetting the general I/O window also cancels a pending HALTCNT
+        // request that has not yet been consumed at a CPU instruction boundary.
+        self.halt_requested = false;
+        self.stop_requested = false;
 
         // Preserve live DISPSTAT status bits; reset its writable controls.
         self.dispstat &= 0x0007;
@@ -3529,6 +3537,25 @@ mod tests {
         assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
         assert_eq!(bus.read16(0x0400_0120), 0x1234);
         assert_eq!(bus.interrupt_enable_mask(), 1);
+    }
+
+    #[test]
+    fn bios_sound_reset_disables_live_psg_channels_but_preserves_wave_ram() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write8(0x0400_0065, 0xC0); // Enable Square 1 DAC.
+        bus.write8(0x0400_0063, 0xF0); // Maximum initial envelope volume.
+        bus.write8(0x0400_0064, 0x80); // Trigger Square 1.
+        bus.write8(0x0400_0070, 0x80);
+        bus.write8(0x0400_0090, 0x5A);
+        assert_ne!(bus.psg.status_bits() & 1, 0);
+
+        bus.reset_sound_registers();
+
+        assert_eq!(bus.psg.status_bits() & 0x0F, 0);
+        assert_eq!(bus.psg_stereo_sample(), (0, 0));
+        assert_eq!(bus.read16(0x0400_0084), 0);
+        assert_eq!(bus.read8(0x0400_0090), 0x5A);
     }
 
     #[test]
