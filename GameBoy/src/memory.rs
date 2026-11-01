@@ -5597,16 +5597,24 @@ mod tests {
         bus.write8(0x0400_0063, 0xF0); // Maximum envelope volume.
         bus.write8(0x0400_0065, 0x80); // Trigger.
         bus.write16(0x0400_0080, 0x0107); // NR50 right volume 7, NR51 routes square 1 right.
+        bus.write16(0x0400_0082, (1 << 9) | (1 << 8) | (1 << 2)); // Direct Sound A: both outputs, full volume.
+        bus.write32(0x0400_00A0, 0x1010_1010);
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
 
         let full = bus.psg_stereo_sample();
+        let direct = bus.direct_sound_stereo_sample();
         assert_eq!(full.1, 240);
+        assert_eq!(direct, (16, 16));
 
-        bus.write16(0x0400_0082, 0);
-        assert_eq!(bus.audio_stereo_sample().1, full.1 / 4);
-        bus.write16(0x0400_0082, 1);
-        assert_eq!(bus.audio_stereo_sample().1, full.1 / 2);
-        bus.write16(0x0400_0082, 2);
-        assert_eq!(bus.audio_stereo_sample().1, full.1);
+        let direct_control = (1 << 9) | (1 << 8) | (1 << 2);
+        bus.write16(0x0400_0082, direct_control);
+        assert_eq!(bus.audio_stereo_sample(), (direct.0, direct.1 + full.1 / 4));
+        bus.write16(0x0400_0082, direct_control | 1);
+        assert_eq!(bus.audio_stereo_sample(), (direct.0, direct.1 + full.1 / 2));
+        bus.write16(0x0400_0082, direct_control | 2);
+        assert_eq!(bus.audio_stereo_sample(), (direct.0, direct.1 + full.1));
     }
 
     #[test]
