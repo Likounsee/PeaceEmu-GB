@@ -616,7 +616,8 @@ impl GbaMachine {
 
     /// Returns whether an enabled interrupt is ready for CPU service (IME, IE, and IF).
     ///
-    /// This is a status query only; IRQ exception entry is not implemented yet.
+    /// This is a status query only; the machine services eligible IRQs before the
+    /// next instruction fetch when step() is called.
     pub fn interrupt_pending(&self) -> bool {
         self.bus.interrupt_pending()
     }
@@ -4415,6 +4416,12 @@ mod tests {
     fn save_state_restores_cpu_ram_interrupts_timers_video_and_counters() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write32(0x0200_0100, 0xCAFE_BABE);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0100);
+        machine.bus_mut().write32(0x0400_00B4, 0x0200_0200);
+        machine.bus_mut().write16(0x0400_00B8, 2);
+        machine.bus_mut().write16(0x0400_00BA, 0x8000);
+        assert_eq!(machine.bus().read32(0x0200_0200), 0xCAFE_BABE);
+        assert_eq!(machine.dma_completed_transfers(0), Some(1));
         machine.bus_mut().write16(0x0400_0100, 0xFFFE);
         machine.bus_mut().write16(0x0400_0102, 0x0080);
         machine.bus_mut().advance_cycles(1);
@@ -4429,6 +4436,7 @@ mod tests {
         let checkpoint_diagnostics = machine.diagnostic_snapshot();
 
         machine.bus_mut().write32(0x0200_0100, 0xDEAD_BEEF);
+        machine.bus_mut().write32(0x0200_0200, 0xDEAD_BEEF);
         machine.bus_mut().write16(0x0400_0100, 0x4321);
         machine.acknowledge_interrupts(1 << 4);
         machine.set_button_pressed(crate::GbaButton::A, false);
@@ -4441,6 +4449,8 @@ mod tests {
 
         machine.load_state(&checkpoint);
         assert_eq!(machine.bus().read32(0x0200_0100), 0xCAFE_BABE);
+        assert_eq!(machine.bus().read32(0x0200_0200), 0xCAFE_BABE);
+        assert_eq!(machine.dma_completed_transfers(0), Some(1));
         assert_eq!(machine.cpu().register(0), Some(0x1234_5678));
         assert_eq!(machine.cpu().register(15), Some(CARTRIDGE_ENTRY_POINT));
         assert_eq!(machine.interrupt_request_flags() & (1 << 4), 1 << 4);
