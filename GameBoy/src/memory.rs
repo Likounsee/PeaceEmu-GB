@@ -4423,6 +4423,24 @@ mod tests {
     }
 
     #[test]
+    fn dma_completed_burst_counter_tracks_transfers_and_resets_on_power_cycle() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.dma_completed_transfers(0), Some(0));
+        assert_eq!(bus.dma_completed_transfers(4), None);
+
+        bus.write16(0x0200_0000, 0xCAFE);
+        bus.write32(0x0400_00B0, 0x0200_0000);
+        bus.write32(0x0400_00B4, 0x0300_0000);
+        bus.write16(0x0400_00B8, 1);
+        bus.write16(0x0400_00BA, 0x8000);
+        assert_eq!(bus.dma_completed_transfers(0), Some(1));
+        assert_eq!(bus.read16(0x0300_0000), 0xCAFE);
+
+        bus.power_cycle();
+        assert_eq!(bus.dma_completed_transfers(0), Some(0));
+    }
+
+    #[test]
     fn dma_effective_zero_counts_follow_channel_specific_limits() {
         let mut bus = MemoryBus::new(cartridge());
         for channel in 0..4_usize {
