@@ -846,9 +846,8 @@ impl MemoryBus {
                 if width_bytes == 4 {
                     let second_address = bus_address.checked_add(2)?;
                     let second_sequential = second_address & 0x1_FFFF != 0;
-                    first.checked_add(
-                        self.gamepak_access_cycles(second_address, second_sequential)?,
-                    )
+                    first
+                        .checked_add(self.gamepak_access_cycles(second_address, second_sequential)?)
                 } else {
                     Some(first)
                 }
