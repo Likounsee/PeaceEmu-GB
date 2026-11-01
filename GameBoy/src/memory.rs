@@ -346,9 +346,22 @@ impl MemoryBus {
     }
 
     /// Mixes PSG and Direct Sound into one raw stereo sample.
+    ///
+    /// SOUNDCNT_H bits 0–1 apply the shared PSG output ratio (25%, 50%, or
+    /// 100%). Direct Sound has independent per-FIFO volume bits and is not
+    /// affected by this ratio.
     pub fn audio_stereo_sample(&self) -> (i16, i16) {
         let direct = self.direct_sound_stereo_sample();
+        let control = self.read16(0x0400_0082);
+        let divisor = match control & 3 {
+            0 => 4,
+            1 => 2,
+            // The value 3 is reserved by the hardware documentation; keep
+            // output bounded to the highest defined ratio rather than muting it.
+            _ => 1,
+        };
         let psg = self.psg_stereo_sample();
+        let psg = (psg.0 / divisor, psg.1 / divisor);
         (
             direct.0.saturating_add(psg.0),
             direct.1.saturating_add(psg.1),
@@ -5574,6 +5587,26 @@ mod tests {
         assert_eq!(bus.read8(0x0400_0084) & 1, 1);
         assert_ne!(bus.psg_stereo_sample().0, 0);
         assert_ne!(bus.audio_stereo_sample().0, 0);
+    }
+
+    #[test]
+    fn soundcnt_h_applies_psg_ratio_without_scaling_direct_sound() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080); // Master sound.
+        bus.write8(0x0400_0062, 0x80); // Square 1, 50% duty.
+        bus.write8(0x0400_0063, 0xF0); // Maximum envelope volume.
+        bus.write8(0x0400_0065, 0x80); // Trigger.
+        bus.write16(0x0400_0080, 0x0701); // NR50 volume 7, route square 1 right.
+
+        let full = bus.psg_stereo_sample();
+        assert_eq!(full.1, 240);
+
+        bus.write16(0x0400_0082, 0);
+        assert_eq!(bus.audio_stereo_sample().1, full.1 / 4);
+        bus.write16(0x0400_0082, 1);
+        assert_eq!(bus.audio_stereo_sample().1, full.1 / 2);
+        bus.write16(0x0400_0082, 2);
+        assert_eq!(bus.audio_stereo_sample().1, full.1);
     }
 
     #[test]
