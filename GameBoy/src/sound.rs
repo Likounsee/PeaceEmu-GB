@@ -478,10 +478,10 @@ impl Psg {
         let samples = self.channel_samples();
         let routing = self.registers[0x21];
         let volume = self.registers[0x20];
-        // NR50 stores the actual 0..7 output level. Zero is mute; do not
-        // bias the hardware value upward (which made "volume 0" audible).
-        let left_volume = i16::from((volume >> 4) & 7);
-        let right_volume = i16::from(volume & 7);
+        // NR50 has eight non-zero attenuation steps: code 0 is the
+        // minimum (1/8), and code 7 is the maximum (8/8).
+        let left_volume = i16::from((volume >> 4) & 7) + 1;
+        let right_volume = i16::from(volume & 7) + 1;
         let mut left = 0_i16;
         let mut right = 0_i16;
         for (index, sample) in samples.into_iter().enumerate() {
@@ -558,7 +558,7 @@ mod tests {
     }
 
     #[test]
-    fn nr50_zero_volume_mutes_each_stereo_side_independently() {
+    fn nr50_volume_zero_is_minimum_attenuation_not_mute() {
         let mut psg = Psg::default();
         psg.set_master_enabled(true);
         psg.write(0x62, 0x80);
@@ -569,18 +569,15 @@ mod tests {
         let full = psg.channel_samples()[0];
         assert_ne!(full, 0);
 
-        psg.write(0x80, 0x07); // Left volume 0, right volume 7.
-        let (left, right) = psg.stereo_sample();
-        assert_eq!(left, 0);
-        assert_eq!(right, full * 7);
-
-        psg.write(0x80, 0x70); // Left volume 7, right volume 0.
-        let (left, right) = psg.stereo_sample();
-        assert_eq!(left, full * 7);
-        assert_eq!(right, 0);
-
         psg.write(0x80, 0x00);
-        assert_eq!(psg.stereo_sample(), (0, 0));
+        let (left, right) = psg.stereo_sample();
+        assert_eq!(left, full);
+        assert_eq!(right, full);
+
+        psg.write(0x80, 0x77);
+        let (left, right) = psg.stereo_sample();
+        assert_eq!(left, full * 8);
+        assert_eq!(right, full * 8);
     }
 
     #[test]
