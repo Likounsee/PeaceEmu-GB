@@ -2009,6 +2009,31 @@ mod tests {
     }
 
     #[test]
+    fn save_state_restores_in_flight_serial_transfer_and_remaining_cycles() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_012A, 0x005A);
+        machine
+            .bus_mut()
+            .write16(0x0400_0128, (1 << 14) | (1 << 7) | 1);
+        machine.bus_mut().advance_cycles(200);
+        let checkpoint = machine.save_state();
+
+        machine.bus_mut().advance_cycles(312);
+        assert_eq!(machine.bus().read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(machine.bus().read8(0x0400_012A), 0xFF);
+        assert_eq!(machine.interrupt_request_flags() & (1 << 7), 1 << 7);
+
+        machine.load_state(&checkpoint);
+        assert_ne!(machine.bus().read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(machine.interrupt_request_flags() & (1 << 7), 0);
+        machine.bus_mut().advance_cycles(311);
+        assert_ne!(machine.bus().read16(0x0400_0128) & (1 << 7), 0);
+        machine.bus_mut().advance_cycles(1);
+        assert_eq!(machine.bus().read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(machine.interrupt_request_flags() & (1 << 7), 1 << 7);
+    }
+
+    #[test]
     fn audio_fifo_refill_runner_distinguishes_low_water_from_refilled_state() {
         let mut machine = GbaMachine::new(cartridge());
         assert_eq!(machine.run_until_audio_fifo_refilled(2, 10).unwrap(), None);
