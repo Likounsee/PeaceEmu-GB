@@ -1259,6 +1259,14 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Returns the number of timer-driven PCM bytes consumed by Direct Sound FIFO A (0) or B (1).
+    ///
+    /// The counter advances only when a queued sample is actually popped. It resets
+    /// on a full machine power cycle and is useful for audio synchronization/debugging.
+    pub fn audio_fifo_samples_consumed(&self, fifo: usize) -> Option<u64> {
+        self.bus.audio_fifo_samples_consumed(fifo)
+    }
+
     /// Returns the most recently latched signed PCM sample for FIFO A (0) or B (1).
     pub fn audio_fifo_last_sample(&self, fifo: usize) -> Option<i8> {
         self.bus.audio_fifo_last_sample(fifo)
@@ -3761,6 +3769,20 @@ mod tests {
         assert_eq!(snapshot.audio_fifo_lengths[0], Some(3));
         assert_eq!(snapshot.audio_fifo_last_samples[0], Some(0x40));
         assert_eq!(snapshot.audio_stereo_sample, (64, 64));
+    }
+    #[test]
+    fn machine_exposes_fifo_consumption_counters_and_rejects_invalid_indices() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.audio_fifo_samples_consumed(0), Some(0));
+        assert_eq!(machine.audio_fifo_samples_consumed(1), Some(0));
+        assert_eq!(machine.audio_fifo_samples_consumed(2), None);
+        machine.bus_mut().write32(0x0400_00A4, 0x0102_0304);
+        machine.bus_mut().write16(0x0400_0104, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0106, 0x0080);
+        machine.bus_mut().write16(0x0400_0084, 0x0080);
+        machine.bus_mut().advance_cycles(1);
+        assert_eq!(machine.audio_fifo_samples_consumed(1), Some(1));
+        assert_eq!(machine.audio_fifo_samples_consumed(0), Some(0));
     }
     #[test]
     fn machine_audio_fifo_helpers_validate_fifo_indices() {
