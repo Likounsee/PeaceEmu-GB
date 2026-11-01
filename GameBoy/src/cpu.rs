@@ -447,6 +447,19 @@ impl Cpu {
         &mut self,
         bus: &mut MemoryBus,
     ) -> Result<(StepOutcome, u32), CpuError> {
+        // HALTCNT is written through MMIO, so consume its command only after
+        // the previous instruction has completed and before the next fetch.
+        if bus.take_stop_request() {
+            self.stopped = true;
+            self.halted = false;
+            self.bios_wait_mask = None;
+            self.last_fetch_next = None;
+        } else if bus.take_halt_request() {
+            self.halted = true;
+            self.stopped = false;
+            self.bios_wait_mask = None;
+            self.last_fetch_next = None;
+        }
         if self.stopped {
             // STOP only resumes on an enabled keypad interrupt (IE & IF bit 12).
             // Timers and the PPU are not enough to wake the processor from STOP.
@@ -8439,4 +8452,44 @@ mod tests {
         assert_eq!(bus.read16(destination + 2), 0x5656);
         assert_eq!(bus.read16(destination + 4), 0x5656);
     }
+
+    #[test]
+    fn halcnt_halt_request_enters_cpu_wait_state_at_step_boundary() {
+        let mut bus = bus_with_program(&[0xE1A0_0000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        bus.write8(0x0400_0301, 0x00);
+
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+
+        assert_eq!(outcome, StepOutcome::Halted);
+        assert_eq!(cycles, 1);
+        assert!(cpu.is_halted());
+        assert!(!cpu.is_stopped());
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
+    }
+
+    #[test]
+    fn haltcnt_stop_waits_for_keypad_irq_and_resumes_guest_execution() {
+        let mut bus = bus_with_program(&[0xE1A0_0000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        bus.write16(0x0400_0200, 1 << 12);
+        bus.write16(0x0400_0132, (1 << 14) | 1);
+        bus.write8(0x0400_0301, 0x80);
+
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert_eq!(outcome, StepOutcome::Halted);
+        assert_eq!(cycles, 0);
+        assert!(cpu.is_stopped());
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
+
+        bus.set_button_pressed(crate::memory::GbaButton::A, true);
+        let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
+        assert!(matches!(outcome, StepOutcome::Executed { .. }));
+        assert!(cycles > 0);
+        assert!(!cpu.is_stopped());
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
 }

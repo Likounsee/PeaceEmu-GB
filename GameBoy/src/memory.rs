@@ -137,6 +137,9 @@ pub struct MemoryBus {
     psg: crate::sound::Psg,
     /// Completed DMA bursts per channel since the last power cycle.
     dma_completed_transfers: [u64; 4],
+    /// Pending HALTCNT requests consumed by the CPU at the next step boundary.
+    halt_requested: bool,
+    stop_requested: bool,
 }
 
 /// Error returned when loading save data whose size does not match the device capacity.
@@ -200,6 +203,8 @@ impl MemoryBus {
             audio_fifo_samples_consumed: [0; 2],
             psg: crate::sound::Psg::default(),
             dma_completed_transfers: [0; 4],
+            halt_requested: false,
+            stop_requested: false,
         }
     }
 
@@ -1109,6 +1114,16 @@ impl MemoryBus {
         }
     }
 
+    /// Consumes a pending HALTCNT HALT request, if one was written by the CPU.
+    pub(crate) fn take_halt_request(&mut self) -> bool {
+        std::mem::take(&mut self.halt_requested)
+    }
+
+    /// Consumes a pending HALTCNT STOP request, if one was written by the CPU.
+    pub(crate) fn take_stop_request(&mut self) -> bool {
+        std::mem::take(&mut self.stop_requested)
+    }
+
     /// Sets the pressed GBA buttons using a bitmask (bit 0=A, 1=B, 2=Select,
     /// 3=Start, 4=Right, 5=Left, 6=Up, 7=Down, 8=R, 9=L).
     ///
@@ -1638,6 +1653,15 @@ impl MemoryBus {
 
     /// Writes one byte to writable memory. Cartridge ROM and BIOS writes are ignored.
     pub fn write8(&mut self, address: u32, mut value: u8) {
+        // HALTCNT is the high byte of 0x04000300: bit 7 selects STOP,
+        // while a clear bit selects HALT. The request is consumed at the
+        // next CPU step boundary, after the writing instruction has retired.
+        if address == 0x0400_0301 {
+            self.io[0x301] = value & 0x80;
+            self.stop_requested = value & 0x80 != 0;
+            self.halt_requested = value & 0x80 == 0;
+            return;
+        }
         // DMA source/destination registers are 28-bit addresses. Byte stores
         // to the most-significant byte must not preserve the reserved high nibble.
         if (0x0400_00B0..=0x0400_00DF).contains(&address) {
@@ -1852,6 +1876,14 @@ impl MemoryBus {
 
     /// Writes a little-endian halfword, aligned down to a two-byte boundary.
     pub fn write16(&mut self, address: u32, value: u16) {
+        // POSTFLG/HALTCNT share this halfword. POSTFLG is sticky once set;
+        // the upper byte carries the HALT/STOP command.
+        if (address & !1) == 0x0400_0300 {
+            self.io[0x300] |= (value as u8) & 1;
+            let haltcnt = (value >> 8) as u8;
+            self.write8(0x0400_0301, haltcnt);
+            return;
+        }
         // EEPROM command streams are transferred as halfword bit values by DMA.
         if (0x0D00_0000..=0x0DFF_FFFF).contains(&address) {
             if let Some(eeprom) = &mut self.eeprom {
@@ -2361,6 +2393,26 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0204), 0x7FA5);
         assert_eq!(bus.read8(0x0400_0204), 0xA5);
         assert_eq!(bus.read8(0x0400_0205), 0x7F);
+    }
+
+    #[test]
+    fn haltcnt_byte_and_halfword_writes_latch_cpu_sleep_requests() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        bus.write8(0x0400_0301, 0x00);
+        assert!(bus.take_halt_request());
+        assert!(!bus.take_stop_request());
+
+        bus.write8(0x0400_0301, 0x80);
+        assert!(bus.take_stop_request());
+        assert!(!bus.take_halt_request());
+
+        // STRH to POSTFLG/HALTCNT also dispatches the high-byte command.
+        bus.write16(0x0400_0300, 0x8001);
+        assert_eq!(bus.read8(0x0400_0300) & 1, 1);
+        assert!(bus.take_stop_request());
+        bus.write16(0x0400_0300, 0x0000);
+        assert!(bus.take_halt_request());
     }
 
     #[test]
