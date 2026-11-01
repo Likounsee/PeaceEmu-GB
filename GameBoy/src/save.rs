@@ -137,6 +137,52 @@ mod tests {
     }
 
     #[test]
+    fn eeprom_transfer_configuration_discards_partial_command_and_stale_response() {
+        let mut eeprom = EepromDevice::new();
+        // Begin but do not finish a write command.
+        for bit in [1, 1, 0, 0, 0, 0] {
+            eeprom.write_bit(bit);
+        }
+        eeprom.configure_transfer_length(74);
+
+        let address = 5_usize;
+        let value = 0xA1B2_C3D4_E5F6_0718_u64;
+        let mut command = vec![1, 1, 0];
+        command.extend((0..6).rev().map(|bit| ((address >> bit) & 1) as u8));
+        command.extend((0..64).rev().map(|bit| ((value >> bit) & 1) as u8));
+        command.push(0);
+        for bit in command {
+            eeprom.write_bit(u16::from(bit));
+        }
+        assert_eq!(
+            &eeprom.data()[address * 8..address * 8 + 8],
+            &value.to_be_bytes()
+        );
+
+        // A completed read leaves a response queued. A new valid DMA command
+        // clears it before accepting the next command's bits.
+        let mut read = vec![1, 1, 1];
+        read.extend((0..6).rev().map(|bit| ((address >> bit) & 1) as u8));
+        read.push(0);
+        for bit in read {
+            eeprom.write_bit(u16::from(bit));
+        }
+        assert_eq!(eeprom.read_bit(), 0);
+        eeprom.write_bit(1);
+        assert_eq!(eeprom.read_bit(), 1);
+    }
+
+    #[test]
+    fn eeprom_unrecognized_dma_length_preserves_an_in_progress_command() {
+        let mut eeprom = EepromDevice::new();
+        for bit in [1, 1, 0, 0, 0] {
+            eeprom.write_bit(bit);
+        }
+        eeprom.configure_transfer_length(68);
+        assert_eq!(eeprom.input_bits, vec![1, 1, 0, 0, 0]);
+    }
+
+    #[test]
     fn malformed_eeprom_stop_bit_does_not_poison_next_transaction() {
         let mut eeprom = EepromDevice::new();
         let address = 2_usize;
@@ -317,20 +363,32 @@ impl EepromDevice {
     /// GBA EEPROM commands use 10/74 halfwords for 512-byte devices and
     /// 18/82 halfwords for 8-KiB devices (read/write command streams).
     pub fn configure_transfer_length(&mut self, halfwords: u32) {
-        match halfwords {
-            10 | 74 => self.address_bits = 6,
-            18 | 82 => {
-                self.address_bits = 14;
-                if self.data.len() != 8 * 1024 {
-                    self.data.resize(8 * 1024, 0xFF);
-                }
+        let selected_address_bits = match halfwords {
+            10 | 74 => Some(6),
+            18 | 82 => Some(14),
+            _ => None,
+        };
+        if let Some(address_bits) = selected_address_bits {
+            self.address_bits = address_bits;
+            if address_bits == 14 && self.data.len() != 8 * 1024 {
+                self.data.resize(8 * 1024, 0xFF);
             }
-            _ => {}
+            // A DMA command transfer starts a fresh serial transaction. Do not
+            // let an interrupted command or unread response leak into the next one.
+            self.input_bits.clear();
+            self.output_bits.clear();
+            self.output_cursor.set(0);
         }
     }
 
     /// Clocks one input bit into the EEPROM command stream.
     pub fn write_bit(&mut self, value: u16) {
+        if self.input_bits.is_empty() && value & 1 != 0 {
+            // The first start bit begins a new command and releases any stale
+            // response bits left by an earlier read transaction.
+            self.output_bits.clear();
+            self.output_cursor.set(0);
+        }
         self.input_bits.push((value & 1) as u8);
         if self.input_bits.first() != Some(&1) {
             self.input_bits.clear();
