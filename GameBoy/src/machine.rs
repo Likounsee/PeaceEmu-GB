@@ -126,9 +126,9 @@ pub struct MachineSnapshot {
 
 /// A runnable, partially implemented Game Boy Advance machine.
 ///
-/// This facade centralizes CPU stepping and approximate peripheral timing. It
-/// does not provide BIOS boot, audio output, interrupts/exception entry, or
-/// cycle-accurate hardware behavior.
+/// This facade centralizes CPU stepping and approximate peripheral timing,
+/// including a subset of BIOS HLE, Direct Sound mixing, and IRQ entry. It does
+/// not provide BIOS ROM boot, PSG audio output, or cycle-accurate bus behavior.
 #[derive(Clone, Debug)]
 pub struct GbaMachine {
     cpu: Cpu,

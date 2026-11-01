@@ -87,7 +87,7 @@ pub struct CpuSnapshot {
     pub registers: [u32; 16],
     /// Modeled condition flags.
     pub flags: ConditionFlags,
-    /// Modeled CPSR bits (N, Z, C, V and T).
+    /// Modeled CPSR bits (N, Z, C, V, IRQ-disable, T, and mode).
     pub cpsr: u32,
     /// Whether the processor is in Thumb state.
     pub thumb: bool,
@@ -115,8 +115,9 @@ pub struct CpuSnapshot {
 
 /// ARM7TDMI CPU state with partial ARM and Thumb instruction support.
 ///
-/// Banked registers, SPSRs, exception entry/return, and cycle-accurate
-/// execution are not modeled yet.
+/// User/System and IRQ register banks plus IRQ exception entry/return are
+/// modeled. Other privileged modes, FIQ banking, and cycle-accurate execution
+/// remain outside the current implementation.
 #[derive(Clone, Debug)]
 pub struct Cpu {
     registers: [u32; 16],
@@ -137,91 +138,6 @@ pub struct Cpu {
     irq_sp_lr: [u32; 2],
     spsr_irq: u32,
     spsr_irq_valid: bool,
-}
-
-/// Decodes the GBA BIOS 0x10 LZ77 stream format.
-fn bios_lz77_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
-    let header = bus.read32(source);
-    if header as u8 != 0x10 {
-        return None;
-    }
-    let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
-    let mut output = Vec::with_capacity(output_size);
-    let mut cursor = source.wrapping_add(4);
-    while output.len() < output_size {
-        let flags = bus.read8(cursor);
-        cursor = cursor.wrapping_add(1);
-        for bit in (0..8).rev() {
-            if output.len() >= output_size {
-                break;
-            }
-            if flags & (1 << bit) == 0 {
-                output.push(bus.read8(cursor));
-                cursor = cursor.wrapping_add(1);
-            } else {
-                let first = bus.read8(cursor);
-                let second = bus.read8(cursor.wrapping_add(1));
-                cursor = cursor.wrapping_add(2);
-                let length = usize::from(first >> 4) + 3;
-                let displacement = (usize::from(first & 0x0F) << 8 | usize::from(second)) + 1;
-                if displacement > output.len() {
-                    return None;
-                }
-                for _ in 0..length.min(output_size - output.len()) {
-                    let value = output[output.len() - displacement];
-                    output.push(value);
-                }
-            }
-        }
-    }
-    Some(output)
-}
-
-/// Decodes the GBA BIOS 0x30 run-length stream format.
-fn bios_rl_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
-    let header = bus.read32(source);
-    if header as u8 != 0x30 {
-        return None;
-    }
-    let output_size = ((header >> 8) & 0x00FF_FFFF) as usize;
-    let mut output = Vec::with_capacity(output_size);
-    let mut cursor = source.wrapping_add(4);
-    while output.len() < output_size {
-        let control = bus.read8(cursor);
-        cursor = cursor.wrapping_add(1);
-        if control & 0x80 != 0 {
-            let length = usize::from(control & 0x7F) + 3;
-            let value = bus.read8(cursor);
-            cursor = cursor.wrapping_add(1);
-            output.resize(output.len() + length.min(output_size - output.len()), value);
-        } else {
-            let length = usize::from(control) + 1;
-            let count = length.min(output_size - output.len());
-            for _ in 0..count {
-                output.push(bus.read8(cursor));
-                cursor = cursor.wrapping_add(1);
-            }
-        }
-    }
-    Some(output)
-}
-
-/// Writes decompressed BIOS output, using halfword stores for VRAM destinations.
-fn bios_write_decompressed(bus: &mut MemoryBus, destination: u32, bytes: &[u8], vram: bool) {
-    if vram {
-        for (index, pair) in bytes.chunks(2).enumerate() {
-            let low = pair[0];
-            let high = pair.get(1).copied().unwrap_or(0);
-            bus.write16(
-                destination.wrapping_add((index as u32) * 2) & !1,
-                u16::from_le_bytes([low, high]),
-            );
-        }
-    } else {
-        for (index, byte) in bytes.iter().copied().enumerate() {
-            bus.write8(destination.wrapping_add(index as u32), byte);
-        }
-    }
 }
 
 impl Default for Cpu {
@@ -283,9 +199,9 @@ impl Cpu {
         self.registers
     }
 
-    /// Returns the modeled CPSR bits: N, Z, C, V and T.
+    /// Returns the modeled CPSR bits: N, Z, C, V, IRQ-disable, T, and mode.
     ///
-    /// Unmodeled mode, interrupt-mask, and other CPSR fields read as zero.
+    /// Unmodeled CPSR control and extension fields read as zero.
     pub fn cpsr_flags(&self) -> u32 {
         (u32::from(self.flags.negative) << 31)
             | (u32::from(self.flags.zero) << 30)
@@ -2077,7 +1993,7 @@ impl Cpu {
     }
 
     /// Reads the modeled CPSR fields with ARM-state MRS.
-    /// Mode, interrupt masks and other unmodeled CPSR bits read as zero.
+    /// Unmodeled CPSR control and extension bits read as zero.
     fn execute_mrs(&mut self, address: u32, instruction: u32) -> Result<(), CpuError> {
         let rd = ((instruction >> 12) & 0xF) as usize;
         let saved_status = instruction & (1 << 22) != 0;
@@ -2255,27 +2171,6 @@ impl Cpu {
                 }
             }
 
-            // LZ77UnCompWram/Vram share the same stream decoder. VRAM output
-            // must use halfword stores because byte writes are not supported there.
-            0x11 | 0x12 => {
-                let decoded = bios_lz77_decompress(bus, self.registers[0]).ok_or(
-                    CpuError::UnsupportedInstruction {
-                        address,
-                        instruction,
-                    },
-                )?;
-                bios_write_decompressed(bus, self.registers[1], &decoded, swi == 0x12);
-            }
-            // RLUnCompWram/Vram decode literal and repeated-byte runs.
-            0x14 | 0x15 => {
-                let decoded = bios_rl_decompress(bus, self.registers[0]).ok_or(
-                    CpuError::UnsupportedInstruction {
-                        address,
-                        instruction,
-                    },
-                )?;
-                bios_write_decompressed(bus, self.registers[1], &decoded, swi == 0x15);
-            }
             // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
             // This is a compatibility value; it does not claim to emulate BIOS ROM.
             0x0D => {
@@ -2539,21 +2434,6 @@ impl Cpu {
                 let semitones = f64::from(midi_key - 180) + f64::from(fine) / 256.0;
                 let frequency = f64::from(wave_frequency) * 2.0_f64.powf(semitones / 12.0);
                 self.registers[0] = frequency.round().clamp(0.0, f64::from(u32::MAX)) as u32;
-            }
-            // CpuFastSet copies/fills words in groups of eight; count rounds up.
-            0x0C => {
-                let source = self.registers[0] & !3;
-                let destination = self.registers[1] & !3;
-                let control = self.registers[2];
-                let count = (control & 0x001F_FFFF).saturating_add(7) & !7;
-                let fill = control & (1 << 24) != 0;
-                let mut value = 0;
-                for index in 0..count {
-                    if !fill || index == 0 {
-                        value = bus.read32(source.wrapping_add(index * 4));
-                    }
-                    bus.write32(destination.wrapping_add(index * 4), value);
-                }
             }
             _ => {
                 return Err(CpuError::UnsupportedInstruction {
@@ -4429,6 +4309,59 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read16(0x0600_0000), 0x5A5A);
         assert_eq!(bus.read16(0x0600_0002) & 0x00FF, 0x005A);
+    }
+
+
+    #[test]
+    fn bios_hle_lz77_vram_decompression_writes_packed_halfwords() {
+        let mut bus = bus_with_program(&[0xEF00_0012]);
+        for (offset, byte) in [
+            (0, 0x10),
+            (1, 3),
+            (2, 0),
+            (3, 0),
+            (4, 0x00),
+            (5, b'A'),
+            (6, b'B'),
+            (7, b'C'),
+        ] {
+            bus.write8(0x0200_0100 + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0600_0000);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read16(0x0600_0000), u16::from_le_bytes([b'A', b'B']));
+        assert_eq!(bus.read16(0x0600_0002), u16::from_le_bytes([b'C', 0]));
+    }
+
+    #[test]
+    fn bios_hle_rle_wram_decompression_writes_exact_literal_length() {
+        let mut bus = bus_with_program(&[0xEF00_0014]);
+        for (offset, byte) in [
+            (0, 0x30),
+            (1, 3),
+            (2, 0),
+            (3, 0),
+            (4, 0x02),
+            (5, b'X'),
+            (6, b'Y'),
+            (7, b'Z'),
+        ] {
+            bus.write8(0x0200_0100 + offset, byte);
+        }
+        let mut cpu = Cpu::new();
+        cpu.set_register(15, 0x0200_0000);
+        cpu.set_register(0, 0x0200_0100);
+        cpu.set_register(1, 0x0200_0200);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(
+            (0..3)
+                .map(|index| bus.read8(0x0200_0200 + index))
+                .collect::<Vec<_>>(),
+            b"XYZ"
+        );
     }
 
     #[test]
@@ -8463,7 +8396,6 @@ mod tests {
         bus.write8(source + 9, 0x10); // length 4, displacement 4.
         bus.write8(source + 10, 0x03);
         assert_eq!(bus.read32(source), 0x0000_0810);
-        assert!(bios_lz77_decompress(&bus, source).is_some());
         let mut cpu = Cpu::new();
         cpu.set_register(0, source);
         cpu.set_register(1, destination);

@@ -4,9 +4,10 @@
 //! Game Boy Advance hardware primitives for PeaceEmu.
 //!
 //! The package keeps the internal development codename `gameboy`, but targets
-//! the Game Boy Advance only. Cartridge validation, an instruction-functional
-//! ARM7TDMI/Thumb CPU subset, and an initial memory bus are implemented; full
-//! peripherals, exceptions, and cycle-accurate timing remain in development.
+//! the Game Boy Advance only. Cartridge validation, a partial ARM7TDMI/Thumb CPU,
+//! a memory bus, selected BIOS HLE services, IRQ entry, and initial video/audio
+//! peripherals are implemented. Other privileged modes, complete peripheral
+//! behavior, and cycle-accurate timing remain in development.
 
 /// Game Boy Advance cartridge header parsing and validation.
 pub mod cartridge;
