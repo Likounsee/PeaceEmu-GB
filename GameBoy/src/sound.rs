@@ -248,6 +248,36 @@ impl Psg {
             self.sweep_clock -= 131_072;
             Self::clock_sweep(&mut self.square[0]);
         }
+
+        // Length counters are clocked by the shared frame sequencer even
+        // while their channels are disabled. Keeping this separate from
+        // oscillator advancement matters when software arms length before
+        // triggering a channel, or leaves a disabled counter running.
+        if ticks != 0 {
+            for channel in &mut self.square {
+                if channel.length_enabled {
+                    channel.length = channel.length.saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
+                    if channel.length == 0 {
+                        channel.enabled = false;
+                    }
+                }
+            }
+            if self.wave.length_enabled {
+                self.wave.length =
+                    self.wave.length.saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
+                if self.wave.length == 0 {
+                    self.wave.enabled = false;
+                }
+            }
+            if self.noise.length_enabled {
+                self.noise.length =
+                    self.noise.length.saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
+                if self.noise.length == 0 {
+                    self.noise.enabled = false;
+                }
+            }
+        }
+
         for channel in &mut self.square {
             if !channel.enabled {
                 continue;
@@ -260,12 +290,6 @@ impl Psg {
                 channel.timer = period;
             }
             channel.timer -= remaining;
-            if channel.length_enabled && ticks != 0 {
-                channel.length = channel.length.saturating_sub(ticks as u16);
-                if channel.length == 0 {
-                    channel.enabled = false;
-                }
-            }
             Self::clock_envelope(
                 &mut channel.volume,
                 channel.initial_volume,
@@ -284,12 +308,6 @@ impl Psg {
                 self.wave.timer = Self::wave_period(self.wave.frequency);
             }
             self.wave.timer -= remaining;
-            if self.wave.length_enabled && ticks != 0 {
-                self.wave.length = self.wave.length.saturating_sub(ticks as u16);
-                if self.wave.length == 0 {
-                    self.wave.enabled = false;
-                }
-            }
         }
         if self.noise.enabled {
             let mut remaining = cycles;
@@ -304,12 +322,6 @@ impl Psg {
                     Self::noise_period(self.noise.divisor_code, self.noise.clock_shift);
             }
             self.noise.timer -= remaining;
-            if self.noise.length_enabled && ticks != 0 {
-                self.noise.length = self.noise.length.saturating_sub(ticks as u16);
-                if self.noise.length == 0 {
-                    self.noise.enabled = false;
-                }
-            }
             Self::clock_envelope(
                 &mut self.noise.volume,
                 self.noise.initial_volume,
@@ -833,4 +845,44 @@ mod tests {
 
         assert_eq!(psg.status_bits() & 0b1001, 0);
     }
+
+    #[test]
+    fn square_length_counter_runs_before_channel_trigger() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x62, 1); // 63 length units.
+        psg.write(0x65, 0x40); // Enable length without triggering.
+        psg.advance(65_536);
+        psg.write(0x63, 0xF0); // Enable DAC.
+        psg.write(0x65, 0xC0); // Trigger with 62 units remaining.
+        psg.advance(62 * 65_536);
+        assert_eq!(psg.status_bits() & 1, 0);
+    }
+
+    #[test]
+    fn wave_length_counter_runs_before_channel_trigger() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x73, 1); // 255 length units.
+        psg.write(0x75, 0x40); // Enable length without triggering.
+        psg.advance(65_536);
+        psg.write(0x70, 0x80); // Enable wave DAC.
+        psg.write(0x75, 0xC0); // Trigger with 254 units remaining.
+        psg.advance(254 * 65_536);
+        assert_eq!(psg.status_bits() & 4, 0);
+    }
+
+    #[test]
+    fn noise_length_counter_runs_before_channel_trigger() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x78, 1); // 63 length units.
+        psg.write(0x7D, 0x40); // Enable length without triggering.
+        psg.advance(65_536);
+        psg.write(0x79, 0xF0); // Enable noise DAC.
+        psg.write(0x7D, 0xC0); // Trigger with 62 units remaining.
+        psg.advance(62 * 65_536);
+        assert_eq!(psg.status_bits() & 8, 0);
+    }
+
 }
