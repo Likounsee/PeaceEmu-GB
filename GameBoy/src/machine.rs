@@ -1504,7 +1504,11 @@ impl GbaMachine {
             if cycles == 0 {
                 return Ok(None);
             }
-            if self.bus.audio_fifo_len(fifo).is_some_and(|len| len < initial_len) {
+            if self
+                .bus
+                .audio_fifo_len(fifo)
+                .is_some_and(|len| len < initial_len)
+            {
                 return Ok(Some(executed + 1));
             }
         }
@@ -3701,7 +3705,10 @@ mod tests {
         machine.bus_mut().write16(0x0400_0084, 0x0080);
 
         assert_eq!(machine.audio_fifo_len(0), Some(8));
-        assert_eq!(machine.run_until_audio_fifo_consumed(0, 8).unwrap(), Some(1));
+        assert_eq!(
+            machine.run_until_audio_fifo_consumed(0, 8).unwrap(),
+            Some(1)
+        );
         assert_eq!(machine.audio_fifo_len(0), Some(4));
         assert_eq!(machine.audio_fifo_last_sample(0), Some(0x7F_i8));
         assert_eq!(machine.direct_sound_stereo_sample(), (127, 127));
