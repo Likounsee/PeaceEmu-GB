@@ -197,8 +197,10 @@ impl GbaMachine {
         // accepts only an enabled keypad IRQ as a wake source; other pending
         // sources must remain latched without entering the exception handler.
         self.cpu.apply_pending_sleep_request(&mut self.bus);
-        let irq_wake_allowed =
-            !self.cpu.is_stopped() || self.bus.pending_interrupts() & (1 << 12) != 0;
+        if self.cpu.is_stopped() && self.bus.pending_interrupts() & (1 << 12) != 0 {
+            self.cpu.wake_from_stop_for_keypad_irq();
+        }
+        let irq_wake_allowed = !self.cpu.is_stopped();
         if irq_wake_allowed
             && self.bus.interrupt_master_enabled()
             && self.bus.pending_interrupts() != 0

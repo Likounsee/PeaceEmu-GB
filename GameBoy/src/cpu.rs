@@ -255,6 +255,11 @@ impl Cpu {
     ///
     /// The command is latched by MMIO and must take effect before the machine
     /// decides whether a pending interrupt may enter the IRQ exception.
+    pub(crate) fn wake_from_stop_for_keypad_irq(&mut self) {
+        self.stopped = false;
+        self.last_fetch_next = None;
+    }
+
     pub(crate) fn apply_pending_sleep_request(&mut self, bus: &mut MemoryBus) {
         if bus.take_stop_request() {
             self.stopped = true;
