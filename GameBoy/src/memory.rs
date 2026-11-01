@@ -4300,7 +4300,7 @@ mod tests {
         // of a newly entered 128 KiB block.
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0802_0000, true, 2),
-            Some(4)
+            Some(3)
         );
         // A 32-bit access straddling the boundary has S then N bus beats.
         assert_eq!(
