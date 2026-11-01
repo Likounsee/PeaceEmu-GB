@@ -3559,9 +3559,9 @@ mod tests {
     fn bios_sound_reset_disables_live_psg_channels_but_preserves_wave_ram() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);
-        bus.write8(0x0400_0065, 0xC0); // Enable Square 1 DAC.
-        bus.write8(0x0400_0063, 0xF0); // Maximum initial envelope volume.
-        bus.write8(0x0400_0064, 0x80); // Trigger Square 1.
+        bus.write8(0x0400_0063, 0xF0); // Enable Square 1 DAC at maximum volume.
+        bus.write8(0x0400_0064, 0x80); // Set Square 1 frequency low byte.
+        bus.write8(0x0400_0065, 0x80); // Trigger Square 1.
         bus.write8(0x0400_0070, 0x80);
         bus.write8(0x0400_0090, 0x5A);
         assert_ne!(bus.psg.status_bits() & 1, 0);
@@ -3593,6 +3593,7 @@ mod tests {
         // The channel registers (including bank selection) reset to bank 0,
         // but both physical 16-byte Wave RAM banks retain their sample data.
         assert_eq!(bus.read8(0x0400_0090), 0x12);
+        bus.write16(0x0400_0084, 0x0080); // Re-enable PSG before changing bank.
         bus.write8(0x0400_0070, 0xA0);
         assert_eq!(bus.read8(0x0400_0090), 0xAB);
         bus.write8(0x0400_0070, 0x80);
