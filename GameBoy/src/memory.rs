@@ -5515,5 +5515,4 @@ mod tests {
         assert_eq!(bus.video_hblank_events(), 0);
         assert_eq!(bus.video_vblank_events(), 0);
     }
-
 }
