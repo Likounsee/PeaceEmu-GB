@@ -237,7 +237,7 @@ fn bios_bit_unpack(bus: &MemoryBus, source: u32, info: u32) -> Option<Vec<u32>> 
         let byte_address = source.wrapping_add((bit_offset / 8) as u32);
         let bit_in_byte = bit_offset % 8;
         let raw = (u32::from(bus.read8(byte_address)) >> bit_in_byte) & source_mask;
-        let value = if raw == 0 && !zero_is_unpacked {
+        let value = if raw == 0 && zero_is_unpacked {
             0
         } else {
             raw.wrapping_add(offset) & destination_mask
