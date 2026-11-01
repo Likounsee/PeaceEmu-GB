@@ -2067,7 +2067,10 @@ impl Cpu {
             // not model banked mode stacks, so only the System stack is restored.
             0x00 => {
                 self.reset(0x0800_0000);
-                self.registers[13] = 0x0300_7F00;
+                // SoftReset must restore both BIOS-managed stack banks.
+                // Initializing only the active System SP leaves IRQ handlers
+                // without the standard 0x03007FA0 stack after the first IRQ.
+                self.initialize_gba_stacks();
                 return Ok(());
             }
             // Halt: stop fetching instructions until any enabled interrupt is requested.
@@ -8170,6 +8173,11 @@ mod tests {
         assert_eq!(cpu.register(1), Some(0));
         assert!(!cpu.is_thumb());
         assert_eq!(cpu.flags(), ConditionFlags::default());
+
+        // The IRQ bank must be ready too, not just the active System stack.
+        assert!(cpu.enter_irq());
+        assert_eq!(cpu.processor_mode(), 0x12);
+        assert_eq!(cpu.register(13), Some(0x0300_7FA0));
     }
 
     #[test]
