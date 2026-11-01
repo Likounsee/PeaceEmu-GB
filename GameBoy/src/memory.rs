@@ -4289,7 +4289,7 @@ mod tests {
     #[test]
     fn gamepak_rom_sequences_restart_at_each_128k_block_boundary() {
         let mut bus = MemoryBus::new(cartridge());
-        // ROM0 non-sequential=4, sequential=1.
+        // ROM0 non-sequential=3, sequential=1.
         bus.write16(0x0400_0204, (1 << 2) | (1 << 4));
 
         assert_eq!(
