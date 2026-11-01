@@ -2210,10 +2210,13 @@ impl Cpu {
                 }
             }
 
-            // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
-            // This is a compatibility value; it does not claim to emulate BIOS ROM.
+            // GetBiosChecksum reports the fixed checksum and BIOS metadata used
+            // by the HLE BIOS: checksum, success flag, and 16 KiB BIOS size.
+            // This does not claim to expose or emulate the protected BIOS ROM.
             0x0D => {
                 self.registers[0] = 0xBAAE_187F;
+                self.registers[1] = 1;
+                self.registers[3] = 0x4000;
             }
             // SoundBiasChange selects one of the two BIOS PWM bias targets.
             // Preserve the amplitude-resolution bits in SOUNDBIAS.
@@ -3779,6 +3782,22 @@ mod tests {
             .unwrap();
         assert_eq!(bus.read16(0x0400_0090), 0x1234);
         assert_eq!(bus.read16(0x0400_0120), 0x1234);
+    }
+
+    #[test]
+    fn bios_checksum_returns_checksum_success_and_bios_size() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        cpu.set_register(1, 0xDEAD_BEEF);
+        cpu.set_register(3, 0xCAFE_BABE);
+
+        cpu.execute_swi(0x0200_0100, 0xEF00_000D, 0x0D, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+        assert_eq!(cpu.register(1), Some(1));
+        assert_eq!(cpu.register(3), Some(0x4000));
     }
 
     #[test]
