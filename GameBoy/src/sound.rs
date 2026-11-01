@@ -5,7 +5,7 @@
 //! noise-channel synthesis are not implemented yet.
 
 /// Two-channel programmable sound generator for the GBA's legacy PSG.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Psg {
     registers: [u8; 0x22],
     channels: [SquareChannel; 2],
@@ -27,6 +27,17 @@ struct SquareChannel {
     envelope_increase: bool,
     envelope_period: u8,
     envelope_timer: u32,
+}
+
+impl Default for Psg {
+    fn default() -> Self {
+        Self {
+            registers: [0; 0x22],
+            channels: std::array::from_fn(|_| SquareChannel::default()),
+            master_enabled: false,
+            length_clock: 0,
+        }
+    }
 }
 
 impl Psg {
@@ -71,8 +82,7 @@ impl Psg {
             0x65 | 0x6D => {
                 let channel = if offset == 0x65 { 0 } else { 1 };
                 let state = &mut self.channels[channel];
-                state.frequency =
-                    (state.frequency & 0x00FF) | (u16::from(value & 0x07) << 8);
+                state.frequency = (state.frequency & 0x00FF) | (u16::from(value & 0x07) << 8);
                 state.length_enabled = value & 0x40 != 0;
                 if value & 0x80 != 0 {
                     state.enabled = true;

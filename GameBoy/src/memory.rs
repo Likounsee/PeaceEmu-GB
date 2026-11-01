@@ -344,7 +344,10 @@ impl MemoryBus {
     pub fn audio_stereo_sample(&self) -> (i16, i16) {
         let direct = self.direct_sound_stereo_sample();
         let psg = self.psg_stereo_sample();
-        (direct.0.saturating_add(psg.0), direct.1.saturating_add(psg.1))
+        (
+            direct.0.saturating_add(psg.0),
+            direct.1.saturating_add(psg.1),
+        )
     }
 
     /// Mixes the current Direct Sound FIFO DAC latches into a stereo sample.
