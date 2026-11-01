@@ -7957,7 +7957,7 @@ mod tests {
         let source = 0x0200_0000;
         let destination = 0x0200_0100;
         let info = 0x0200_0200;
-        bus.write32(source, 0x7654_3210);
+        bus.write32(source, 0x7600_0010);
         bus.write16(info, 4);
         bus.write8(info + 2, 8);
         bus.write8(info + 3, 8);
@@ -7971,7 +7971,7 @@ mod tests {
         cpu.execute_swi(0x0200_0300, 0xEF00_0010, 0x10, false, &mut bus)
             .unwrap();
 
-        assert_eq!(bus.read32(destination), 0x7957_3513);
+        assert_eq!(bus.read32(destination), 0x7903_0313);
     }
 
     #[test]
