@@ -2626,11 +2626,15 @@ impl Cpu {
                 bits_remaining -= 1;
                 let child_offset = u32::from(node & 0x3F) * 2 + 2 + u32::from(bit);
                 let child_address = node_address.wrapping_add(child_offset);
-                if node_address < tree_start || node_address >= tree_start.wrapping_add(tree_size as u32)
+                if node_address < tree_start
+                    || node_address >= tree_start.wrapping_add(tree_size as u32)
                     || child_address < tree_start
                     || child_address >= tree_start.wrapping_add(tree_size as u32)
                 {
-                    return Err(CpuError::UnsupportedInstruction { address, instruction });
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
                 }
                 let is_leaf = if bit == 0 {
                     node & 0x80 != 0
