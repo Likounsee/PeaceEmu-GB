@@ -3467,6 +3467,26 @@ mod tests {
     }
 
     #[test]
+    fn wave_ram_window_tracks_selected_bank_and_survives_bios_sound_reset() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        bus.write8(0x0400_0070, 0xA0); // Enable wave DAC and select bank 1.
+        bus.write8(0x0400_0090, 0xAB);
+        assert_eq!(bus.read8(0x0400_0090), 0xAB);
+
+        bus.write8(0x0400_0070, 0x80); // Select bank 0.
+        bus.write8(0x0400_0090, 0x12);
+        assert_eq!(bus.read8(0x0400_0090), 0x12);
+
+        bus.write8(0x0400_0070, 0xA0);
+        assert_eq!(bus.read8(0x0400_0090), 0xAB);
+        bus.reset_sound_registers();
+        assert_eq!(bus.read8(0x0400_0090), 0xAB);
+        bus.write8(0x0400_0070, 0x80);
+        assert_eq!(bus.read8(0x0400_0090), 0x12);
+    }
+
+    #[test]
     fn disabling_sound_master_clears_both_fifos_samples_and_direct_sound_controls() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);

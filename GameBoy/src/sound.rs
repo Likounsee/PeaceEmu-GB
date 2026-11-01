@@ -7,9 +7,10 @@ pub struct Psg {
     square: [SquareChannel; 2],
     wave: WaveChannel,
     noise: NoiseChannel,
-    wave_ram: [u8; 16],
+    wave_ram: [u8; 32],
     master_enabled: bool,
     length_clock: u32,
+    sweep_clock: u32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -26,6 +27,13 @@ struct SquareChannel {
     envelope_increase: bool,
     envelope_period: u8,
     envelope_timer: u32,
+    sweep_period: u8,
+    sweep_decrease: bool,
+    sweep_shift: u8,
+    sweep_timer: u8,
+    sweep_shadow: u16,
+    sweep_enabled: bool,
+    sweep_negate_used: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -38,6 +46,8 @@ struct WaveChannel {
     frequency: u16,
     position: u8,
     timer: u32,
+    two_bank_mode: bool,
+    bank_select: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -67,9 +77,10 @@ impl Default for Psg {
                 lfsr: 0x7FFF,
                 ..NoiseChannel::default()
             },
-            wave_ram: [0; 16],
+            wave_ram: [0; 32],
             master_enabled: false,
             length_clock: 0,
+            sweep_clock: 0,
         }
     }
 }
@@ -96,6 +107,15 @@ impl Psg {
         };
         self.registers[index] = masked;
         match offset {
+            0x60 => {
+                let sweep = &mut self.square[0];
+                sweep.sweep_period = (value >> 4) & 7;
+                sweep.sweep_decrease = value & 8 != 0;
+                sweep.sweep_shift = value & 7;
+                if !sweep.sweep_decrease && sweep.sweep_negate_used {
+                    sweep.enabled = false;
+                }
+            }
             0x62 | 0x68 => {
                 let c = usize::from(offset == 0x68);
                 self.square[c].duty = masked >> 6;
@@ -122,7 +142,11 @@ impl Psg {
                     Self::trigger_square(s);
                 }
             }
-            0x70 => self.wave.dac_enabled = value & 0x80 != 0,
+            0x70 => {
+                self.wave.dac_enabled = value & 0x80 != 0;
+                self.wave.two_bank_mode = value & 0x40 != 0;
+                self.wave.bank_select = usize::from(value & 0x20 != 0);
+            },
             0x72 => self.wave.volume_code = (value >> 5) & 3,
             0x73 => self.wave.length = 256 - u16::from(value),
             0x74 => self.wave.frequency = (self.wave.frequency & 0x0700) | u16::from(value),
@@ -170,17 +194,16 @@ impl Psg {
 
     /// Writes one byte of the 16-byte wave sample RAM.
     pub fn write_wave_ram(&mut self, index: usize, value: u8) -> bool {
-        if let Some(byte) = self.wave_ram.get_mut(index) {
-            *byte = value;
-            true
-        } else {
-            false
+        if index >= 16 {
+            return false;
         }
+        self.wave_ram[self.wave.bank_select * 16 + index] = value;
+        true
     }
 
     /// Reads one byte of wave sample RAM.
     pub fn read_wave_ram(&self, index: usize) -> Option<u8> {
-        self.wave_ram.get(index).copied()
+        (index < 16).then(|| self.wave_ram[self.wave.bank_select * 16 + index])
     }
 
     /// Enables or disables the PSG master circuit.
@@ -194,6 +217,7 @@ impl Psg {
                 ..NoiseChannel::default()
             };
             self.length_clock = 0;
+            self.sweep_clock = 0;
         }
         self.master_enabled = enabled;
     }
@@ -206,6 +230,11 @@ impl Psg {
         self.length_clock = self.length_clock.saturating_add(cycles);
         let ticks = self.length_clock / 65536;
         self.length_clock %= 65536;
+        self.sweep_clock = self.sweep_clock.saturating_add(cycles);
+        while self.sweep_clock >= 131_072 {
+            self.sweep_clock -= 131_072;
+            Self::clock_sweep(&mut self.square[0]);
+        }
         for channel in &mut self.square {
             if !channel.enabled {
                 continue;
@@ -237,7 +266,8 @@ impl Psg {
             let mut remaining = cycles;
             while remaining >= self.wave.timer {
                 remaining -= self.wave.timer;
-                self.wave.position = (self.wave.position + 1) & 31;
+                let position_mask = if self.wave.two_bank_mode { 63 } else { 31 };
+                self.wave.position = (self.wave.position + 1) & position_mask;
                 self.wave.timer = Self::wave_period(self.wave.frequency);
             }
             self.wave.timer -= remaining;
@@ -316,6 +346,57 @@ impl Psg {
         if channel.length == 0 {
             channel.length = 64;
         }
+        if channel.sweep_shift != 0 {
+            channel.sweep_shadow = channel.frequency;
+            channel.sweep_timer = if channel.sweep_period == 0 { 8 } else { channel.sweep_period };
+            channel.sweep_enabled = channel.sweep_period != 0 || channel.sweep_shift != 0;
+            channel.sweep_negate_used = false;
+            if Self::sweep_calculate(channel).is_none() {
+                channel.enabled = false;
+            }
+        } else {
+            channel.sweep_shadow = channel.frequency;
+            channel.sweep_timer = if channel.sweep_period == 0 { 8 } else { channel.sweep_period };
+            channel.sweep_enabled = channel.sweep_period != 0;
+            channel.sweep_negate_used = false;
+        }
+    }
+
+    fn sweep_calculate(channel: &mut SquareChannel) -> Option<u16> {
+        let delta = channel.sweep_shadow >> channel.sweep_shift;
+        let next = if channel.sweep_decrease {
+            channel.sweep_negate_used = true;
+            channel.sweep_shadow.checked_sub(delta)?
+        } else {
+            channel.sweep_shadow.checked_add(delta)?
+        };
+        (next <= 2047).then_some(next)
+    }
+
+    fn clock_sweep(channel: &mut SquareChannel) {
+        if !channel.enabled || !channel.sweep_enabled {
+            return;
+        }
+        if channel.sweep_timer > 0 {
+            channel.sweep_timer -= 1;
+        }
+        if channel.sweep_timer != 0 {
+            return;
+        }
+        channel.sweep_timer = if channel.sweep_period == 0 { 8 } else { channel.sweep_period };
+        if channel.sweep_period == 0 || channel.sweep_shift == 0 {
+            return;
+        }
+        let Some(next) = Self::sweep_calculate(channel) else {
+            channel.enabled = false;
+            return;
+        };
+        channel.sweep_shadow = next;
+        channel.frequency = next;
+        channel.timer = Self::square_period(next);
+        if Self::sweep_calculate(channel).is_none() {
+            channel.enabled = false;
+        }
     }
 
     /// Returns raw signed samples for Square 1, Square 2, Wave and Noise.
@@ -341,7 +422,13 @@ impl Psg {
             }
         }
         if self.wave.enabled && self.wave.volume_code != 0 {
-            let sample_byte = self.wave_ram[(self.wave.position / 2) as usize];
+            let sample_index = (self.wave.position / 2) as usize;
+            let bank_offset = if self.wave.two_bank_mode {
+                0
+            } else {
+                self.wave.bank_select * 16
+            };
+            let sample_byte = self.wave_ram[bank_offset + sample_index];
             let nibble = if self.wave.position & 1 == 0 {
                 sample_byte >> 4
             } else {
@@ -482,6 +569,44 @@ mod tests {
         psg.set_master_enabled(false);
         assert_eq!(psg.status_bits(), 0);
         assert_eq!(psg.stereo_sample(), (0, 0));
+    }
+
+    #[test]
+    fn square_one_sweep_increases_frequency_and_disables_on_overflow() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x60, 0x11); // Sweep every 1 unit, shift right by 1.
+        psg.write(0x62, 0x80);
+        psg.write(0x63, 0xF0);
+        psg.write(0x64, 0xE8); // Initial frequency 1000.
+        psg.write(0x65, 0x83);
+        assert_eq!(psg.square[0].frequency, 1000);
+        psg.advance(131_072);
+        assert_eq!(psg.square[0].frequency, 1500);
+        psg.write(0x64, 0xFF);
+        psg.write(0x65, 0x87); // Re-trigger at a high frequency; overflow check.
+        assert_eq!(psg.status_bits() & 1, 0);
+    }
+
+    #[test]
+    fn wave_ram_bank_selection_and_two_bank_playback_are_supported() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x70, 0xA0); // DAC enabled, bank 1 selected.
+        psg.write_wave_ram(0, 0xF0);
+        assert_eq!(psg.read_wave_ram(0), Some(0xF0));
+        psg.write(0x70, 0x80); // Select bank 0.
+        psg.write_wave_ram(0, 0x10);
+        psg.write(0x70, 0xA0);
+        assert_eq!(psg.read_wave_ram(0), Some(0xF0));
+        psg.write(0x70, 0xE0); // 64-sample mode traverses both banks.
+        psg.write(0x72, 0x20);
+        psg.write(0x74, 0xFF);
+        psg.write(0x75, 0x87);
+        assert_eq!(psg.channel_samples()[2], -14);
+        psg.advance(8 * 32);
+        assert_eq!(psg.wave.position, 32);
+        assert_eq!(psg.channel_samples()[2], 14);
     }
 
     #[test]
