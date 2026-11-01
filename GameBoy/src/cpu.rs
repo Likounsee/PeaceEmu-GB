@@ -206,7 +206,6 @@ fn bios_rl_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
     Some(output)
 }
 
-
 /// Decodes the GBA BIOS Huffman stream into complete little-endian output words.
 fn bios_huffman_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u32>> {
     let source = source & !3;
@@ -8708,6 +8707,4 @@ mod tests {
         bus.write32(source, (4 << 8) | 0x23);
         assert!(bios_huffman_decompress(&bus, source).is_none());
     }
-
-
 }
