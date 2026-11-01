@@ -8445,7 +8445,7 @@ mod tests {
         let source = 0x0200_1000;
         let destination = 0x0200_2000;
         bus.write32(source, 0x0000_0810); // LZ77, eight output bytes.
-        bus.write8(source + 4, 0x10); // Four literals, then one back-reference.
+        bus.write8(source + 4, 0x08); // Four literals, then one back-reference.
         for (offset, byte) in [b'A', b'B', b'C', b'D'].into_iter().enumerate() {
             bus.write8(source + 5 + offset as u32, byte);
         }
