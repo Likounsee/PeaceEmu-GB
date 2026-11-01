@@ -210,27 +210,27 @@ fn bios_rl_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
 fn bios_huffman_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u32>> {
     let source = source & !3;
     let header = bus.read32(source);
-    let symbol_width = (header & 0x0F) as u8;
-    if !matches!(symbol_width, 4 | 8) || header as u8 != (0x20 | symbol_width) {
+    let encoded_width = (header & 0x0F) as u8;
+    let symbol_width = if encoded_width == 0 { 8 } else { encoded_width };
+    if !matches!(symbol_width, 4 | 8) || header as u8 != (0x20 | encoded_width) {
         return None;
     }
     let output_bytes = ((header >> 8) & 0x00FF_FFFF) as usize;
-    if output_bytes % 4 != 0 {
-        return None;
+    if output_bytes == 0 {
+        return Some(Vec::new());
     }
 
-    let tree_size = u32::from(bus.read8(source.wrapping_add(4))) * 2 + 1;
+    let tree_size = u32::from(bus.read8(source.wrapping_add(4))) * 2 + 2;
     let tree_base = source.wrapping_add(5);
     let tree_end = tree_base.checked_add(tree_size)?;
     let bitstream = tree_end.checked_add(3)? & !3;
-    let root = tree_base;
     let symbol_mask = (1_u32 << symbol_width) - 1;
     let symbols_per_word = 32 / u32::from(symbol_width);
     let symbol_count = output_bytes.checked_mul(8)? / usize::from(symbol_width);
-    let mut output = Vec::with_capacity(output_bytes / 4);
+    let mut output = Vec::with_capacity(output_bytes.div_ceil(4));
     let mut packed_word = 0_u32;
     let mut symbols_in_word = 0_u32;
-    let mut node_address = root;
+    let mut node_address = tree_base;
     let mut bitstream_address = bitstream;
     let mut bitstream_word = 0_u32;
     let mut bits_remaining = 0_u8;
@@ -249,7 +249,7 @@ fn bios_huffman_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u32>> {
             let node = bus.read8(node_address);
             let child_base = (node_address & !1)
                 .wrapping_add(u32::from(node & 0x3F) * 2)
-                .wrapping_add(2);
+                .wrapping_add(3);
             let (child, is_leaf) = if branch {
                 (child_base.wrapping_add(1), node & 0x40 != 0)
             } else {
@@ -259,7 +259,7 @@ fn bios_huffman_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u32>> {
                 return None;
             }
             if is_leaf {
-                node_address = root;
+                node_address = tree_base;
                 break u32::from(bus.read8(child)) & symbol_mask;
             }
             node_address = child;
@@ -274,7 +274,7 @@ fn bios_huffman_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u32>> {
         }
     }
     if symbols_in_word != 0 {
-        return None;
+        output.push(packed_word);
     }
     Some(output)
 }
