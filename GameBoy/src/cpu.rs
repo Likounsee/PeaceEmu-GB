@@ -3801,7 +3801,7 @@ mod tests {
         cpu.set_register(0, 1 << 5);
         cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0128), 0);
+        assert_eq!(bus.read16(0x0400_0128), 1 << 2);
         assert_eq!(bus.read16(0x0400_0090), 0x1234);
 
         bus.write16(0x0400_0128, 0x1234);
