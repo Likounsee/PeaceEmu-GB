@@ -2128,9 +2128,7 @@ impl MemoryBus {
             self.sio_rcnt = value & 0xC00F;
             return;
         }
-        if (0x0400_0120..=0x0400_0123).contains(&sio_address)
-            && self.sio_control >> 12 & 3 == 1
-        {
+        if (0x0400_0120..=0x0400_0123).contains(&sio_address) && self.sio_control >> 12 & 3 == 1 {
             let shift = (sio_address - 0x0400_0120) * 8;
             let mask = 0xFFFF_u32 << shift;
             self.sio_data32 = (self.sio_data32 & !mask) | (u32::from(value) << shift);
