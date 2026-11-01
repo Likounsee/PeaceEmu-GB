@@ -319,22 +319,32 @@ impl Psg {
         if period == 0 {
             return;
         }
-        *timer = timer.saturating_sub(cycles);
         let step = Self::envelope_period(period);
-        while *timer == 0 {
+        if *timer == 0 {
+            *timer = step;
+        }
+
+        // Preserve elapsed cycles across envelope edges. A single large
+        // advance must produce the same volume and phase as many small advances.
+        let mut remaining = cycles;
+        while remaining >= *timer {
+            remaining -= *timer;
             if increase {
                 if *volume == 15 {
-                    break;
+                    *timer = step;
+                    return;
                 }
                 *volume += 1;
             } else {
                 if *volume == 0 {
-                    break;
+                    *timer = step;
+                    return;
                 }
                 *volume -= 1;
             }
             *timer = step;
         }
+        *timer -= remaining;
     }
 
     fn trigger_square(channel: &mut SquareChannel) {
@@ -621,5 +631,55 @@ mod tests {
             psg.advance(256);
         }
         assert_eq!(psg.status_bits() & 1, 0);
+    } 
+    #[test]
+    fn envelope_clock_is_invariant_to_cycle_chunking() {
+        let mut one_shot = Psg::default();
+        let mut chunked = Psg::default();
+        for psg in [&mut one_shot, &mut chunked] {
+            psg.set_master_enabled(true);
+            psg.write(0x63, 0xA8); // Start at 10, increase every 8 envelope periods.
+            psg.write(0x65, 0x80);
+        }
+
+        one_shot.advance(8 * 262_144 + 123);
+        for _ in 0..8 {
+            chunked.advance(262_144);
+        }
+        chunked.advance(123);
+
+        assert_eq!(one_shot.square[0].volume, 11);
+        assert_eq!(one_shot.square[0].volume, chunked.square[0].volume);
+        assert_eq!(
+            one_shot.square[0].envelope_timer,
+            chunked.square[0].envelope_timer
+        );
     }
+
+    #[test]
+    fn envelope_clock_processes_multiple_steps_in_one_advance() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x63, 0x20); // Start at 2, decrease every envelope period.
+        psg.write(0x65, 0x80);
+
+        psg.advance(3 * 262_144 + 17);
+
+        assert_eq!(psg.square[0].volume, 0);
+        assert_eq!(psg.square[0].envelope_timer, 262_144);
+    }
+
+    #[test]
+    fn noise_envelope_uses_the_same_cycle_accurate_clock() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x79, 0x18); // Start at 1, increase every envelope period.
+        psg.write(0x7D, 0x80);
+
+        psg.advance(2 * 262_144 + 9);
+
+        assert_eq!(psg.noise.volume, 3);
+        assert_eq!(psg.noise.envelope_timer, 262_144 - 9);
+    }
+
 }
