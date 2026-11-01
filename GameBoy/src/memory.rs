@@ -842,10 +842,9 @@ impl MemoryBus {
                     }
                     let first = self.gamepak_access_cycles(bus_address, sequential)?;
                     if width_bytes == 4 {
-                        first.checked_add(self.gamepak_access_cycles(
-                            bus_address.checked_add(2)?,
-                            true,
-                        )?)
+                        first.checked_add(
+                            self.gamepak_access_cycles(bus_address.checked_add(2)?, true)?,
+                        )
                     } else {
                         Some(first)
                     }
