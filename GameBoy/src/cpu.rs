@@ -2910,6 +2910,24 @@ impl Cpu {
         Ok(())
     }
 
+    fn read_user_register(&self, register: usize, instruction_address: u32) -> u32 {
+        match register {
+            13 if self.mode == 0x12 => self.user_sp_lr[0],
+            14 if self.mode == 0x12 => self.user_sp_lr[1],
+            15 => instruction_address.wrapping_add(8),
+            _ => self.registers[register],
+        }
+    }
+
+    fn write_user_register(&mut self, register: usize, value: u32) {
+        match register {
+            13 if self.mode == 0x12 => self.user_sp_lr[0] = value,
+            14 if self.mode == 0x12 => self.user_sp_lr[1] = value,
+            15 => self.registers[15] = value & !3,
+            _ => self.registers[register] = value,
+        }
+    }
+
     fn execute_block_transfer(
         &mut self,
         address: u32,
@@ -2923,14 +2941,6 @@ impl Cpu {
         let load = instruction & (1 << 20) != 0;
         let rn = ((instruction >> 16) & 0xF) as usize;
         let register_list = instruction & 0xFFFF;
-
-        // User-bank transfers require exception/banked-register support.
-        if user_registers {
-            return Err(CpuError::UnsupportedInstruction {
-                address,
-                instruction,
-            });
-        }
 
         // Writing back through r15 makes the block-transfer base depend on
         // the pipeline-visible PC and has unpredictable control-flow effects.
@@ -2973,7 +2983,11 @@ impl Cpu {
 
             if load {
                 let value = bus.read32(transfer_address);
-                self.registers[register] = if register == 15 { value & !3 } else { value };
+                if user_registers {
+                    self.write_user_register(register, value);
+                } else {
+                    self.registers[register] = if register == 15 { value & !3 } else { value };
+                }
             } else {
                 let value = if register == 15 {
                     address.wrapping_add(12)
@@ -2992,6 +3006,8 @@ impl Cpu {
                     } else {
                         base
                     }
+                } else if user_registers {
+                    self.read_user_register(register, address)
                 } else {
                     self.registers[register]
                 };
@@ -3015,6 +3031,18 @@ impl Cpu {
                 } else {
                     base.wrapping_sub(bytes)
                 };
+            }
+        }
+
+        // LDM^ with PC restores CPSR from the current exception mode's SPSR.
+        // The loaded PC is retained as the return target while the bank switch
+        // restores the interrupted User/System r13-r14 pair.
+        if user_registers && load && effective_list & (1 << 15) != 0 {
+            if !self.restore_irq_exception_state() {
+                return Err(CpuError::UnsupportedInstruction {
+                    address,
+                    instruction,
+                });
             }
         }
         Ok(())
@@ -8252,4 +8280,58 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.spsr_irq & 0xF000_0000, 0xA000_0000);
     }
+    #[test]
+    fn irq_user_bank_stm_and_ldm_transfer_user_sp_lr() {
+        // STMIA r0!, {r13-r14}^ ; LDMIA r1!, {r13-r14}^
+        let mut bus = bus_with_program(&[0xE8E0_C000, 0xE8F1_C000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(13, 0x0300_7E00);
+        cpu.set_register(14, 0x0800_1234);
+        cpu.set_register(0, 0x0200_1000);
+        cpu.set_register(1, 0x0200_2000);
+        assert!(cpu.enter_irq());
+        cpu.set_register(13, 0x0300_7F00);
+        cpu.set_register(14, 0x0200_0104);
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read32(0x0200_1000), 0x0300_7E00);
+        assert_eq!(bus.read32(0x0200_1004), 0x0800_1234);
+        assert_eq!(cpu.register(0), Some(0x0200_1008));
+
+        bus.write32(0x0200_2000, 0x0300_7D00);
+        bus.write32(0x0200_2004, 0x0800_5678);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.user_sp_lr, [0x0300_7D00, 0x0800_5678]);
+        assert_eq!(cpu.register(13), Some(0x0300_7F00));
+        assert_eq!(cpu.register(14), Some(0x0200_0104));
+        assert_eq!(cpu.register(1), Some(0x0200_2008));
+    }
+
+    #[test]
+    fn irq_ldm_user_bank_with_pc_performs_exception_return() {
+        // LDMIA r0, {r13-r15}^
+        let mut bus = bus_with_program(&[0xE8D0_E000]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(13, 0x0300_7000);
+        cpu.set_register(14, 0x0800_1000);
+        cpu.set_execution_state(true);
+        cpu.set_register(15, 0x0200_0200);
+        assert!(cpu.enter_irq());
+        cpu.set_register(13, 0x0300_7F00);
+        cpu.set_register(14, 0x0200_0204);
+        cpu.set_register(0, 0x0200_3000);
+        bus.write32(0x0200_3000, 0x0300_7100);
+        bus.write32(0x0200_3004, 0x0800_2000);
+        bus.write32(0x0200_3008, 0x0800_4001);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.processor_mode(), 0x1F);
+        assert!(cpu.is_thumb());
+        assert_eq!(cpu.register(13), Some(0x0300_7100));
+        assert_eq!(cpu.register(14), Some(0x0800_2000));
+        assert_eq!(cpu.register(15), Some(0x0800_4000));
+    }
+
+
 }
