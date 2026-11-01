@@ -8495,5 +8495,4 @@ mod tests {
         assert_eq!(bus.read16(destination + 2), 0x5656);
         assert_eq!(bus.read16(destination + 4), 0x5656);
     }
-
 }
