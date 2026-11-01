@@ -139,7 +139,6 @@ pub struct Cpu {
     spsr_irq_valid: bool,
 }
 
-
 /// Decodes the GBA BIOS 0x10 LZ77 stream format.
 fn bios_lz77_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
     let header = bus.read32(source);
@@ -164,8 +163,7 @@ fn bios_lz77_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
                 let second = bus.read8(cursor.wrapping_add(1));
                 cursor = cursor.wrapping_add(2);
                 let length = usize::from(first >> 4) + 3;
-                let displacement =
-                    (usize::from(first & 0x0F) << 8 | usize::from(second)) + 1;
+                let displacement = (usize::from(first & 0x0F) << 8 | usize::from(second)) + 1;
                 if displacement > output.len() {
                     return None;
                 }
@@ -2261,14 +2259,22 @@ impl Cpu {
             // LZ77UnCompWram/Vram share the same stream decoder. VRAM output
             // must use halfword stores because byte writes are not supported there.
             0x11 | 0x12 => {
-                let decoded = bios_lz77_decompress(bus, self.registers[0])
-                    .ok_or(CpuError::UnsupportedInstruction { address, instruction })?;
+                let decoded = bios_lz77_decompress(bus, self.registers[0]).ok_or(
+                    CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    },
+                )?;
                 bios_write_decompressed(bus, self.registers[1], &decoded, swi == 0x12);
             }
             // RLUnCompWram/Vram decode literal and repeated-byte runs.
             0x14 | 0x15 => {
-                let decoded = bios_rl_decompress(bus, self.registers[0])
-                    .ok_or(CpuError::UnsupportedInstruction { address, instruction })?;
+                let decoded = bios_rl_decompress(bus, self.registers[0]).ok_or(
+                    CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    },
+                )?;
                 bios_write_decompressed(bus, self.registers[1], &decoded, swi == 0x15);
             }
             // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
@@ -8450,7 +8456,9 @@ mod tests {
         cpu.set_register(1, destination);
         cpu.execute_swi(0, 0, 0x11, false, &mut bus).unwrap();
         assert_eq!(
-            (0..8).map(|i| bus.read8(destination + i)).collect::<Vec<_>>(),
+            (0..8)
+                .map(|i| bus.read8(destination + i))
+                .collect::<Vec<_>>(),
             b"ABCDABCD"
         );
     }
@@ -8474,6 +8482,4 @@ mod tests {
         assert_eq!(bus.read16(destination + 2), 0x5656);
         assert_eq!(bus.read16(destination + 4), 0x5656);
     }
-
-
 }
