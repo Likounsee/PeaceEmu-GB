@@ -2279,7 +2279,10 @@ impl MemoryBus {
 
     /// Writes a little-endian word, aligned down to a four-byte boundary.
     pub fn write32(&mut self, address: u32, value: u32) {
-        if (address & !3) == 0x0400_0120 && self.sio_control >> 12 & 3 == 1 {
+        if (address & !3) == 0x0400_0120
+            && self.sio_control >> 12 & 3 == 1
+            && self.sio_rcnt & 0xC000 == 0
+        {
             self.sio_data32 = value;
             return;
         }
@@ -2674,6 +2677,7 @@ mod tests {
     #[test]
     fn sio_normal_32_bit_fast_transfer_uses_256_cpu_cycles() {
         let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0128, 1 << 12);
         bus.write32(0x0400_0120, 0x1234_5678);
         bus.write16(0x0400_0128, (1 << 12) | (1 << 7) | 3);
         bus.advance_cycles(255);
