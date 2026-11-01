@@ -3589,6 +3589,11 @@ mod tests {
         bus.write8(0x0400_0070, 0xA0);
         assert_eq!(bus.read8(0x0400_0090), 0xAB);
         bus.reset_sound_registers();
+
+        // The channel registers (including bank selection) reset to bank 0,
+        // but both physical 16-byte Wave RAM banks retain their sample data.
+        assert_eq!(bus.read8(0x0400_0090), 0x12);
+        bus.write8(0x0400_0070, 0xA0);
         assert_eq!(bus.read8(0x0400_0090), 0xAB);
         bus.write8(0x0400_0070, 0x80);
         assert_eq!(bus.read8(0x0400_0090), 0x12);
