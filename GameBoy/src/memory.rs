@@ -823,14 +823,38 @@ impl MemoryBus {
                 }
             }
             0x0E00_0000..=0x0FFF_FFFF => {
-                // SRAM is byte-wide and selects its lane from the original
-                // address, so wider accesses repeat that byte without alignment.
                 let last_address = address.checked_add(u32::from(width_bytes) - 1)?;
                 if last_address > 0x0FFF_FFFF {
                     return None;
                 }
-                self.gamepak_access_cycles(address, sequential)?
-                    .checked_mul(u32::from(width_bytes))
+                if self.flash.is_some() {
+                    // Flash cartridges use the 16-bit Game Pak data bus,
+                    // unlike byte-wide SRAM. A word therefore needs two
+                    // halfword transfers; SRAM still repeats one byte lane.
+                    let bus_address = match width_bytes {
+                        2 => address & !1,
+                        4 => address & !3,
+                        _ => address,
+                    };
+                    let bus_last = bus_address.checked_add(u32::from(width_bytes) - 1)?;
+                    if bus_last > 0x0E00_FFFF {
+                        return None;
+                    }
+                    let first = self.gamepak_access_cycles(bus_address, sequential)?;
+                    if width_bytes == 4 {
+                        first.checked_add(self.gamepak_access_cycles(
+                            bus_address.checked_add(2)?,
+                            true,
+                        )?)
+                    } else {
+                        Some(first)
+                    }
+                } else {
+                    // SRAM is byte-wide and selects its lane from the original
+                    // address, so wider accesses repeat that byte without alignment.
+                    self.gamepak_access_cycles(address, sequential)?
+                        .checked_mul(u32::from(width_bytes))
+                }
             }
             _ => None,
         }
@@ -4281,6 +4305,43 @@ mod tests {
             .wrapping_neg();
         rom[0xBD] = checksum;
         GbaCartridge::parse(&rom).expect("test ROM header should validate")
+    }
+
+    #[test]
+    fn flash_gamepak_timing_uses_sixteen_bit_bus_while_sram_is_byte_wide() {
+        let flash_cart =
+            cartridge_with_save_signature(b"").with_save_type(Some(crate::SaveType::Flash64K));
+        let mut flash_bus = MemoryBus::new(flash_cart);
+        let sram_bus = MemoryBus::new(cartridge());
+
+        // Default SRAM/Flash wait-state setting: four clocks per first access.
+        assert_eq!(
+            flash_bus.gamepak_access_cycles_for_width(0x0E00_0000, false, 1),
+            Some(4)
+        );
+        assert_eq!(
+            flash_bus.gamepak_access_cycles_for_width(0x0E00_0001, false, 2),
+            Some(4)
+        );
+        assert_eq!(
+            flash_bus.gamepak_access_cycles_for_width(0x0E00_0003, false, 4),
+            Some(8)
+        );
+        assert_eq!(
+            sram_bus.gamepak_access_cycles_for_width(0x0E00_0003, false, 4),
+            Some(16)
+        );
+
+        // The second halfword of a flash word access remains within the
+        // mapped save window; an access crossing its end is rejected.
+        assert_eq!(
+            flash_bus.gamepak_access_cycles_for_width(0x0E00_FFFC, false, 4),
+            Some(8)
+        );
+        assert_eq!(
+            flash_bus.gamepak_access_cycles_for_width(0x0E00_FFFF, false, 4),
+            None
+        );
     }
 
     #[test]
