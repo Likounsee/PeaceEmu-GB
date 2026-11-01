@@ -4517,7 +4517,7 @@ mod tests {
         cpu.reset(0x0800_0100);
         assert_eq!(cpu.registers()[0], 0);
         assert_eq!(cpu.registers()[15], 0x0800_0100);
-        assert_eq!(cpu.cpsr_flags(), 0);
+        assert_eq!(cpu.cpsr_flags(), 0x1F);
     }
 
     #[test]
@@ -7889,7 +7889,7 @@ mod tests {
         assert!(!cpu.is_halted());
         assert!(!cpu.is_stopped());
         assert_eq!(cpu.snapshot().bios_wait_mask, None);
-        assert_eq!(cpu.cpsr_flags(), 0);
+        assert_eq!(cpu.cpsr_flags(), 0x1F);
     }
 
     #[test]
