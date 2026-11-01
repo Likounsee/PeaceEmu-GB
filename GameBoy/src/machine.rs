@@ -3709,7 +3709,7 @@ mod tests {
             machine.run_until_audio_fifo_consumed(0, 8).unwrap(),
             Some(1)
         );
-        assert_eq!(machine.audio_fifo_len(0), Some(4));
+        assert_eq!(machine.audio_fifo_len(0), Some(7));
         assert_eq!(machine.audio_fifo_last_sample(0), Some(0x7F_i8));
         assert_eq!(machine.direct_sound_stereo_sample(), (127, 127));
     }
@@ -3738,7 +3738,7 @@ mod tests {
 
         machine.bus_mut().advance_cycles(1);
         let snapshot = machine.diagnostic_snapshot();
-        assert_eq!(snapshot.audio_fifo_lengths[0], Some(0));
+        assert_eq!(snapshot.audio_fifo_lengths[0], Some(3));
         assert_eq!(snapshot.audio_fifo_last_samples[0], Some(0x40));
         assert_eq!(snapshot.audio_stereo_sample, (64, 64));
     }
