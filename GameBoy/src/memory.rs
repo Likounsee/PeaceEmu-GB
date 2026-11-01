@@ -638,6 +638,14 @@ impl MemoryBus {
         }
     }
 
+    /// Clears the BIOS-reserved top 0x200 bytes of IWRAM during SoftReset.
+    ///
+    /// The caller must read the SoftReset return selector before clearing this
+    /// region, which also contains BIOS interrupt history and the IRQ callback.
+    pub fn reset_bios_work_ram(&mut self) {
+        self.iwram[0x7E00..].fill(0);
+    }
+
     /// Resets the serial communication register window for BIOS flag 5.
     ///
     /// Directly clearing the register backing store avoids register-specific write
@@ -3509,6 +3517,20 @@ mod tests {
         assert_eq!(bus.audio_fifo_len(0), Some(4));
         assert_eq!(bus.audio_fifo_last_sample(0), Some(0x22));
         assert_eq!(bus.read16(0x0400_0084), 0x0080);
+    }
+
+    #[test]
+    fn soft_reset_clears_only_the_bios_reserved_top_of_iwram() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0300_7DFC, 0x1122_3344);
+        bus.write32(0x0300_7E00, 0xAABB_CCDD);
+        bus.write32(0x0300_7FF8, 0x1234_5678);
+
+        bus.reset_bios_work_ram();
+
+        assert_eq!(bus.read32(0x0300_7DFC), 0x1122_3344);
+        assert_eq!(bus.read32(0x0300_7E00), 0);
+        assert_eq!(bus.read32(0x0300_7FF8), 0);
     }
 
     #[test]
