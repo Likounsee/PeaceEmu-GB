@@ -251,6 +251,24 @@ impl Cpu {
         self.stopped
     }
 
+    /// Applies a HALTCNT request before machine-level IRQ arbitration.
+    ///
+    /// The command is latched by MMIO and must take effect before the machine
+    /// decides whether a pending interrupt may enter the IRQ exception.
+    pub(crate) fn apply_pending_sleep_request(&mut self, bus: &mut MemoryBus) {
+        if bus.take_stop_request() {
+            self.stopped = true;
+            self.halted = false;
+            self.bios_wait_mask = None;
+            self.last_fetch_next = None;
+        } else if bus.take_halt_request() {
+            self.halted = true;
+            self.stopped = false;
+            self.bios_wait_mask = None;
+            self.last_fetch_next = None;
+        }
+    }
+
     /// Returns whether the CPU is currently executing Thumb instructions.
     pub fn is_thumb(&self) -> bool {
         self.thumb
@@ -449,17 +467,7 @@ impl Cpu {
     ) -> Result<(StepOutcome, u32), CpuError> {
         // HALTCNT is written through MMIO, so consume its command only after
         // the previous instruction has completed and before the next fetch.
-        if bus.take_stop_request() {
-            self.stopped = true;
-            self.halted = false;
-            self.bios_wait_mask = None;
-            self.last_fetch_next = None;
-        } else if bus.take_halt_request() {
-            self.halted = true;
-            self.stopped = false;
-            self.bios_wait_mask = None;
-            self.last_fetch_next = None;
-        }
+        self.apply_pending_sleep_request(bus);
         if self.stopped {
             // STOP only resumes on an enabled keypad interrupt (IE & IF bit 12).
             // Timers and the PPU are not enough to wake the processor from STOP.

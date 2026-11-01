@@ -193,7 +193,14 @@ impl GbaMachine {
     /// On an unsupported instruction, the CPU returns an error and this call
     /// does not increment the successful-instruction counter.
     pub fn step(&mut self) -> Result<u32, CpuError> {
-        if self.bus.interrupt_master_enabled()
+        // Apply a just-written HALTCNT command before IRQ arbitration. STOP
+        // accepts only an enabled keypad IRQ as a wake source; other pending
+        // sources must remain latched without entering the exception handler.
+        self.cpu.apply_pending_sleep_request(&mut self.bus);
+        let irq_wake_allowed = !self.cpu.is_stopped()
+            || self.bus.pending_interrupts() & (1 << 12) != 0;
+        if irq_wake_allowed
+            && self.bus.interrupt_master_enabled()
             && self.bus.pending_interrupts() != 0
             && self.cpu.enter_irq()
         {
@@ -2050,6 +2057,56 @@ mod tests {
         assert_eq!(machine.step().unwrap(), 1);
         assert_eq!(machine.instructions_executed(), 1);
         assert_eq!(machine.cycles_elapsed(), cycles_before_idle + 1);
+    }
+
+    #[test]
+    fn stopped_machine_ignores_non_keypad_irqs_even_when_ime_is_enabled() {
+        let mut rom = vec![0; GBA_HEADER_SIZE];
+        rom[0..4].copy_from_slice(&0xEF00_0003_u32.to_le_bytes()); // SWI Stop.
+        rom[4..8].copy_from_slice(&0xE1A0_0000_u32.to_le_bytes()); // MOV R0, R0.
+        rom[0xA0..0xAC].copy_from_slice(b"STOP IRQ    ");
+        rom[0xAC..0xB0].copy_from_slice(b"STPI");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        let mut machine = GbaMachine::new(GbaCartridge::parse(&rom).unwrap());
+        machine.step().unwrap();
+        assert!(machine.cpu_snapshot().stopped);
+
+        machine.bus_mut().write16(0x0400_0200, 1 << 0);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        machine.request_interrupt(1 << 0);
+        let pc_before = machine.cpu().register(15).unwrap();
+        let cycles_before = machine.cycles_elapsed();
+
+        assert_eq!(machine.step().unwrap(), 0);
+        assert!(machine.cpu_snapshot().stopped);
+        assert_eq!(machine.cpu().register(15), Some(pc_before));
+        assert_eq!(machine.cycles_elapsed(), cycles_before);
+        assert_eq!(machine.interrupt_request_flags() & 1, 1);
+
+        // A keypad IRQ is the only source that releases STOP and may enter IRQ.
+        machine.bus_mut().write16(0x0400_0200, 1 << 12);
+        machine.request_interrupt(1 << 12);
+        assert_eq!(machine.step().unwrap(), 3);
+        assert!(!machine.cpu_snapshot().stopped);
+        assert_eq!(machine.cpu().register(15), Some(0x18));
+    }
+
+    #[test]
+    fn haltcnt_stop_is_applied_before_machine_irq_arbitration() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write16(0x0400_0200, 1 << 0);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        machine.bus_mut().write8(0x0400_0301, 0x80);
+        machine.request_interrupt(1 << 0);
+
+        assert_eq!(machine.step().unwrap(), 0);
+        assert!(machine.cpu_snapshot().stopped);
+        assert_eq!(machine.cpu().register(15), Some(0x0800_0000));
+        assert_eq!(machine.interrupt_request_flags() & 1, 1);
     }
 
     #[test]
