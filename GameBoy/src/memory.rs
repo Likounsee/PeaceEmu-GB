@@ -677,6 +677,11 @@ impl MemoryBus {
     /// masks preventing the BIOS reset operation from restoring default values.
     pub fn reset_sio_registers(&mut self) {
         self.io[0x120..0x130].fill(0);
+        self.sio_multi = [0; 4];
+        self.sio_data8 = 0;
+        self.sio_data32 = 0;
+        self.sio_control = 0;
+        self.sio_rcnt = 0;
     }
 
     /// Resets sound registers and Direct Sound FIFO state for BIOS flag 6.
@@ -1859,25 +1864,6 @@ impl MemoryBus {
         }
         // WAITCNT exposes SRAM/Game Pak wait-state, PHI, and prefetch controls;
         // bit 15 reads as zero; the modeled timing and high-byte controls are preserved.
-        // SIO control and transmit data registers are writable halfwords.
-        if (address & !1) == 0x0400_0128 {
-            self.sio_control = u16::from(value) & 0x30CF;
-            return;
-        }
-        if address == 0x0400_012A {
-            self.sio_data8 = value as u8;
-            return;
-        }
-        if (address & !1) == 0x0400_0134 {
-            self.sio_rcnt = u16::from(value) & 0xC00F;
-            return;
-        }
-        if (address & !3) == 0x0400_0120 && self.sio_control >> 12 & 3 == 1 {
-            let shift = (address & 2) * 8;
-            let mask = 0xFFFF_u32 << shift;
-            self.sio_data32 = (self.sio_data32 & !mask) | (u32::from(value) << shift);
-            return;
-        }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
             let shift = (address - 0x0400_0204) * 8;
             let byte_mask = 0xFF_u16 << shift;
