@@ -349,10 +349,10 @@ impl Psg {
         if channel.sweep_shift != 0 {
             channel.sweep_shadow = channel.frequency;
             channel.sweep_timer = if channel.sweep_period == 0 {
-                8
-            } else {
-                channel.sweep_period
-            };
+            8
+        } else {
+            channel.sweep_period
+        };
             channel.sweep_enabled = channel.sweep_period != 0 || channel.sweep_shift != 0;
             channel.sweep_negate_used = false;
             if Self::sweep_calculate(channel).is_none() {
