@@ -147,6 +147,8 @@ pub struct MemoryBus {
     sio_control: u16,
     /// General-purpose I/O / serial mode control register (RCNT).
     sio_rcnt: u16,
+    /// Remaining CPU cycles for an internally clocked normal-mode SIO transfer.
+    sio_cycles_remaining: u32,
     /// Pending HALTCNT requests consumed by the CPU at the next step boundary.
     halt_requested: bool,
     stop_requested: bool,
@@ -218,6 +220,7 @@ impl MemoryBus {
             sio_data32: 0,
             sio_control: 0,
             sio_rcnt: 0,
+            sio_cycles_remaining: 0,
             halt_requested: false,
             stop_requested: false,
         }
@@ -682,6 +685,7 @@ impl MemoryBus {
         self.sio_data32 = 0;
         self.sio_control = 0;
         self.sio_rcnt = 0;
+        self.sio_cycles_remaining = 0;
     }
 
     /// Resets sound registers and Direct Sound FIFO state for BIOS flag 6.
@@ -1289,6 +1293,7 @@ impl MemoryBus {
     /// DISPSTAT/VCOUNT and enabled HBlank, VBlank, and VCOUNT-match IRQs. The caller
     /// supplies elapsed CPU cycles; instruction-specific bus wait states are not yet modeled.
     pub fn advance_cycles(&mut self, cycles: u32) {
+        self.advance_sio_cycles(cycles);
         self.psg.advance(cycles);
         // Most instructions execute with all hardware timers disabled. In that
         // common case, jump between PPU transition edges instead of iterating
@@ -1948,8 +1953,8 @@ impl MemoryBus {
         if (0x0400_0128..=0x0400_0129).contains(&address) {
             let shift = (address - 0x0400_0128) * 8;
             let mask = 0xFF_u16 << shift;
-            self.sio_control = (self.sio_control & !mask) | (u16::from(value) << shift);
-            self.sio_control &= 0x30CF;
+            let next = (self.sio_control & !mask) | (u16::from(value) << shift);
+            self.write_sio_control(next);
             return;
         }
         if (0x0400_0134..=0x0400_0135).contains(&address) {
@@ -2117,7 +2122,7 @@ impl MemoryBus {
         // SIO transmit registers are mode-dependent; receive slots remain read-only.
         let sio_address = address & !1;
         if sio_address == 0x0400_0128 {
-            self.sio_control = value & 0x30CF;
+            self.write_sio_control(value);
             return;
         }
         if sio_address == 0x0400_012A {
@@ -2600,6 +2605,43 @@ mod tests {
         assert_eq!(bus.read32(0x0400_0120), 0xABCD_5678);
         bus.write8(0x0400_0121, 0xAA);
         assert_eq!(bus.read32(0x0400_0120), 0xABCD_AA78);
+    }
+
+    #[test]
+    fn sio_normal_8_bit_internal_transfer_completes_and_requests_irq() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_012A, 0x005A);
+        bus.write16(0x0400_0128, (1 << 14) | (1 << 7) | 1);
+        assert_ne!(bus.read16(0x0400_0128) & (1 << 7), 0);
+        bus.advance_cycles(511);
+        assert_ne!(bus.read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 7), 0);
+        bus.advance_cycles(1);
+        assert_eq!(bus.read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(bus.read8(0x0400_012A), 0xFF);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 7), 1 << 7);
+    }
+
+    #[test]
+    fn sio_normal_32_bit_fast_transfer_uses_256_cpu_cycles() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write32(0x0400_0120, 0x1234_5678);
+        bus.write16(0x0400_0128, (1 << 12) | (1 << 7) | 3);
+        bus.advance_cycles(255);
+        assert_ne!(bus.read16(0x0400_0128) & (1 << 7), 0);
+        bus.advance_cycles(1);
+        assert_eq!(bus.read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(bus.read32(0x0400_0120), u32::MAX);
+    }
+
+    #[test]
+    fn sio_external_clock_transfer_remains_busy_until_clocked_by_peer() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_012A, 0x003C);
+        bus.write16(0x0400_0128, 1 << 7);
+        bus.advance_cycles(4096);
+        assert_ne!(bus.read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(bus.interrupt_request_flags() & (1 << 7), 0);
     }
 
     #[test]
