@@ -2088,10 +2088,17 @@ impl Cpu {
             // SoftReset returns to the cartridge entry point. The emulator does
             // not model banked mode stacks, so only the System stack is restored.
             0x00 => {
-                self.reset(0x0800_0000);
-                // SoftReset must restore both BIOS-managed stack banks.
-                // Initializing only the active System SP leaves IRQ handlers
-                // without the standard 0x03007FA0 stack after the first IRQ.
+                // The BIOS chooses the reset target before clearing its
+                // reserved IWRAM window. 03007FFAh selects ROM when zero and
+                // EWRAM when non-zero.
+                let entry = if bus.read8(0x0300_7FFA) == 0 {
+                    0x0800_0000
+                } else {
+                    0x0200_0000
+                };
+                bus.reset_bios_work_ram();
+                self.reset(entry);
+                // Restore the System and IRQ stacks after clearing BIOS RAM.
                 self.initialize_gba_stacks();
                 return Ok(());
             }
@@ -8190,6 +8197,9 @@ mod tests {
         cpu.set_register(0, 0x1234_5678);
         cpu.set_register(1, 0x8765_4321);
         cpu.set_register(13, 0x0300_1000);
+        bus.write32(0x0300_7E00, 0xAABB_CCDD);
+        bus.write16(0x0300_7FF8, 0x1234);
+        bus.write32(0x0300_7FFC, 0x0800_0100);
         cpu.set_condition_flags(ConditionFlags {
             negative: true,
             zero: true,
@@ -8202,6 +8212,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(cpu.register(15), Some(0x0800_0000));
+        assert_eq!(bus.read32(0x0300_7E00), 0);
+        assert_eq!(bus.read16(0x0300_7FF8), 0);
+        assert_eq!(bus.read32(0x0300_7FFC), 0);
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
         assert_eq!(cpu.register(0), Some(0));
         assert_eq!(cpu.register(1), Some(0));
@@ -8211,6 +8224,23 @@ mod tests {
         // The IRQ bank must be ready too, not just the active System stack.
         assert!(cpu.enter_irq());
         assert_eq!(cpu.processor_mode(), 0x12);
+        assert_eq!(cpu.register(13), Some(0x0300_7FA0));
+    }
+
+    #[test]
+    fn bios_soft_reset_uses_wram_return_selector_before_clearing_it() {
+        let mut bus = bus_with_program(&[]);
+        bus.write8(0x0300_7FFA, 1);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_0000, 0x00, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(bus.read8(0x0300_7FFA), 0);
+        assert_eq!(cpu.register(13), Some(0x0300_7F00));
+        assert!(cpu.enter_irq());
         assert_eq!(cpu.register(13), Some(0x0300_7FA0));
     }
 
