@@ -206,6 +206,57 @@ fn bios_rl_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
     Some(output)
 }
 
+
+/// Expands the BIOS BitUnPack source bitstream into destination-width values.
+fn bios_bit_unpack(bus: &MemoryBus, source: u32, info: u32) -> Option<Vec<u32>> {
+    let source_bytes = usize::from(bus.read16(info));
+    let source_width = bus.read8(info.wrapping_add(2));
+    let destination_width = bus.read8(info.wrapping_add(3));
+    if !matches!(source_width, 1 | 2 | 4 | 8)
+        || !matches!(destination_width, 1 | 2 | 4 | 8 | 16 | 32)
+        || destination_width < source_width
+        || destination_width % source_width != 0
+    {
+        return None;
+    }
+
+    let offset_word = bus.read32(info.wrapping_add(4));
+    let zero_is_unpacked = offset_word & 0x8000_0000 != 0;
+    let offset = offset_word & 0x7FFF_FFFF;
+    let source_bit_count = source_bytes.checked_mul(8)?;
+    let source_mask = (1_u32 << source_width) - 1;
+    let destination_mask = if destination_width == 32 {
+        u32::MAX
+    } else {
+        (1_u32 << destination_width) - 1
+    };
+    let mut packed_word = 0_u32;
+    let mut packed_bits = 0_u8;
+    let mut words = Vec::new();
+
+    for bit_offset in (0..source_bit_count).step_by(usize::from(source_width)) {
+        let byte_address = source.wrapping_add((bit_offset / 8) as u32);
+        let bit_in_byte = bit_offset % 8;
+        let raw = (u32::from(bus.read8(byte_address)) >> bit_in_byte) & source_mask;
+        let value = if raw == 0 && !zero_is_unpacked {
+            0
+        } else {
+            raw.wrapping_add(offset) & destination_mask
+        };
+        packed_word |= value << packed_bits;
+        packed_bits += destination_width;
+        if packed_bits == 32 {
+            words.push(packed_word);
+            packed_word = 0;
+            packed_bits = 0;
+        }
+    }
+    if packed_bits != 0 {
+        words.push(packed_word);
+    }
+    Some(words)
+}
+
 /// Writes decompressed BIOS output, using halfword stores for VRAM destinations.
 fn bios_write_decompressed(bus: &mut MemoryBus, destination: u32, bytes: &[u8], vram: bool) {
     if vram {
@@ -2414,6 +2465,19 @@ impl Cpu {
                         value = bus.read32(source.wrapping_add(index * 4));
                     }
                     bus.write32(destination.wrapping_add(index * 4), value);
+                }
+            }
+            // BitUnPack expands packed 1/2/4/8-bit source values into
+            // destination elements described by the BIOS BitUnPackInfo struct.
+            0x10 => {
+                let words = bios_bit_unpack(bus, self.registers[0], self.registers[2])
+                    .ok_or(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    })?;
+                let destination = self.registers[1] & !3;
+                for (index, word) in words.into_iter().enumerate() {
+                    bus.write32(destination.wrapping_add((index as u32) * 4), word);
                 }
             }
             // Differential filters restore byte/halfword delta-compressed assets.
@@ -8486,4 +8550,43 @@ mod tests {
         assert_eq!(bus.read16(destination + 2), 0x5656);
         assert_eq!(bus.read16(destination + 4), 0x5656);
     }
+    #[test]
+    fn bios_bit_unpack_expands_nibbles_and_applies_data_offset() {
+        let mut bus = bus_with_program(&[0xE1A0_0000]);
+        let source = 0x0200_1000;
+        let destination = 0x0200_2000;
+        let info = 0x0200_3000;
+        bus.write8(source, 0x21);
+        bus.write8(source + 1, 0x03);
+        bus.write16(info, 2); // Two source bytes.
+        bus.write8(info + 2, 4); // Four-bit source elements.
+        bus.write8(info + 3, 8); // Eight-bit destination elements.
+        bus.write32(info + 4, 0x0000_0010);
+        let mut cpu = Cpu::new();
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, info);
+        cpu.execute_swi(0, 0, 0x10, false, &mut bus).unwrap();
+        assert_eq!(bus.read32(destination), 0x1312_1110);
+        assert_eq!(bus.read32(destination + 4), 0x1013_1010);
+    }
+
+    #[test]
+    fn bios_bit_unpack_can_preserve_zero_elements_and_reject_invalid_widths() {
+        let mut bus = bus_with_program(&[0xE1A0_0000]);
+        let source = 0x0200_1000;
+        let info = 0x0200_3000;
+        bus.write8(source, 0x10);
+        bus.write16(info, 1);
+        bus.write8(info + 2, 2);
+        bus.write8(info + 3, 4);
+        bus.write32(info + 4, 0x8000_0003);
+        let words = bios_bit_unpack(&bus, source, info).unwrap();
+        assert_eq!(words, vec![0x0300_0003]);
+
+        bus.write8(info + 2, 3);
+        assert!(bios_bit_unpack(&bus, source, info).is_none());
+    }
+
+
 }
