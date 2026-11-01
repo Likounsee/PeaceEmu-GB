@@ -4338,7 +4338,7 @@ mod tests {
             Some(8)
         );
         assert_eq!(
-            flash_bus.gamepak_access_cycles_for_width(0x0E00_FFFF, false, 4),
+            flash_bus.gamepak_access_cycles_for_width(0x0E01_0000, false, 1),
             None
         );
     }
