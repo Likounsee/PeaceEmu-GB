@@ -106,6 +106,8 @@ pub struct MachineSnapshot {
     pub audio_fifo_last_samples: [Option<i8>; 2],
     /// Bytes remaining until Direct Sound FIFOs A and B reach the 16-byte refill threshold.
     pub audio_fifo_bytes_until_refill: [Option<usize>; 2],
+    /// Current mixed Direct Sound output as raw signed left/right levels.
+    pub audio_stereo_sample: (i16, i16),
     /// KEYCNT selection and IRQ mode bits.
     pub keypad_control: u16,
     /// Active-high pressed-button mask (bits 0–9 map to A, B, Select, Start, directions, R, L).
@@ -1480,6 +1482,34 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Runs until the next timer-driven sample word is consumed from a Direct Sound FIFO.
+    ///
+    /// A FIFO word contains four bytes. The method observes queue occupancy, so
+    /// it also detects consumption when consecutive PCM samples have identical
+    /// values. Returns Some(n) after n instructions, or None for an invalid
+    /// FIFO, an initially empty FIFO, STOP, or an exhausted instruction budget.
+    pub fn run_until_audio_fifo_consumed(
+        &mut self,
+        fifo: usize,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        let Some(initial_len) = self.bus.audio_fifo_len(fifo) else {
+            return Ok(None);
+        };
+        if initial_len == 0 {
+            return Ok(None);
+        }
+        for executed in 0..max_steps {
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
+            if self.bus.audio_fifo_len(fifo).is_some_and(|len| len < initial_len) {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
     /// Returns the currently mixed Direct Sound stereo sample as raw signed integer levels.
     ///
     /// The mix reflects SOUNDCNT_H volume and left/right routing. The result
@@ -1732,6 +1762,7 @@ impl GbaMachine {
                 self.bus.audio_fifo_bytes_until_refill(0),
                 self.bus.audio_fifo_bytes_until_refill(1),
             ],
+            audio_stereo_sample: self.bus.direct_sound_stereo_sample(),
             keypad_control: self.bus.read16(0x0400_0132),
             keypad_pressed: self.bus.keys_pressed(),
             keypad_irq_requested: self.bus.keypad_irq_requested(),
@@ -3659,6 +3690,51 @@ mod tests {
         assert_eq!(machine.audio_fifo_len(0), Some(4));
     }
 
+    #[test]
+    fn audio_fifo_consumption_waiter_observes_timer_word_pop_even_for_repeated_samples() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write32(0x0400_00A0, 0x7F7F_7F7F);
+        machine.bus_mut().write32(0x0400_00A0, 0x7F7F_7F7F);
+        machine.bus_mut().write16(0x0400_0100, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0102, 0x0080);
+        machine.bus_mut().write16(0x0400_0082, 0x0304);
+        machine.bus_mut().write16(0x0400_0084, 0x0080);
+
+        assert_eq!(machine.audio_fifo_len(0), Some(8));
+        assert_eq!(machine.run_until_audio_fifo_consumed(0, 8).unwrap(), Some(1));
+        assert_eq!(machine.audio_fifo_len(0), Some(4));
+        assert_eq!(machine.audio_fifo_last_sample(0), Some(0x7F_i8));
+        assert_eq!(machine.direct_sound_stereo_sample(), (127, 127));
+    }
+
+    #[test]
+    fn audio_fifo_consumption_waiter_rejects_empty_invalid_and_exhausted_cases() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.run_until_audio_fifo_consumed(0, 10).unwrap(), None);
+        assert_eq!(machine.run_until_audio_fifo_consumed(2, 10).unwrap(), None);
+
+        machine.bus_mut().write32(0x0400_00A0, 0x1234_5678);
+        assert_eq!(machine.run_until_audio_fifo_consumed(0, 0).unwrap(), None);
+        assert_eq!(machine.audio_fifo_len(0), Some(4));
+    }
+
+    #[test]
+    fn diagnostic_snapshot_includes_current_stereo_audio_mix() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.diagnostic_snapshot().audio_stereo_sample, (0, 0));
+
+        machine.bus_mut().write16(0x0400_0082, 0x0304);
+        machine.bus_mut().write16(0x0400_0084, 0x0080);
+        machine.bus_mut().write32(0x0400_00A0, 0x4040_4040);
+        machine.bus_mut().write16(0x0400_0100, 0xFFFF);
+        machine.bus_mut().write16(0x0400_0102, 0x0080);
+
+        machine.bus_mut().advance_cycles(1);
+        let snapshot = machine.diagnostic_snapshot();
+        assert_eq!(snapshot.audio_fifo_lengths[0], Some(0));
+        assert_eq!(snapshot.audio_fifo_last_samples[0], Some(0x40));
+        assert_eq!(snapshot.audio_stereo_sample, (64, 64));
+    }
     #[test]
     fn machine_audio_fifo_helpers_validate_fifo_indices() {
         let machine = GbaMachine::new(cartridge());
