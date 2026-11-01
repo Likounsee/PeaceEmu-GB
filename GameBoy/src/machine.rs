@@ -1398,6 +1398,40 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Runs until a DMA channel has completed at least `target_transfers` transfers.
+    ///
+    /// The target is an absolute per-channel transfer counter. Returns `Some(0)
+    /// when the counter has already reached the target, `Some(n)` after n CPU
+    /// steps, or `None` for an invalid channel or an exhausted/stopped machine.
+    /// This also observes repeated HBlank/VBlank transfers while the channel stays enabled.
+    pub fn run_until_dma_transfer_count(
+        &mut self,
+        channel: usize,
+        target_transfers: u32,
+        max_steps: usize,
+    ) -> Result<Option<usize>, CpuError> {
+        let Some(initial_count) = self.bus.dma_transfer_count(channel) else {
+            return Ok(None);
+        };
+        if initial_count >= target_transfers {
+            return Ok(Some(0));
+        }
+        for executed in 0..max_steps {
+            let cycles = self.step()?;
+            if cycles == 0 {
+                return Ok(None);
+            }
+            if self
+                .bus
+                .dma_transfer_count(channel)
+                .is_some_and(|count| count >= target_transfers)
+            {
+                return Ok(Some(executed + 1));
+            }
+        }
+        Ok(None)
+    }
+
     /// Runs until a DMA channel is disabled, usually after a one-shot transfer.
     ///
     /// Returns `Some(0)` if the channel is already disabled, `Some(n)` after
@@ -2666,6 +2700,58 @@ mod tests {
         assert!(matches!(steps, Some(count) if count > 0 && count <= 2_000));
         assert_eq!(machine.bus().read16(0x0300_0000), 0xBEEF);
         assert_eq!(machine.bus().dma_enabled(0), Some(false));
+    }
+
+    #[test]
+    fn dma_transfer_counter_waiter_observes_real_hblank_completion() {
+        let mut rom = vec![0; 0xC0];
+        rom[0..4].copy_from_slice(&0xEAFF_FFFE_u32.to_le_bytes());
+        rom[0xB2] = 0x96;
+        let sum = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0_u8, |sum, byte| sum.wrapping_add(*byte));
+        rom[0xBD] = 0_u8.wrapping_sub(sum).wrapping_sub(0x19);
+        let cartridge = GbaCartridge::parse(&rom).expect("synthetic GBA header should be valid");
+        let mut machine = GbaMachine::new(cartridge);
+        machine.bus_mut().write16(0x0200_0000, 0xBEEF);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0xA000);
+
+        assert_eq!(machine.run_until_dma_transfer_count(4, 1, 10).unwrap(), None);
+        assert_eq!(machine.run_until_dma_transfer_count(0, 0, 0).unwrap(), Some(0));
+        assert_eq!(machine.run_until_dma_transfer_count(0, 1, 0).unwrap(), None);
+        let steps = machine.run_until_dma_transfer_count(0, 1, 2_000).unwrap();
+        assert!(matches!(steps, Some(count) if count > 0 && count <= 2_000));
+        assert_eq!(machine.dma_transfer_count(0), Some(1));
+        assert_eq!(machine.bus().read16(0x0300_0000), 0xBEEF);
+        assert_eq!(machine.dma_enabled(0), Some(false));
+        assert_eq!(machine.run_until_dma_transfer_count(0, 1, 0).unwrap(), Some(0));
+    }
+
+    #[test]
+    fn dma_transfer_counter_waiter_tracks_repeated_hblank_transfers() {
+        let mut rom = vec![0; 0xC0];
+        rom[0..4].copy_from_slice(&0xEAFF_FFFE_u32.to_le_bytes());
+        rom[0xB2] = 0x96;
+        let sum = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0_u8, |sum, byte| sum.wrapping_add(*byte));
+        rom[0xBD] = 0_u8.wrapping_sub(sum).wrapping_sub(0x19);
+        let cartridge = GbaCartridge::parse(&rom).expect("synthetic GBA header should be valid");
+        let mut machine = GbaMachine::new(cartridge);
+        machine.bus_mut().write16(0x0200_0000, 0xCAFE);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0xA260); // HBlank, repeat, destination reload, enable.
+
+        let steps = machine.run_until_dma_transfer_count(0, 2, 4_000).unwrap();
+        assert!(matches!(steps, Some(count) if count > 0 && count <= 4_000));
+        assert_eq!(machine.dma_transfer_count(0), Some(2));
+        assert_eq!(machine.bus().read16(0x0300_0000), 0xCAFE);
+        assert_eq!(machine.dma_enabled(0), Some(true));
     }
 
     #[test]
