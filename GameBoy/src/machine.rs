@@ -198,7 +198,9 @@ impl GbaMachine {
         {
             const IRQ_ENTRY_CYCLES: u32 = 3;
             self.bus.advance_cycles(IRQ_ENTRY_CYCLES);
-            self.cycles_elapsed = self.cycles_elapsed.saturating_add(u64::from(IRQ_ENTRY_CYCLES));
+            self.cycles_elapsed = self
+                .cycles_elapsed
+                .saturating_add(u64::from(IRQ_ENTRY_CYCLES));
             return Ok(IRQ_ENTRY_CYCLES);
         }
         let (outcome, cycles) = self.cpu.step_with_cycles(&mut self.bus)?;
@@ -4448,6 +4450,4 @@ mod tests {
         assert_eq!(machine.instructions_executed(), before);
         assert_eq!(machine.cycles_elapsed(), 3);
     }
-
-
 }
