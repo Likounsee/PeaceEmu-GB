@@ -3688,9 +3688,9 @@ mod tests {
     fn bios_register_ram_reset_sound_flag_stops_active_psg_generators() {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0084, 0x0080);
-        bus.write8(0x0400_0065, 0xC0);
         bus.write8(0x0400_0063, 0xF0);
         bus.write8(0x0400_0064, 0x80);
+        bus.write8(0x0400_0065, 0x80);
         assert_ne!(bus.read16(0x0400_0084) & 1, 0);
 
         let mut cpu = Cpu::new();
