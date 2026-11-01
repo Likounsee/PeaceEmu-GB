@@ -129,6 +129,8 @@ pub struct MemoryBus {
     audio_last_samples: [i8; 2],
     /// Cumulative timer-driven PCM byte consumptions since the last power cycle.
     audio_fifo_samples_consumed: [u64; 2],
+    /// Completed DMA bursts per channel since the last power cycle.
+    dma_completed_transfers: [u64; 4],
 }
 
 /// Error returned when loading save data whose size does not match the device capacity.
@@ -188,6 +190,7 @@ impl MemoryBus {
             audio_fifos: std::array::from_fn(|_| VecDeque::with_capacity(32)),
             audio_last_samples: [0; 2],
             audio_fifo_samples_consumed: [0; 2],
+            dma_completed_transfers: [0; 4],
         }
     }
 
@@ -504,6 +507,11 @@ impl MemoryBus {
         } else {
             0x4000
         })
+    }
+
+    /// Returns the number of completed DMA bursts on a channel since power-on.
+    pub fn dma_completed_transfers(&self, channel: usize) -> Option<u64> {
+        self.dma_completed_transfers.get(channel).copied()
     }
 
     /// Returns whether a DMA channel is currently enabled.
@@ -906,6 +914,9 @@ impl MemoryBus {
         }
         let next_source = source.wrapping_add(16) & 0x0FFF_FFFC;
         self.io[base..base + 4].copy_from_slice(&next_source.to_le_bytes());
+        self.dma_completed_transfers[channel] =
+            self.dma_completed_transfers[channel].saturating_add(1);
+
         if control & (1 << 14) != 0 {
             self.request_interrupt(1 << (8 + channel));
         }
