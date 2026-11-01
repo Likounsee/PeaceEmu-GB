@@ -638,14 +638,12 @@ mod tests {
         let mut chunked = Psg::default();
         for psg in [&mut one_shot, &mut chunked] {
             psg.set_master_enabled(true);
-            psg.write(0x63, 0xA8); // Start at 10, increase every 8 envelope periods.
+            psg.write(0x63, 0xA9); // Start at 10, increase every envelope period.
             psg.write(0x65, 0x80);
         }
 
-        one_shot.advance(8 * 262_144 + 123);
-        for _ in 0..8 {
-            chunked.advance(262_144);
-        }
+        one_shot.advance(262_144 + 123);
+        chunked.advance(262_144);
         chunked.advance(123);
 
         assert_eq!(one_shot.square[0].volume, 11);
@@ -660,7 +658,7 @@ mod tests {
     fn envelope_clock_processes_multiple_steps_in_one_advance() {
         let mut psg = Psg::default();
         psg.set_master_enabled(true);
-        psg.write(0x63, 0x20); // Start at 2, decrease every envelope period.
+        psg.write(0x63, 0x21); // Start at 2, decrease every envelope period.
         psg.write(0x65, 0x80);
 
         psg.advance(3 * 262_144 + 17);
@@ -673,7 +671,7 @@ mod tests {
     fn noise_envelope_uses_the_same_cycle_accurate_clock() {
         let mut psg = Psg::default();
         psg.set_master_enabled(true);
-        psg.write(0x79, 0x18); // Start at 1, increase every envelope period.
+        psg.write(0x79, 0x19); // Start at 1, increase every envelope period.
         psg.write(0x7D, 0x80);
 
         psg.advance(2 * 262_144 + 9);
