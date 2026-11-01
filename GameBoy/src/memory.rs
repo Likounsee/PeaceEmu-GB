@@ -1009,6 +1009,10 @@ impl MemoryBus {
         if address == 0x0400_0084 {
             return (self.io[0x84] & 0x80) | self.psg.status_bits();
         }
+        if (0x0400_0090..=0x0400_009F).contains(&address) {
+            let index = (address - 0x0400_0090) as usize;
+            return self.psg.read_wave_ram(index).unwrap_or(0);
+        }
         // SOUNDCNT_X channel-status bits are read-only. Channel status is not
         // synthesized yet, so expose only the writable sound-master bit.
         if (0x0400_0084..=0x0400_0085).contains(&address) {
@@ -1751,6 +1755,14 @@ impl MemoryBus {
             if let Some(stored) = self.psg.write(offset, value) {
                 self.io[offset] = stored;
             }
+            return;
+        }
+
+        // Wave RAM is a distinct 16-byte sound-memory window.
+        if (0x0400_0090..=0x0400_009F).contains(&address) {
+            let index = (address - 0x0400_0090) as usize;
+            self.psg.write_wave_ram(index, value);
+            self.io[0x90 + index] = value;
             return;
         }
 
