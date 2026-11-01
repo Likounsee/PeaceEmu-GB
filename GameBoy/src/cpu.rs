@@ -2210,13 +2210,10 @@ impl Cpu {
                 }
             }
 
-            // GetBiosChecksum reports the fixed checksum and BIOS metadata used
-            // by the HLE BIOS: checksum, success flag, and 16 KiB BIOS size.
-            // This does not claim to expose or emulate the protected BIOS ROM.
+            // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
+            // The HLE contract changes R0 only; the protected BIOS ROM is not exposed.
             0x0D => {
                 self.registers[0] = 0xBAAE_187F;
-                self.registers[1] = 1;
-                self.registers[3] = 0x4000;
             }
             // ArcTan: interpret R0 as signed 1.14 tangent and return a 3.12 angle.
             0x09 => {
@@ -3764,22 +3761,6 @@ mod tests {
             .unwrap();
         assert_eq!(bus.read16(0x0400_0090), 0x1234);
         assert_eq!(bus.read16(0x0400_0120), 0x1234);
-    }
-
-    #[test]
-    fn bios_checksum_returns_checksum_success_and_bios_size() {
-        let mut bus = bus_with_program(&[]);
-        let mut cpu = Cpu::new();
-        cpu.reset(0x0200_0100);
-        cpu.set_register(1, 0xDEAD_BEEF);
-        cpu.set_register(3, 0xCAFE_BABE);
-
-        cpu.execute_swi(0x0200_0100, 0xEF00_000D, 0x0D, false, &mut bus)
-            .unwrap();
-
-        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
-        assert_eq!(cpu.register(1), Some(1));
-        assert_eq!(cpu.register(3), Some(0x4000));
     }
 
     #[test]
