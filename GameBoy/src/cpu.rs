@@ -4311,7 +4311,6 @@ mod tests {
         assert_eq!(bus.read16(0x0600_0002) & 0x00FF, 0x005A);
     }
 
-
     #[test]
     fn bios_hle_lz77_vram_decompression_writes_packed_halfwords() {
         let mut bus = bus_with_program(&[0xEF00_0012]);
