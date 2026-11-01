@@ -2727,10 +2727,7 @@ mod tests {
             machine.run_until_dma_transfer_count(0, 0, 0).unwrap(),
             Some(0)
         );
-        assert_eq!(
-            machine.run_until_dma_transfer_count(0, 1, 0).unwrap(),
-            None
-        );
+        assert_eq!(machine.run_until_dma_transfer_count(0, 1, 0).unwrap(), None);
         let steps = machine.run_until_dma_transfer_count(0, 1, 2_000).unwrap();
         assert!(matches!(steps, Some(count) if count > 0 && count <= 2_000));
         assert_eq!(machine.dma_transfer_count(0), Some(1));
@@ -3920,7 +3917,9 @@ mod tests {
         );
         assert_eq!(machine.audio_fifo_samples_consumed(0), Some(1));
         assert_eq!(
-            machine.run_until_audio_fifo_samples_consumed(0, 1, 0).unwrap(),
+            machine
+                .run_until_audio_fifo_samples_consumed(0, 1, 0)
+                .unwrap(),
             Some(0)
         );
         assert_eq!(
