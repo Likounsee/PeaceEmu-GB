@@ -251,6 +251,32 @@ impl Cpu {
         self.stopped
     }
 
+    /// Re-evaluates an in-flight BIOS IntrWait after returning from an IRQ handler.
+    ///
+    /// The GBA BIOS wait service observes the software interrupt-history word
+    /// at 03007FF8h. The guest IRQ handler records handled sources there; IF
+    /// may already have been acknowledged and is deliberately not consulted.
+    fn refresh_bios_interrupt_wait(&mut self, bus: &mut MemoryBus) {
+        let Some(mask) = self.bios_wait_mask else {
+            return;
+        };
+        // While in IRQ mode the handler must be allowed to execute. Its return
+        // restores the interrupted mode, at which point the wait is checked.
+        if self.mode == 0x12 {
+            return;
+        }
+        let flags = bus.read16(0x0300_7FF8);
+        let matched = flags & mask;
+        if matched == 0 {
+            self.halted = true;
+            return;
+        }
+        bus.write16(0x0300_7FF8, flags & !matched);
+        self.bios_wait_mask = None;
+        self.halted = false;
+        self.last_fetch_next = None;
+    }
+
     /// Applies a HALTCNT request before machine-level IRQ arbitration.
     ///
     /// The command is latched by MMIO and must take effect before the machine
@@ -341,7 +367,9 @@ impl Cpu {
         self.registers[15] = 0x18;
         self.halted = false;
         self.stopped = false;
-        self.bios_wait_mask = None;
+        // IntrWait remains suspended across IRQ-handler execution. The
+        // handler records serviced sources in the BIOS IWRAM flag word;
+        // the wait is completed only after returning to the interrupted mode.
         self.last_fetch_next = None;
         true
     }
@@ -473,6 +501,7 @@ impl Cpu {
         // HALTCNT is written through MMIO, so consume its command only after
         // the previous instruction has completed and before the next fetch.
         self.apply_pending_sleep_request(bus);
+        self.refresh_bios_interrupt_wait(bus);
         if self.stopped {
             // STOP only resumes on an enabled keypad interrupt (IE & IF bit 12).
             // Timers and the PPU are not enough to wake the processor from STOP.
@@ -486,16 +515,12 @@ impl Cpu {
         }
         if self.halted {
             let pending = bus.pending_interrupts();
-            if let Some(mask) = self.bios_wait_mask {
-                let matched = pending & mask;
-                if matched == 0 {
-                    bus.advance_cycles(1);
-                    return Ok((StepOutcome::Halted, 1));
-                }
-                // IntrWait consumes the interrupt flags it waited for. This
-                // models the BIOS wait contract, not IRQ exception entry.
-                bus.acknowledge_interrupts(matched);
-                self.bios_wait_mask = None;
+            if self.bios_wait_mask.is_some() {
+                // IntrWait waits on the BIOS-maintained IWRAM flags, not the
+                // hardware IF register. IRQ handlers may acknowledge IF
+                // before recording the serviced source in that software word.
+                bus.advance_cycles(1);
+                return Ok((StepOutcome::Halted, 1));
             } else if pending == 0 {
                 bus.advance_cycles(1);
                 return Ok((StepOutcome::Halted, 1));
@@ -1220,6 +1245,7 @@ impl Cpu {
     /// Thumb execution is supported, but exceptions, banked registers, and SPSRs
     /// are not modeled yet.
     pub fn step(&mut self, bus: &mut MemoryBus) -> Result<StepOutcome, CpuError> {
+        self.refresh_bios_interrupt_wait(bus);
         if self.stopped {
             // STOP is only released by an enabled keypad interrupt, not by an
             // arbitrary enabled interrupt such as VBlank.
@@ -1231,14 +1257,10 @@ impl Cpu {
         }
         if self.halted {
             let pending = bus.pending_interrupts();
-            if let Some(mask) = self.bios_wait_mask {
-                let matched = pending & mask;
-                if matched == 0 {
-                    return Ok(StepOutcome::Halted);
-                }
-                // BIOS IntrWait consumes only the interrupt flags it selected.
-                bus.acknowledge_interrupts(matched);
-                self.bios_wait_mask = None;
+            if self.bios_wait_mask.is_some() {
+                // BIOS IntrWait is completed by its IWRAM software flags,
+                // checked above, rather than by consuming hardware IF bits.
+                return Ok(StepOutcome::Halted);
             } else if pending == 0 {
                 return Ok(StepOutcome::Halted);
             }
@@ -2095,9 +2117,18 @@ impl Cpu {
                 if discard_old {
                     bus.acknowledge_interrupts(mask);
                 }
-                let matched = bus.pending_interrupts() & mask;
+                // The BIOS uses 03007FF8h as a software interrupt
+                // history word. The IRQ handler ORs serviced IF bits into
+                // this word; IF itself remains owned by the guest handler.
+                bus.write16(0x0400_0208, 1); // IntrWait always enables IME.
+                if discard_old {
+                    let flags = bus.read16(0x0300_7FF8);
+                    bus.write16(0x0300_7FF8, flags & !mask);
+                }
+                let flags = bus.read16(0x0300_7FF8);
+                let matched = flags & mask;
                 if matched != 0 {
-                    bus.acknowledge_interrupts(matched);
+                    bus.write16(0x0300_7FF8, flags & !matched);
                     self.bios_wait_mask = None;
                     self.halted = false;
                 } else {
