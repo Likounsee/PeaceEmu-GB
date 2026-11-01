@@ -5706,7 +5706,10 @@ mod tests {
         assert_eq!(whole.timer_prescaler_phase, chunked.timer_prescaler_phase);
         assert_eq!(whole.audio_fifos, chunked.audio_fifos);
         assert_eq!(whole.audio_last_samples, chunked.audio_last_samples);
-        assert_eq!(whole.audio_fifo_samples_consumed, chunked.audio_fifo_samples_consumed);
+        assert_eq!(
+            whole.audio_fifo_samples_consumed,
+            chunked.audio_fifo_samples_consumed
+        );
         assert_eq!(whole.video_cycles_in_line, chunked.video_cycles_in_line);
         assert_eq!(whole.vcount, chunked.vcount);
         assert_eq!(whole.dispstat, chunked.dispstat);
