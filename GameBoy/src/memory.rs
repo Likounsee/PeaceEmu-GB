@@ -1794,6 +1794,16 @@ impl MemoryBus {
             return;
         }
 
+        // SOUNDBIAS exposes only the 10-bit bias and two resolution bits.
+        if (0x0400_0088..=0x0400_0089).contains(&address) {
+            let shift = (address - 0x0400_0088) * 8;
+            let mask = 0x00FF_u16 << shift;
+            let current = u16::from_le_bytes([self.io[0x88], self.io[0x89]]);
+            let next = ((current & !mask) | (u16::from(value) << shift)) & 0xC3FF;
+            self.io[0x88..0x8A].copy_from_slice(&next.to_le_bytes());
+            return;
+        }
+
         // PSG registers occupy 0x04000060..0x04000081, including NR50/NR51.
         if (0x0400_0060..=0x0400_0081).contains(&address) {
             let offset = (address - 0x0400_0000) as usize;
@@ -1987,6 +1997,10 @@ impl MemoryBus {
         }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
             self.wait_control = value & 0x7FFF;
+            return;
+        }
+        if address == 0x0400_0088 || address == 0x0400_0089 {
+            self.io[0x88..0x8A].copy_from_slice(&(value & 0xC3FF).to_le_bytes());
             return;
         }
         if address == 0x0400_0084 || address == 0x0400_0085 {
@@ -3553,6 +3567,21 @@ mod tests {
         assert_eq!(bus.audio_fifo_last_sample(1), Some(0));
         assert_eq!(bus.read16(0x0400_0120), 0x1234);
         assert_eq!(bus.interrupt_enable_mask(), 1);
+    }
+
+    #[test]
+    fn sound_bias_masks_reserved_bits_for_byte_and_halfword_writes() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        bus.write16(0x0400_0088, 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0088), 0xC3FF);
+
+        bus.write16(0x0400_0088, 0);
+        bus.write8(0x0400_0089, 0xFF);
+        assert_eq!(bus.read16(0x0400_0088), 0xC000);
+
+        bus.write8(0x0400_0088, 0xFF);
+        assert_eq!(bus.read16(0x0400_0088), 0xC3FF);
     }
 
     #[test]
