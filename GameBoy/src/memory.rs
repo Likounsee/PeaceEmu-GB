@@ -638,6 +638,16 @@ impl MemoryBus {
         }
     }
 
+    /// Returns the BIOS interrupt-history flags stored at 03007FF8h.
+    pub(crate) fn bios_interrupt_flags(&self) -> u16 {
+        u16::from_le_bytes([self.iwram[0x7FF8], self.iwram[0x7FF9]])
+    }
+
+    /// Updates the BIOS interrupt-history flags without touching hardware IF.
+    pub(crate) fn set_bios_interrupt_flags(&mut self, flags: u16) {
+        self.iwram[0x7FF8..0x7FFA].copy_from_slice(&flags.to_le_bytes());
+    }
+
     /// Clears the BIOS-reserved top 0x200 bytes of IWRAM during SoftReset.
     ///
     /// The caller must read the SoftReset return selector before clearing this
