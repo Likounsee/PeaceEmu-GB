@@ -163,6 +163,37 @@ impl GbaMachine {
         }
     }
 
+    /// Returns the cartridge's complete battery-backed save image.
+    ///
+    /// SRAM, Flash, and EEPROM are selected from the cartridge's detected save
+    /// type. Unknown save hardware returns None. The returned bytes can be
+    /// persisted by a frontend without reaching into the memory bus.
+    pub fn save_data(&self) -> Option<&[u8]> {
+        match self.bus.cartridge_save_type()? {
+            crate::SaveType::Sram => Some(self.bus.sram_data()),
+            crate::SaveType::Flash64K | crate::SaveType::Flash128K => self.bus.flash_data(),
+            crate::SaveType::Eeprom => self.bus.eeprom_data(),
+        }
+    }
+
+    /// Loads a complete battery-backed save image for the current cartridge.
+    ///
+    /// Returns Ok(false) when the cartridge has no recognized save hardware.
+    /// Device-specific size validation occurs before mutating stored data.
+    pub fn load_save_data(&mut self, data: &[u8]) -> Result<bool, crate::SramSizeError> {
+        match self.bus.cartridge_save_type() {
+            Some(crate::SaveType::Sram) => {
+                self.bus.load_sram_data(data)?;
+                Ok(true)
+            }
+            Some(crate::SaveType::Flash64K | crate::SaveType::Flash128K) => {
+                self.bus.load_flash_data(data)
+            }
+            Some(crate::SaveType::Eeprom) => self.bus.load_eeprom_data(data),
+            None => Ok(false),
+        }
+    }
+
     /// Captures a complete, restorable snapshot of the emulated machine.
     ///
     /// This is separate from diagnostic_snapshot, which is intended for inspection
@@ -1946,6 +1977,19 @@ mod tests {
             .iter()
             .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
             .wrapping_neg();
+        GbaCartridge::parse(&rom).unwrap()
+    }
+
+    fn cartridge_with_save_signature(signature: &[u8]) -> GbaCartridge {
+        let mut rom = vec![0; GBA_HEADER_SIZE + signature.len()];
+        rom[0xA0..0xAC].copy_from_slice(b"TEST GAME   ");
+        rom[0xAC..0xB0].copy_from_slice(b"TGME");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        rom[GBA_HEADER_SIZE..].copy_from_slice(signature);
         GbaCartridge::parse(&rom).unwrap()
     }
 
@@ -4292,6 +4336,38 @@ mod tests {
             after.video_cycles_into_scanline,
             before.video_cycles_into_scanline
         );
+    }
+
+    #[test]
+    fn machine_save_data_dispatches_sram_and_validates_before_mutation() {
+        let mut machine = GbaMachine::new(cartridge_with_save_signature(b"SRAM_V"));
+        assert_eq!(machine.save_data().unwrap().len(), crate::memory::SRAM_SIZE);
+        let replacement = vec![0x5A; crate::memory::SRAM_SIZE];
+        assert!(machine.load_save_data(&replacement).unwrap());
+        assert_eq!(machine.save_data().unwrap(), replacement.as_slice());
+        let invalid = vec![0xA5; crate::memory::SRAM_SIZE - 1];
+        assert!(machine.load_save_data(&invalid).is_err());
+        assert_eq!(machine.save_data().unwrap(), replacement.as_slice());
+    }
+
+    #[test]
+    fn machine_save_data_dispatches_flash_and_eeprom_devices() {
+        let mut flash_machine = GbaMachine::new(cartridge_with_save_signature(b"FLASH1M_V"));
+        let flash_image = vec![0xC3; 128 * 1024];
+        assert!(flash_machine.load_save_data(&flash_image).unwrap());
+        assert_eq!(flash_machine.save_data().unwrap(), flash_image.as_slice());
+        let mut eeprom_machine = GbaMachine::new(cartridge_with_save_signature(b"EEPROM_V"));
+        let eeprom_image = vec![0x3C; 512];
+        assert!(eeprom_machine.load_save_data(&eeprom_image).unwrap());
+        assert_eq!(eeprom_machine.save_data().unwrap(), eeprom_image.as_slice());
+    }
+
+    #[test]
+    fn machine_save_data_reports_unknown_backup_hardware_without_mutation() {
+        let mut machine = GbaMachine::new(cartridge());
+        assert_eq!(machine.save_data(), None);
+        assert!(!machine.load_save_data(&[0xFF; 32 * 1024]).unwrap());
+        assert_eq!(machine.save_data(), None);
     }
 
     #[test]
