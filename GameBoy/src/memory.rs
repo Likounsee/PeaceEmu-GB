@@ -133,6 +133,8 @@ pub struct MemoryBus {
     audio_last_samples: [i8; 2],
     /// Cumulative timer-driven PCM byte consumptions since the last power cycle.
     audio_fifo_samples_consumed: [u64; 2],
+    /// Legacy PSG pulse-channel synthesizer.
+    psg: crate::sound::Psg,
     /// Completed DMA bursts per channel since the last power cycle.
     dma_completed_transfers: [u64; 4],
 }
@@ -196,6 +198,7 @@ impl MemoryBus {
             audio_fifos: std::array::from_fn(|_| VecDeque::with_capacity(32)),
             audio_last_samples: [0; 2],
             audio_fifo_samples_consumed: [0; 2],
+            psg: crate::sound::Psg::default(),
             dma_completed_transfers: [0; 4],
         }
     }
@@ -330,6 +333,18 @@ impl MemoryBus {
         self.audio_fifos
             .get(fifo)
             .map(|queue| queue.len().saturating_sub(16))
+    }
+
+    /// Returns the current legacy PSG pulse-channel stereo sample.
+    pub fn psg_stereo_sample(&self) -> (i16, i16) {
+        self.psg.stereo_sample()
+    }
+
+    /// Mixes PSG and Direct Sound into one raw stereo sample.
+    pub fn audio_stereo_sample(&self) -> (i16, i16) {
+        let direct = self.direct_sound_stereo_sample();
+        let psg = self.psg_stereo_sample();
+        (direct.0.saturating_add(psg.0), direct.1.saturating_add(psg.1))
     }
 
     /// Mixes the current Direct Sound FIFO DAC latches into a stereo sample.
@@ -835,6 +850,7 @@ impl MemoryBus {
         let enabled = value & 0x0080 != 0;
         self.io[0x84] = if enabled { 0x80 } else { 0 };
         self.io[0x85] = 0;
+        self.psg.set_master_enabled(enabled);
         // Turning the sound master off resets the Direct Sound FIFO state too.
         if was_enabled && !enabled {
             // Disabling the master sound circuit resets the implemented
@@ -987,6 +1003,9 @@ impl MemoryBus {
     ///
     /// Unmapped and BIOS addresses return zero in this early bus model.
     pub fn read8(&self, address: u32) -> u8 {
+        if address == 0x0400_0084 {
+            return (self.io[0x84] & 0x80) | self.psg.status_bits();
+        }
         // SOUNDCNT_X channel-status bits are read-only. Channel status is not
         // synthesized yet, so expose only the writable sound-master bit.
         if (0x0400_0084..=0x0400_0085).contains(&address) {
@@ -1142,6 +1161,7 @@ impl MemoryBus {
     /// DISPSTAT/VCOUNT and enabled HBlank, VBlank, and VCOUNT-match IRQs. The caller
     /// supplies elapsed CPU cycles; instruction-specific bus wait states are not yet modeled.
     pub fn advance_cycles(&mut self, cycles: u32) {
+        self.psg.advance(cycles);
         // Most instructions execute with all hardware timers disabled. In that
         // common case, jump between PPU transition edges instead of iterating
         // once per CPU cycle; HBlank/VBlank DMA and IRQ edges remain exact.
@@ -1718,6 +1738,15 @@ impl MemoryBus {
         if (0x0400_0208..=0x0400_0209).contains(&address) {
             if address == 0x0400_0208 {
                 self.interrupt_master_enable = (value as u16) & 1;
+            }
+            return;
+        }
+
+        // PSG registers occupy 0x04000060..0x04000081, including NR50/NR51.
+        if (0x0400_0060..=0x0400_0081).contains(&address) {
+            let offset = (address - 0x0400_0000) as usize;
+            if let Some(stored) = self.psg.write(offset, value) {
+                self.io[offset] = stored;
             }
             return;
         }
@@ -5443,6 +5472,33 @@ mod tests {
         bus.set_keys_pressed(0x03FF);
         assert_eq!(bus.read16(0x0400_0130), 0xFC00);
         assert_eq!(bus.read8(0x0400_0131), 0xFC);
+    }
+
+    #[test]
+    fn psg_register_writes_drive_pulse_status_and_mixed_audio() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.read8(0x0400_0084) & 3, 0);
+        bus.write8(0x0400_0084, 0x80);
+        bus.write8(0x0400_0062, 0xC0);
+        bus.write8(0x0400_0063, 0xF0);
+        bus.write8(0x0400_0065, 0x80);
+        bus.write8(0x0400_0080, 0x77);
+        bus.write8(0x0400_0081, 0x10);
+        assert_eq!(bus.read8(0x0400_0084) & 1, 1);
+        assert_ne!(bus.psg_stereo_sample().0, 0);
+        assert_ne!(bus.audio_stereo_sample().0, 0);
+    }
+
+    #[test]
+    fn psg_channel_status_clears_when_master_sound_is_disabled() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write8(0x0400_0084, 0x80);
+        bus.write8(0x0400_0063, 0xF0);
+        bus.write8(0x0400_0065, 0x80);
+        assert_eq!(bus.read8(0x0400_0084) & 1, 1);
+        bus.write8(0x0400_0084, 0);
+        assert_eq!(bus.read8(0x0400_0084), 0);
+        assert_eq!(bus.psg_stereo_sample(), (0, 0));
     }
 
     #[test]

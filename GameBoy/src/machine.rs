@@ -1633,6 +1633,11 @@ impl GbaMachine {
         self.bus.direct_sound_stereo_sample()
     }
 
+    /// Returns the mixed PSG and Direct Sound stereo sample.
+    pub fn audio_stereo_sample(&self) -> (i16, i16) {
+        self.bus.audio_stereo_sample()
+    }
+
     /// Runs until the next fresh VBlank entry and returns the rendered frame.
     ///
     /// If VBlank is already active, this waits for it to end before waiting for

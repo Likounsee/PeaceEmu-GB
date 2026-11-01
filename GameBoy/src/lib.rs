@@ -17,11 +17,14 @@ pub mod cpu;
 pub mod memory;
 /// Cartridge backup-device detection from ROM signatures.
 pub mod save;
+/// Initial GBA legacy PSG sound synthesis.
+pub mod sound;
 
 pub use cartridge::{CartridgeError, GbaCartridge};
 pub use cpu::{ConditionFlags, Cpu, CpuError, CpuSnapshot, StepOutcome};
 pub use memory::{AudioFifoStatus, GbaButton, MemoryBus, SramSizeError};
 pub use save::{EepromDevice, FlashDevice, SaveType};
+pub use sound::Psg;
 
 /// High-level machine facade connecting the CPU, bus, and video renderer.
 pub mod machine;
