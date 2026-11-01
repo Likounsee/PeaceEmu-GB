@@ -280,7 +280,6 @@ impl MemoryBus {
         self.save_type
     }
 
-    /// Returns the most recently latched signed PCM sample for FIFO A (0) or B (1).
     /// Returns the number of PCM bytes consumed by timer overflows since power-on.
     ///
     /// The counter advances only when a queued byte is popped; underflow and
@@ -289,6 +288,7 @@ impl MemoryBus {
         self.audio_fifo_samples_consumed.get(fifo).copied()
     }
 
+    /// Returns the most recently latched signed PCM sample for FIFO A (0) or B (1).
     pub fn audio_fifo_last_sample(&self, fifo: usize) -> Option<i8> {
         self.audio_last_samples.get(fifo).copied()
     }
