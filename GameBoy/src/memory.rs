@@ -4350,7 +4350,7 @@ mod tests {
         let mut flash_bus = MemoryBus::new(flash_cart);
         let mut sram_bus = MemoryBus::new(cartridge());
 
-        for (waitcnt, halfword_cycles) in [(0, 4), (1, 3), (2, 2), (3, 8)] {
+        for (waitcnt, halfword_cycles) in [(0_u16, 4_u32), (1, 3), (2, 2), (3, 8)] {
             flash_bus.write16(0x0400_0204, waitcnt);
             sram_bus.write16(0x0400_0204, waitcnt);
 
