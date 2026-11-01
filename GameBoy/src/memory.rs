@@ -1968,7 +1968,11 @@ impl MemoryBus {
         }
         if (0x0400_0134..=0x0400_0135).contains(&address) {
             let shift = (address - 0x0400_0134) * 8;
-            let mask = if address == 0x0400_0134 { 0x00FF } else { 0xFF00 };
+            let mask = if address == 0x0400_0134 {
+                0x00FF
+            } else {
+                0xFF00
+            };
             self.sio_rcnt = (self.sio_rcnt & !mask) | (u16::from(value) << shift & mask);
             self.sio_rcnt &= 0xC00F;
             return;
