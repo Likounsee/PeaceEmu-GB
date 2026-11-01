@@ -1947,8 +1947,9 @@ impl MemoryBus {
         // SIO receive slots are read-only. Data/control transmit registers
         // accept byte writes while preserving the untouched lane.
         if (0x0400_0120..=0x0400_0127).contains(&address) {
-            if self.sio_control >> 12 & 3 == 1 {
-                let shift = (address - 0x0400_0120) * 8;
+            let offset = address - 0x0400_0120;
+            if self.sio_control >> 12 & 3 == 1 && offset < 4 {
+                let shift = offset * 8;
                 let mask = 0xFF_u32 << shift;
                 self.sio_data32 = (self.sio_data32 & !mask) | (u32::from(value) << shift);
             }
