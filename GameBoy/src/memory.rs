@@ -1163,7 +1163,12 @@ impl MemoryBus {
             return self.sio_data8;
         }
         if (0x0400_0128..=0x0400_0129).contains(&address) {
-            return ((self.sio_control >> ((address - 0x0400_0128) * 8)) & 0xFF) as u8;
+            let mut control = self.sio_control;
+            if (control >> 12) & 3 <= 1 && self.sio_rcnt & 0xC000 == 0 {
+                // With no cable attached, the incoming serial data line idles high.
+                control |= 1 << 2;
+            }
+            return ((control >> ((address - 0x0400_0128) * 8)) & 0xFF) as u8;
         }
         if (0x0400_0134..=0x0400_0135).contains(&address) {
             return ((self.sio_rcnt >> ((address - 0x0400_0134) * 8)) & 0xFF) as u8;
@@ -1282,6 +1287,50 @@ impl MemoryBus {
             self.keys_pressed & selected != 0
         } else {
             self.keys_pressed & selected == selected
+        }
+    }
+
+    /// Applies a SIOCNT write and starts a supported internally-clocked transfer.
+    fn write_sio_control(&mut self, value: u16) {
+        // Preserve writable clock, start, transfer-mode, unused R/W and IRQ fields.
+        // Read-only status bits are synthesized when the register is read.
+        self.sio_control = value & 0x7F8B;
+        self.sio_cycles_remaining = 0;
+        if self.sio_control & (1 << 7) == 0 || self.sio_rcnt & 0xC000 != 0 {
+            return;
+        }
+
+        let mode = (self.sio_control >> 12) & 3;
+        if mode > 1 || self.sio_control & 1 == 0 {
+            // External-clock transfers wait for a peer; multiplayer and UART
+            // require their own protocol state machines and are not faked here.
+            return;
+        }
+
+        let bits = if mode == 1 { 32 } else { 8 };
+        let cycles_per_bit = if self.sio_control & 2 != 0 { 8 } else { 64 };
+        self.sio_cycles_remaining = bits * cycles_per_bit;
+    }
+
+    /// Completes normal-mode transfers when their internally generated clock expires.
+    fn advance_sio_cycles(&mut self, cycles: u32) {
+        if self.sio_cycles_remaining == 0 {
+            return;
+        }
+        self.sio_cycles_remaining = self.sio_cycles_remaining.saturating_sub(cycles);
+        if self.sio_cycles_remaining != 0 {
+            return;
+        }
+
+        if (self.sio_control >> 12) & 3 == 1 {
+            // With no connected peer, the input line remains pulled high.
+            self.sio_data32 = u32::MAX;
+        } else {
+            self.sio_data8 = u8::MAX;
+        }
+        self.sio_control &= !(1 << 7);
+        if self.sio_control & (1 << 14) != 0 {
+            self.request_interrupt(1 << 7);
         }
     }
 
@@ -2587,7 +2636,7 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0126), 0xFFFF);
 
         bus.write16(0x0400_0128, 0xFFFF);
-        assert_eq!(bus.read16(0x0400_0128), 0x30CF);
+        assert_eq!(bus.read16(0x0400_0128), 0x7F8F);
         bus.write16(0x0400_0134, 0xFFFF);
         assert_eq!(bus.read16(0x0400_0134), 0xC00F);
     }
