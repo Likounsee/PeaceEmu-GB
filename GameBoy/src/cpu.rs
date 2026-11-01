@@ -1031,7 +1031,14 @@ impl Cpu {
             let raw = instruction as u16;
             // Conditional/unconditional branches and BL may refill the pipeline.
             if raw & 0xF000 == 0xD000 && ((raw >> 8) & 0xF) < 0xE {
-                return 3;
+                // A Thumb conditional branch only refills the pipeline when
+                // its condition succeeds. A failed branch retires as a
+                // one-cycle instruction, just like a failed ARM condition.
+                return if self.condition_passed(u32::from((raw >> 8) & 0xF)) {
+                    3
+                } else {
+                    1
+                };
             }
             if raw & 0xF800 == 0xE000 || raw & 0xF800 == 0xF800 {
                 return 3;
@@ -4862,6 +4869,31 @@ mod tests {
         assert_eq!(cpu.estimate_cycles(0xE142_4095), 4);
         // A real LDRH encoding retains the existing halfword estimate.
         assert_eq!(cpu.estimate_cycles(0xE1D2_10B0), 3);
+    }
+
+    #[test]
+    fn thumb_conditional_branch_cycles_depend_on_condition_result() {
+        let mut cpu = Cpu::new();
+        cpu.thumb = true;
+
+        // Default flags are N=Z=C=V=0: EQ fails, NE succeeds.
+        assert_eq!(cpu.estimate_cycles(0xD000), 1); // BEQ not taken
+        assert_eq!(cpu.estimate_cycles(0xD100), 3); // BNE taken
+
+        cpu.set_condition_flags(ConditionFlags {
+            zero: true,
+            ..ConditionFlags::default()
+        });
+        assert_eq!(cpu.estimate_cycles(0xD000), 3); // BEQ taken
+        assert_eq!(cpu.estimate_cycles(0xD100), 1); // BNE not taken
+
+        // Other conditional branches share the same ARM condition evaluator.
+        cpu.set_condition_flags(ConditionFlags {
+            carry: true,
+            ..ConditionFlags::default()
+        });
+        assert_eq!(cpu.estimate_cycles(0xD200), 3); // BCS taken
+        assert_eq!(cpu.estimate_cycles(0xD300), 1); // BCC not taken
     }
 
     #[test]
