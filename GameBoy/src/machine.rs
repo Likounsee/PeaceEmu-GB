@@ -34,6 +34,10 @@ pub struct MachineSnapshot {
     pub cartridge_header_fixed_value: u8,
     /// Software revision byte from cartridge header offset 0xBC.
     pub cartridge_software_version: u8,
+    /// Cumulative HBlank edges since power-on, including VBlank scanlines.
+    pub video_hblank_events: u64,
+    /// Cumulative VBlank entries (one per frame) since power-on.
+    pub video_vblank_events: u64,
     /// Current video scanline (0–227).
     pub video_scanline: u16,
     /// Cycles elapsed within the current scanline.
@@ -100,6 +104,8 @@ pub struct MachineSnapshot {
     pub dma_count_registers: [Option<u16>; 4],
     /// Effective transfer element counts, including channel-specific zero-count semantics.
     pub dma_transfer_counts: [Option<u32>; 4],
+    /// Completed DMA bursts for channels 0 through 3 since power-on.
+    pub dma_completed_transfers: [Option<u64>; 4],
     /// Queued byte counts for Direct Sound FIFOs A and B.
     pub audio_fifo_lengths: [Option<usize>; 2],
     /// Last signed sample values for Direct Sound FIFOs A and B.
@@ -507,6 +513,16 @@ impl GbaMachine {
     /// Returns the number of completed DMA bursts on a channel since power-on.
     pub fn dma_completed_transfers(&self, channel: usize) -> Option<u64> {
         self.bus.dma_completed_transfers(channel)
+    }
+
+    /// Returns the number of HBlank edges observed since the last power cycle.
+    pub fn video_hblank_events(&self) -> u64 {
+        self.bus.video_hblank_events()
+    }
+
+    /// Returns the number of VBlank entries observed since the last power cycle.
+    pub fn video_vblank_events(&self) -> u64 {
+        self.bus.video_vblank_events()
     }
 
     /// Returns whether a DMA channel is enabled.
@@ -1705,6 +1721,8 @@ impl GbaMachine {
             cartridge_save_size_bytes: self.save_data_size_bytes(),
             cartridge_header_fixed_value: self.bus.cartridge_header_fixed_value(),
             cartridge_software_version: self.bus.cartridge_software_version(),
+            video_hblank_events: self.bus.video_hblank_events(),
+            video_vblank_events: self.bus.video_vblank_events(),
             video_scanline: self.bus.video_scanline(),
             video_cycles_into_scanline: self.bus.video_cycles_into_scanline(),
             video_in_vblank: self.bus.video_in_vblank(),
@@ -1837,6 +1855,12 @@ impl GbaMachine {
                 self.bus.dma_transfer_count(1),
                 self.bus.dma_transfer_count(2),
                 self.bus.dma_transfer_count(3),
+            ],
+            dma_completed_transfers: [
+                self.bus.dma_completed_transfers(0),
+                self.bus.dma_completed_transfers(1),
+                self.bus.dma_completed_transfers(2),
+                self.bus.dma_completed_transfers(3),
             ],
             audio_fifo_lengths: [self.bus.audio_fifo_len(0), self.bus.audio_fifo_len(1)],
             audio_fifo_last_samples: [
@@ -2444,6 +2468,9 @@ mod tests {
         assert_eq!(snapshot.dma_source_addresses[0], Some(0x0200_0000));
         assert_eq!(snapshot.dma_destination_addresses[0], Some(0x0300_0000));
         assert_eq!(snapshot.dma_transfer_counts[0], Some(1));
+        assert_eq!(snapshot.dma_completed_transfers, [Some(0); 4]);
+        assert_eq!(snapshot.video_hblank_events, 0);
+        assert_eq!(snapshot.video_vblank_events, 0);
         assert_eq!(snapshot.video_scanline, 0);
         assert_eq!(snapshot.video_cycles_into_scanline, 0);
         assert_eq!(snapshot.interrupt_enable, 1 << 3);
@@ -2451,6 +2478,27 @@ mod tests {
         assert_eq!(machine.diagnostic_snapshot(), snapshot);
         assert_eq!(machine.instructions_executed(), 0);
         assert_eq!(machine.cycles_elapsed(), 0);
+    }
+
+    #[test]
+    fn machine_snapshot_tracks_cumulative_video_edges_and_dma_bursts() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write32(0x0200_0000, 0xCAFE_BABE);
+        machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
+        machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
+        machine.bus_mut().write16(0x0400_00B8, 1);
+        machine.bus_mut().write16(0x0400_00BA, 0x8400);
+        assert_eq!(machine.dma_completed_transfers(0), Some(1));
+
+        machine.bus_mut().advance_cycles(960);
+        assert_eq!(machine.video_hblank_events(), 1);
+        machine.bus_mut().advance_cycles(227 * 1232 + 272);
+        assert_eq!(machine.video_vblank_events(), 1);
+        let snapshot = machine.diagnostic_snapshot();
+        assert_eq!(snapshot.dma_completed_transfers, [Some(1), Some(0), Some(0), Some(0)]);
+        assert_eq!(snapshot.video_hblank_events, 228);
+        assert_eq!(snapshot.video_vblank_events, 1);
+        assert_eq!(machine.diagnostic_snapshot(), snapshot);
     }
 
     #[test]
