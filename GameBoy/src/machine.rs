@@ -2208,6 +2208,41 @@ mod tests {
     }
 
     #[test]
+    fn machine_power_cycle_preserves_every_supported_battery_save_type() {
+        let cases = [
+            (crate::SaveType::Sram, vec![0xA5; 32 * 1024]),
+            (crate::SaveType::Flash64K, vec![0x5A; 64 * 1024]),
+            (crate::SaveType::Flash128K, vec![0xC3; 128 * 1024]),
+            (crate::SaveType::Eeprom, vec![0x3C; 512]),
+        ];
+
+        for (save_type, save_image) in cases {
+            let mut machine =
+                GbaMachine::new(cartridge().with_save_type(Some(save_type)));
+            assert_eq!(machine.load_save_data(&save_image).unwrap(), true);
+            machine.bus_mut().write8(0x0200_0000, 0xA5);
+            machine.bus_mut().write8(0x0300_0000, 0x5A);
+            machine.bus_mut().write16(0x0400_0102, 0x0080);
+            machine.bus_mut().write16(0x0400_0100, 0x00C0);
+            machine.set_keys_pressed(crate::GbaButton::A.mask());
+            machine.cpu.set_register(0, 0x1234_5678);
+
+            machine.power_cycle();
+
+            assert_eq!(machine.cartridge_save_type(), Some(save_type));
+            assert_eq!(machine.save_data().as_deref(), Some(save_image.as_slice()));
+            assert_eq!(machine.save_data_size_bytes(), Some(save_image.len()));
+            assert_eq!(machine.bus().read8(0x0200_0000), 0);
+            assert_eq!(machine.bus().read8(0x0300_0000), 0);
+            assert_eq!(machine.timer_control(0), Some(0));
+            assert_eq!(machine.keys_pressed(), 0);
+            assert_eq!(machine.cpu().register(0), Some(0));
+            assert_eq!(machine.instructions_executed(), 0);
+            assert_eq!(machine.cycles_elapsed(), 0);
+        }
+    }
+
+    #[test]
     fn pending_interrupt_mask_is_independent_of_master_enable() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write16(0x0400_0200, (1 << 0) | (1 << 3));
