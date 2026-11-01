@@ -1482,9 +1482,9 @@ impl GbaMachine {
         Ok(None)
     }
 
-    /// Runs until the next timer-driven sample word is consumed from a Direct Sound FIFO.
+    /// Runs until the next timer-driven sample byte is consumed from a Direct Sound FIFO.
     ///
-    /// A FIFO word contains four bytes. The method observes queue occupancy, so
+    /// A timer overflow consumes one signed PCM byte. The method observes queue occupancy, so
     /// it also detects consumption when consecutive PCM samples have identical
     /// values. Returns Some(n) after n instructions, or None for an invalid
     /// FIFO, an initially empty FIFO, STOP, or an exhausted instruction budget.
@@ -3695,7 +3695,7 @@ mod tests {
     }
 
     #[test]
-    fn audio_fifo_consumption_waiter_observes_timer_word_pop_even_for_repeated_samples() {
+    fn audio_fifo_consumption_waiter_observes_timer_byte_pop_even_for_repeated_samples() {
         let mut machine = GbaMachine::new(cartridge());
         machine.bus_mut().write32(0x0400_00A0, 0x7F7F_7F7F);
         machine.bus_mut().write32(0x0400_00A0, 0x7F7F_7F7F);
