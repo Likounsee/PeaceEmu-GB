@@ -16,6 +16,7 @@ pub struct Psg {
 #[derive(Clone, Debug, Default)]
 struct SquareChannel {
     enabled: bool,
+    dac_enabled: bool,
     duty: u8,
     length: u16,
     length_enabled: bool,
@@ -53,6 +54,7 @@ struct WaveChannel {
 #[derive(Clone, Debug, Default)]
 struct NoiseChannel {
     enabled: bool,
+    dac_enabled: bool,
     length: u16,
     length_enabled: bool,
     initial_volume: u8,
@@ -127,6 +129,10 @@ impl Psg {
                 s.initial_volume = value >> 4;
                 s.envelope_increase = value & 8 != 0;
                 s.envelope_period = value & 7;
+                s.dac_enabled = value & 0xF8 != 0;
+                if !s.dac_enabled {
+                    s.enabled = false;
+                }
                 s.volume = s.initial_volume;
             }
             0x64 | 0x6C => {
@@ -144,6 +150,9 @@ impl Psg {
             }
             0x70 => {
                 self.wave.dac_enabled = value & 0x80 != 0;
+                if !self.wave.dac_enabled {
+                    self.wave.enabled = false;
+                }
                 self.wave.two_bank_mode = value & 0x40 != 0;
                 self.wave.bank_select = usize::from(value & 0x20 != 0);
             }
@@ -167,6 +176,10 @@ impl Psg {
                 self.noise.initial_volume = value >> 4;
                 self.noise.envelope_increase = value & 8 != 0;
                 self.noise.envelope_period = value & 7;
+                self.noise.dac_enabled = value & 0xF8 != 0;
+                if !self.noise.dac_enabled {
+                    self.noise.enabled = false;
+                }
             }
             0x7C => {
                 self.noise.divisor_code = value & 7;
@@ -176,7 +189,7 @@ impl Psg {
             0x7D => {
                 self.noise.length_enabled = value & 0x40 != 0;
                 if value & 0x80 != 0 {
-                    self.noise.enabled = true;
+                    self.noise.enabled = self.noise.dac_enabled;
                     self.noise.lfsr = 0x7FFF;
                     self.noise.timer =
                         Self::noise_period(self.noise.divisor_code, self.noise.clock_shift);
@@ -348,7 +361,7 @@ impl Psg {
     }
 
     fn trigger_square(channel: &mut SquareChannel) {
-        channel.enabled = true;
+        channel.enabled = channel.dac_enabled;
         channel.phase = 0;
         channel.timer = Self::square_period(channel.frequency);
         channel.volume = channel.initial_volume;
@@ -679,4 +692,62 @@ mod tests {
         assert_eq!(psg.noise.volume, 3);
         assert_eq!(psg.noise.envelope_timer, 262_144 - 9);
     }
+    #[test]
+    fn square_dac_disable_stops_channel_until_retriggered() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x63, 0xF0);
+        psg.write(0x65, 0x80);
+        assert_eq!(psg.status_bits() & 1, 1);
+
+        psg.write(0x63, 0x00); // NR12 disables the channel DAC.
+        assert_eq!(psg.status_bits() & 1, 0);
+        psg.write(0x63, 0xF0); // Re-enabling DAC alone does not retrigger.
+        assert_eq!(psg.status_bits() & 1, 0);
+        psg.write(0x65, 0x80);
+        assert_eq!(psg.status_bits() & 1, 1);
+    }
+
+    #[test]
+    fn wave_dac_disable_stops_playback_immediately() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x70, 0x80);
+        psg.write(0x72, 0x20);
+        psg.write(0x75, 0x80);
+        assert_eq!(psg.status_bits() & 4, 4);
+
+        psg.write(0x70, 0x00);
+        assert_eq!(psg.status_bits() & 4, 0);
+        assert_eq!(psg.channel_samples()[2], 0);
+    }
+
+    #[test]
+    fn noise_dac_disable_stops_channel_until_retriggered() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x79, 0xF0);
+        psg.write(0x7D, 0x80);
+        assert_eq!(psg.status_bits() & 8, 8);
+
+        psg.write(0x79, 0x00); // NR42 disables the noise DAC.
+        assert_eq!(psg.status_bits() & 8, 0);
+        psg.write(0x79, 0xF0);
+        assert_eq!(psg.status_bits() & 8, 0);
+        psg.write(0x7D, 0x80);
+        assert_eq!(psg.status_bits() & 8, 8);
+    }
+
+    #[test]
+    fn square_and_noise_triggers_cannot_enable_disabled_dacs() {
+        let mut psg = Psg::default();
+        psg.set_master_enabled(true);
+        psg.write(0x63, 0x00);
+        psg.write(0x65, 0x80);
+        psg.write(0x79, 0x00);
+        psg.write(0x7D, 0x80);
+
+        assert_eq!(psg.status_bits() & 0b1001, 0);
+    }
+
 }
