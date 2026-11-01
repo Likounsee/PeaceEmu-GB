@@ -914,6 +914,8 @@ impl MemoryBus {
         }
         let next_source = source.wrapping_add(16) & 0x0FFF_FFFC;
         self.io[base..base + 4].copy_from_slice(&next_source.to_le_bytes());
+        self.dma_completed_transfers[channel] =
+            self.dma_completed_transfers[channel].saturating_add(1);
         if control & (1 << 14) != 0 {
             self.request_interrupt(1 << (8 + channel));
         }
