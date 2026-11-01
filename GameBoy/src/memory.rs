@@ -3498,6 +3498,22 @@ mod tests {
     }
 
     #[test]
+    fn bios_general_io_reset_cancels_unconsumed_halt_and_stop_requests() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        bus.write8(0x0400_0301, 0x00);
+        bus.reset_general_io_registers();
+        assert!(!bus.take_halt_request());
+        assert!(!bus.take_stop_request());
+
+        bus.write8(0x0400_0301, 0x80);
+        bus.reset_general_io_registers();
+        assert!(!bus.take_halt_request());
+        assert!(!bus.take_stop_request());
+        assert_eq!(bus.read8(0x0400_0301), 0);
+    }
+
+    #[test]
     fn bios_sio_register_reset_clears_window_without_touching_neighboring_io() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0120, 0x1234);
