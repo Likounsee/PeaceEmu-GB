@@ -1862,8 +1862,8 @@ impl MemoryBus {
         // WAITCNT exposes SRAM/Game Pak wait-state, PHI, and prefetch controls;
         // bit 15 reads as zero; the modeled timing and high-byte controls are preserved.
         // SIO control and transmit data registers are writable halfwords.
-        if (address == 0x0400_0128) {
-            self.sio_control = value & 0x700F;
+        if address == 0x0400_0128 {
+            self.sio_control = u16::from(value) & 0x700F;
             return;
         }
         if address == 0x0400_012A {
@@ -1871,7 +1871,7 @@ impl MemoryBus {
             return;
         }
         if address == 0x0400_0134 {
-            self.sio_rcnt = value & 0xC00F;
+            self.sio_rcnt = u16::from(value) & 0xC00F;
             return;
         }
         if (address & !3) == 0x0400_0120 && self.sio_control >> 12 & 3 == 1 {
@@ -1947,7 +1947,7 @@ impl MemoryBus {
         // SIO receive slots are read-only. Data/control transmit registers
         // accept byte writes while preserving the untouched lane.
         if (0x0400_0120..=0x0400_0127).contains(&address) {
-            if (self.sio_control >> 12 & 3 == 1) {
+            if self.sio_control >> 12 & 3 == 1 {
                 let shift = (address - 0x0400_0120) * 8;
                 let mask = 0xFF_u32 << shift;
                 self.sio_data32 = (self.sio_data32 & !mask) | (u32::from(value) << shift);
