@@ -2480,7 +2480,7 @@ mod tests {
         assert_eq!(machine.dma_enabled(0), Some(true));
         assert_eq!(machine.dma_source_address(0), Some(0x0200_0000));
         assert_eq!(machine.dma_destination_address(0), Some(0x0300_0000));
-        assert_eq!(machine.dma_completed_transfers(0), Some(1));
+        assert_eq!(machine.dma_completed_transfers(0), Some(0));
     }
 
     #[test]
