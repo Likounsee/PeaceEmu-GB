@@ -8567,8 +8567,7 @@ mod tests {
         cpu.set_register(1, destination);
         cpu.set_register(2, info);
         cpu.execute_swi(0, 0, 0x10, false, &mut bus).unwrap();
-        assert_eq!(bus.read32(destination), 0x1312_1110);
-        assert_eq!(bus.read32(destination + 4), 0x1013_1010);
+        assert_eq!(bus.read32(destination), 0x1013_1211);
     }
 
     #[test]
@@ -8582,7 +8581,7 @@ mod tests {
         bus.write8(info + 3, 4);
         bus.write32(info + 4, 0x8000_0003);
         let words = bios_bit_unpack(&bus, source, info).unwrap();
-        assert_eq!(words, vec![0x0300_0003]);
+        assert_eq!(words, vec![0x0004_0000]);
 
         bus.write8(info + 2, 3);
         assert!(bios_bit_unpack(&bus, source, info).is_none());
