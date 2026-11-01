@@ -3877,18 +3877,36 @@ mod tests {
     #[test]
     fn audio_fifo_sample_target_waiter_handles_absolute_targets_and_budgets() {
         let mut machine = GbaMachine::new(cartridge());
-        assert_eq!(machine.run_until_audio_fifo_samples_consumed(0, 0, 0).unwrap(), Some(0));
-        assert_eq!(machine.run_until_audio_fifo_samples_consumed(2, 1, 10).unwrap(), None);
-        assert_eq!(machine.run_until_audio_fifo_samples_consumed(0, 1, 0).unwrap(), None);
+        assert_eq!(
+            machine.run_until_audio_fifo_samples_consumed(0, 0, 0).unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_samples_consumed(2, 1, 10).unwrap(),
+            None
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_samples_consumed(0, 1, 0).unwrap(),
+            None
+        );
 
         machine.bus_mut().write32(0x0400_00A0, 0x7F7F_7F7F);
         machine.bus_mut().write16(0x0400_0100, 0xFFFF);
         machine.bus_mut().write16(0x0400_0102, 0x0080);
         machine.bus_mut().write16(0x0400_0084, 0x0080);
-        assert_eq!(machine.run_until_audio_fifo_samples_consumed(0, 1, 8).unwrap(), Some(1));
+        assert_eq!(
+            machine.run_until_audio_fifo_samples_consumed(0, 1, 8).unwrap(),
+            Some(1)
+        );
         assert_eq!(machine.audio_fifo_samples_consumed(0), Some(1));
-        assert_eq!(machine.run_until_audio_fifo_samples_consumed(0, 1, 0).unwrap(), Some(0));
-        assert_eq!(machine.run_until_audio_fifo_samples_consumed(0, 3, 1).unwrap(), None);
+        assert_eq!(
+            machine.run_until_audio_fifo_samples_consumed(0, 1, 0).unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            machine.run_until_audio_fifo_samples_consumed(0, 3, 1).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -3899,7 +3917,10 @@ mod tests {
         machine.bus_mut().write16(0x0400_0106, 0x0080);
         machine.bus_mut().write16(0x0400_0082, 1 << 14);
         machine.bus_mut().write16(0x0400_0084, 0x0080);
-        assert_eq!(machine.run_until_audio_fifo_samples_consumed(1, 1, 8).unwrap(), Some(1));
+        assert_eq!(
+            machine.run_until_audio_fifo_samples_consumed(1, 1, 8).unwrap(),
+            Some(1)
+        );
         assert_eq!(machine.audio_fifo_samples_consumed(1), Some(1));
         assert_eq!(machine.audio_fifo_samples_consumed(0), Some(0));
     }
