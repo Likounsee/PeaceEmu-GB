@@ -3779,6 +3779,8 @@ mod tests {
         machine.bus_mut().write32(0x0400_00A4, 0x0102_0304);
         machine.bus_mut().write16(0x0400_0104, 0xFFFF);
         machine.bus_mut().write16(0x0400_0106, 0x0080);
+        // FIFO B is clocked by timer 1 when SOUNDCNT_H bit 13 is set.
+        machine.bus_mut().write16(0x0400_0082, 1 << 13);
         machine.bus_mut().write16(0x0400_0084, 0x0080);
         machine.bus_mut().advance_cycles(1);
         assert_eq!(machine.audio_fifo_samples_consumed(1), Some(1));
