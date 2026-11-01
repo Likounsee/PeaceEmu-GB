@@ -8398,6 +8398,7 @@ mod tests {
         cpu.set_register(0, 0x0200_1000);
         cpu.set_register(1, 0x0200_2000);
         assert!(cpu.enter_irq());
+        cpu.set_register(15, 0x0200_0000);
         cpu.set_register(13, 0x0300_7F00);
         cpu.set_register(14, 0x0200_0104);
 
@@ -8426,6 +8427,7 @@ mod tests {
         cpu.set_execution_state(true);
         cpu.set_register(15, 0x0200_0200);
         assert!(cpu.enter_irq());
+        cpu.set_register(15, 0x0200_0000);
         cpu.set_register(13, 0x0300_7F00);
         cpu.set_register(14, 0x0200_0204);
         cpu.set_register(0, 0x0200_3000);
@@ -8451,6 +8453,8 @@ mod tests {
         }
         bus.write8(source + 9, 0x10); // length 4, displacement 4.
         bus.write8(source + 10, 0x03);
+        assert_eq!(bus.read32(source), 0x0000_0810);
+        assert!(bios_lz77_decompress(&bus, source).is_some());
         let mut cpu = Cpu::new();
         cpu.set_register(0, source);
         cpu.set_register(1, destination);
