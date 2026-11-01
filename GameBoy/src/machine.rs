@@ -1967,6 +1967,47 @@ mod tests {
         GbaCartridge::parse(&rom).unwrap()
     }
 
+    fn flash_cartridge() -> GbaCartridge {
+        let mut rom = vec![0; GBA_HEADER_SIZE + 0x100];
+        rom[0xA0..0xAC].copy_from_slice(b"FLASH TEST  ");
+        rom[0xAC..0xB0].copy_from_slice(b"FLST");
+        rom[0xB0..0xB2].copy_from_slice(b"01");
+        rom[0x100..0x107].copy_from_slice(b"FLASH_V");
+        rom[0xBD] = rom[0xA0..=0xBC]
+            .iter()
+            .fold(0x19_u8, |sum, byte| sum.wrapping_add(*byte))
+            .wrapping_neg();
+        GbaCartridge::parse(&rom).unwrap()
+    }
+
+    #[test]
+    fn save_state_restores_flash_backup_contents_and_command_state() {
+        let mut machine = GbaMachine::new(flash_cartridge());
+        machine.bus_mut().write8(0x0E00_5555, 0xAA);
+        machine.bus_mut().write8(0x0E00_2AAA, 0x55);
+        machine.bus_mut().write8(0x0E00_5555, 0xA0);
+        machine.bus_mut().write8(0x0E00_0123, 0x5A);
+        assert_eq!(machine.bus().read8(0x0E00_0123), 0x5A);
+
+        let checkpoint = machine.save_state();
+        machine.bus_mut().write8(0x0E00_5555, 0xAA);
+        machine.bus_mut().write8(0x0E00_2AAA, 0x55);
+        machine.bus_mut().write8(0x0E00_5555, 0xA0);
+        machine.bus_mut().write8(0x0E00_0123, 0x0F);
+        assert_eq!(machine.bus().read8(0x0E00_0123), 0x0A);
+
+        machine.load_state(&checkpoint);
+        assert_eq!(machine.bus().read8(0x0E00_0123), 0x5A);
+
+        // Restoring a checkpoint also restores the Flash command sequencer,
+        // so subsequent programming continues from the captured state.
+        machine.bus_mut().write8(0x0E00_5555, 0xAA);
+        machine.bus_mut().write8(0x0E00_2AAA, 0x55);
+        machine.bus_mut().write8(0x0E00_5555, 0xA0);
+        machine.bus_mut().write8(0x0E00_0123, 0x3C);
+        assert_eq!(machine.bus().read8(0x0E00_0123), 0x18);
+    }
+
     #[test]
     fn audio_fifo_refill_runner_distinguishes_low_water_from_refilled_state() {
         let mut machine = GbaMachine::new(cartridge());
