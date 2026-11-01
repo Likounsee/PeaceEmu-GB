@@ -2165,6 +2165,22 @@ impl Cpu {
                     }
                 }
             }
+            // CpuFastSet always transfers aligned 32-bit words and rounds the
+            // requested word count up to a complete eight-word (32-byte) block.
+            0x0C => {
+                let source = self.registers[0] & !3;
+                let destination = self.registers[1] & !3;
+                let control = self.registers[2];
+                let count = (control & 0x001F_FFFF).saturating_add(7) & !7;
+                let fill = control & (1 << 24) != 0;
+                let mut value = 0_u32;
+                for index in 0..count {
+                    if !fill || index == 0 {
+                        value = bus.read32(source.wrapping_add(index * 4));
+                    }
+                    bus.write32(destination.wrapping_add(index * 4), value);
+                }
+            }
             // Differential filters restore byte/halfword delta-compressed assets.
             0x16 | 0x17 | 0x18 => {
                 let source = self.registers[0];
@@ -3213,6 +3229,45 @@ mod tests {
         assert_eq!(bus.read32(destination + 12), (47 << 8) as u32);
     }
 
+    #[test]
+    fn bios_cpu_fast_set_copies_rounded_eight_word_blocks() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        for index in 0..16_u32 {
+            bus.write32(source + index * 4, 0xA500_0000 | index);
+        }
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source + 1);
+        cpu.set_register(1, destination + 3);
+        cpu.set_register(2, 9);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000C, 0x0C, false, &mut bus)
+            .unwrap();
+        for index in 0..16_u32 {
+            assert_eq!(bus.read32(destination + index * 4), 0xA500_0000 | index);
+        }
+        assert_eq!(bus.read32(destination + 16 * 4), 0);
+    }
+
+    #[test]
+    fn bios_cpu_fast_set_fill_reads_one_word_and_repeats_it() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0xDEAD_BEEF);
+        bus.write32(source + 4, 0x1234_5678);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, (1 << 24) | 1);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000C, 0x0C, false, &mut bus)
+            .unwrap();
+        for index in 0..8_u32 {
+            assert_eq!(bus.read32(destination + index * 4), 0xDEAD_BEEF);
+        }
+    }
     #[test]
     fn bios_obj_affine_set_respects_destination_stride() {
         let mut bus = bus_with_program(&[]);
