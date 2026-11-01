@@ -2215,6 +2215,24 @@ impl Cpu {
             0x0D => {
                 self.registers[0] = 0xBAAE_187F;
             }
+            // SoundBiasChange selects one of the two BIOS PWM bias targets.
+            // Preserve the amplitude-resolution bits in SOUNDBIAS.
+            0x19 => {
+                let current = bus.read16(0x0400_0088);
+                let bias = if self.registers[0] == 0 { 0 } else { 0x0200 };
+                bus.write16(0x0400_0088, (current & !0x03FF) | bias);
+            }
+            // MidiKey2Freq reads the base frequency from WaveData+4 and
+            // applies the MIDI key and 1/256-semitone fine adjustment.
+            0x1F => {
+                let wave_data = self.registers[0];
+                let base_frequency = bus.read32(wave_data.wrapping_add(4));
+                let key = (self.registers[1] & 0xFF) as f32;
+                let fine = (self.registers[2] & 0xFF) as f32;
+                let semitones = (180.0_f32 - key - fine / 256.0) / 12.0;
+                let divisor = 2.0_f32.powf(semitones);
+                self.registers[0] = (base_frequency as f32 / divisor) as u32;
+            }
             // ArcTan: interpret R0 as signed 1.14 tangent and return a 3.12 angle.
             0x09 => {
                 let tangent = (self.registers[0] as i16) as f64 / 16_384.0;
@@ -3761,6 +3779,50 @@ mod tests {
             .unwrap();
         assert_eq!(bus.read16(0x0400_0090), 0x1234);
         assert_eq!(bus.read16(0x0400_0120), 0x1234);
+    }
+
+    #[test]
+    fn bios_sound_bias_changes_only_the_bias_field() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        bus.write16(0x0400_0088, 0xC155);
+
+        cpu.set_register(0, 1);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read16(0x0400_0088), 0xC355);
+
+        cpu.set_register(0, 0);
+        cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read16(0x0400_0088), 0xC155);
+    }
+
+    #[test]
+    fn bios_midi_key_to_frequency_uses_wave_data_and_fine_pitch() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        let wave_data = 0x0200_0200;
+        bus.write32(wave_data + 4, 7040);
+
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 69); // A4
+        cpu.set_register(2, 0);
+        cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+        let a4 = cpu.register(0).unwrap();
+        assert_eq!(a4, (7040.0_f32 / 2.0_f32.powf(111.0 / 12.0)) as u32);
+
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 69);
+        cpu.set_register(2, 128); // Half a semitone higher.
+        cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+        let sharpened = cpu.register(0).unwrap();
+        assert!(sharpened > a4);
+        assert!(sharpened < a4 + 40);
     }
 
     #[test]
