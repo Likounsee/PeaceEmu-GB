@@ -206,7 +206,6 @@ fn bios_rl_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
     Some(output)
 }
 
-
 /// Expands the BIOS BitUnPack source bitstream into destination-width values.
 fn bios_bit_unpack(bus: &MemoryBus, source: u32, info: u32) -> Option<Vec<u32>> {
     let source_bytes = usize::from(bus.read16(info));
@@ -2470,11 +2469,12 @@ impl Cpu {
             // BitUnPack expands packed 1/2/4/8-bit source values into
             // destination elements described by the BIOS BitUnPackInfo struct.
             0x10 => {
-                let words = bios_bit_unpack(bus, self.registers[0], self.registers[2])
-                    .ok_or(CpuError::UnsupportedInstruction {
+                let words = bios_bit_unpack(bus, self.registers[0], self.registers[2]).ok_or(
+                    CpuError::UnsupportedInstruction {
                         address,
                         instruction,
-                    })?;
+                    },
+                )?;
                 let destination = self.registers[1] & !3;
                 for (index, word) in words.into_iter().enumerate() {
                     bus.write32(destination.wrapping_add((index as u32) * 4), word);
@@ -8586,6 +8586,4 @@ mod tests {
         bus.write8(info + 2, 3);
         assert!(bios_bit_unpack(&bus, source, info).is_none());
     }
-
-
 }
