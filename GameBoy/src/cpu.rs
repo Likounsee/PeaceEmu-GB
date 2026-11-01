@@ -8581,7 +8581,7 @@ mod tests {
         bus.write8(info + 3, 4);
         bus.write32(info + 4, 0x8000_0003);
         let words = bios_bit_unpack(&bus, source, info).unwrap();
-        assert_eq!(words, vec![0x0004_0000]);
+        assert_eq!(words, vec![0x0000_0400]);
 
         bus.write8(info + 2, 3);
         assert!(bios_bit_unpack(&bus, source, info).is_none());
