@@ -2722,6 +2722,24 @@ mod tests {
     }
 
     #[test]
+    fn sio_all_normal_baud_and_width_combinations_use_hardware_cycle_counts() {
+        let mut fast_8 = MemoryBus::new(cartridge());
+        fast_8.write16(0x0400_0128, (1 << 7) | 3);
+        fast_8.advance_cycles(63);
+        assert_ne!(fast_8.read16(0x0400_0128) & (1 << 7), 0);
+        fast_8.advance_cycles(1);
+        assert_eq!(fast_8.read16(0x0400_0128) & (1 << 7), 0);
+
+        let mut normal_32 = MemoryBus::new(cartridge());
+        normal_32.write16(0x0400_0128, 1 << 12);
+        normal_32.write16(0x0400_0128, (1 << 12) | (1 << 7));
+        normal_32.advance_cycles(2047);
+        assert_ne!(normal_32.read16(0x0400_0128) & (1 << 7), 0);
+        normal_32.advance_cycles(1);
+        assert_eq!(normal_32.read16(0x0400_0128) & (1 << 7), 0);
+    }
+
+    #[test]
     fn sio_unused_rcnt_bit_does_not_disable_normal_transfer_but_mode_bit_does() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0134, 1 << 14);
