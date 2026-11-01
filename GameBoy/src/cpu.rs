@@ -3792,7 +3792,7 @@ mod tests {
     #[test]
     fn bios_register_ram_reset_clears_sio_and_sound_only_when_selected() {
         let mut bus = bus_with_program(&[]);
-        bus.write16(0x0400_0120, 0x1234); // SIOCNT.
+        bus.write16(0x0400_0128, 0x1234); // SIOCNT.
         bus.write16(0x0400_0090, 0x1234); // Wave RAM.
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0100);
@@ -3800,10 +3800,10 @@ mod tests {
         cpu.set_register(0, 1 << 5);
         cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0120), 0);
+        assert_eq!(bus.read16(0x0400_0128), 0);
         assert_eq!(bus.read16(0x0400_0090), 0x1234);
 
-        bus.write16(0x0400_0120, 0x1234);
+        bus.write16(0x0400_0128, 0x1234);
         cpu.set_register(0, 1 << 6);
         cpu.execute_swi(0x0200_0100, 0xEF00_0001, 0x01, false, &mut bus)
             .unwrap();
@@ -7543,6 +7543,7 @@ mod tests {
         bus.write16(0x0400_0204, 0x4017); // WAITCNT
         bus.write16(0x0400_0208, 1); // IME
         bus.write16(0x0400_0090, 0x1234); // Wave RAM (sound range)
+        bus.write16(0x0400_0128, 1 << 12); // Normal 32-bit SIO mode.
         bus.write16(0x0400_0120, 0x5678); // SIO data register
 
         let mut cpu = Cpu::new();
@@ -7566,6 +7567,7 @@ mod tests {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0000, 0x1234);
         bus.write16(0x0400_0100, 0xABCD);
+        bus.write16(0x0400_0128, 1 << 12); // Normal 32-bit SIO mode.
         bus.write16(0x0400_0120, 0x5678);
         bus.write16(0x0400_0090, 0xCAFE);
         bus.write16(0x0400_0080, 0xFFFF);
