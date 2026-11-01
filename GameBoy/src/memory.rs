@@ -2588,8 +2588,10 @@ mod tests {
         bus.write16(0x0400_0128, 1 << 12);
         bus.write32(0x0400_0120, 0x1234_5678);
         assert_eq!(bus.read32(0x0400_0120), 0x1234_5678);
+        bus.write16(0x0400_0122, 0xABCD);
+        assert_eq!(bus.read32(0x0400_0120), 0xABCD_5678);
         bus.write8(0x0400_0121, 0xAA);
-        assert_eq!(bus.read32(0x0400_0120), 0x1234_AA78);
+        assert_eq!(bus.read32(0x0400_0120), 0xABCD_AA78);
     }
 
     #[test]
