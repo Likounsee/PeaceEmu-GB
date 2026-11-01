@@ -1928,8 +1928,7 @@ impl Cpu {
         let field_mask = (instruction >> 16) & 0xF;
         let immediate = instruction & (1 << 25) != 0;
 
-        if (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid)) || field_mask & !0x8 != 0
-        {
+        if (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid)) || field_mask & !0x8 != 0 {
             return Err(CpuError::UnsupportedInstruction {
                 address,
                 instruction,
@@ -2754,7 +2753,10 @@ impl Cpu {
 
         // S=1 with Rd=PC is an exception return through SPSR_irq.
         if set_flags && rd == 15 && (self.mode != 0x12 || !self.spsr_irq_valid) {
-            return Err(CpuError::UnsupportedInstruction { address, instruction });
+            return Err(CpuError::UnsupportedInstruction {
+                address,
+                instruction,
+            });
         }
 
         let left = self.read_operand_register(rn, address);
