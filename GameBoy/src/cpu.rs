@@ -2863,7 +2863,10 @@ impl Cpu {
 
         if set_flags && rd == 15 {
             if !self.restore_irq_exception_state() {
-                return Err(CpuError::UnsupportedInstruction { address, instruction });
+                return Err(CpuError::UnsupportedInstruction {
+                    address,
+                    instruction,
+                });
             }
         } else if set_flags || !write_result {
             self.flags.negative = result >> 31 != 0;
