@@ -2184,7 +2184,7 @@ impl Cpu {
                 if denominator == 0 {
                     // BIOS division by zero yields a sign-dependent sentinel,
                     // preserves the numerator as remainder, and reports |quotient|.
-                    let quotient = if numerator < 0 { 1 } else { -1 };
+                    let quotient: i32 = if numerator < 0 { 1 } else { -1 };
                     self.registers[0] = quotient as u32;
                     self.registers[1] = numerator as u32;
                     self.registers[3] = 1;
@@ -2218,10 +2218,18 @@ impl Cpu {
                 let source_bits = source_len.saturating_mul(8);
                 let element_count = source_bits / usize::from(source_width);
                 let output_bits = element_count.saturating_mul(usize::from(destination_width));
-                let word_count = output_bits.saturating_add(31) / 32;
+                // The BIOS accumulates output in a 32-bit register and only
+                // commits complete words; a trailing partial word is discarded.
+                let word_count = output_bits / 32;
                 let mut words = vec![0_u32; word_count];
                 let source_mask = (1_u32 << source_width) - 1;
+                let destination_mask = if destination_width == 32 {
+                    u32::MAX
+                } else {
+                    (1_u32 << destination_width) - 1
+                };
                 let data_offset = offset_word & 0x7FFF_FFFF;
+                let touch_zero = offset_word & 0x8000_0000 != 0;
                 for index in 0..element_count {
                     let bit = index * usize::from(source_width);
                     let mut packed = 0_u32;
@@ -2231,19 +2239,19 @@ impl Cpu {
                         packed |= u32::from((byte >> (input_bit % 8)) & 1) << source_bit;
                     }
                     let mut value = packed & source_mask;
-                    // Bit 31 of data_offset requests that zero-valued inputs remain zero.
-                    if value != 0 || offset_word & 0x8000_0000 == 0 {
+                    // Offset applies to non-zero values, and to zero values only
+                    // when the descriptor's high "touch zero" flag is set.
+                    if value != 0 || touch_zero {
                         value = value.wrapping_add(data_offset);
                     }
                     value &= destination_mask;
                     let output_bit = index * usize::from(destination_width);
                     let word_index = output_bit / 32;
-                    let shift = output_bit % 32;
-                    let shifted = u64::from(value) << shift;
-                    words[word_index] |= shifted as u32;
-                    if shift + usize::from(destination_width) > 32 {
-                        words[word_index + 1] |= (shifted >> 32) as u32;
+                    if word_index >= word_count {
+                        continue;
                     }
+                    let shift = output_bit % 32;
+                    words[word_index] |= value << shift;
                 }
                 for (index, word) in words.into_iter().enumerate() {
                     bus.write32(destination.wrapping_add((index as u32) * 4), word);
@@ -2346,59 +2354,6 @@ impl Cpu {
                     next = (root + value / root) >> 1;
                 }
                 self.registers[0] = root as u32;
-            }
-            // BitUnPack: expand low-bit-first packed source elements into
-            // a stream of destination elements, emitted as complete words.
-            0x10 => {
-                let source = self.registers[0];
-                let destination = self.registers[1];
-                let info = self.registers[2];
-                let source_len = u32::from(bus.read16(info));
-                let source_width = bus.read8(info.wrapping_add(2));
-                let destination_width = bus.read8(info.wrapping_add(3));
-                let offset_and_touch_zero = bus.read32(info.wrapping_add(4));
-                let valid_source_width = matches!(source_width, 1 | 2 | 4 | 8);
-                let valid_destination_width = matches!(destination_width, 1 | 2 | 4 | 8 | 16 | 32);
-                if !valid_source_width
-                    || !valid_destination_width
-                    || destination_width < source_width
-                {
-                    return Err(CpuError::UnsupportedInstruction {
-                        address,
-                        instruction,
-                    });
-                }
-
-                let source_mask = ((1_u16 << source_width) - 1) as u8;
-                let offset = offset_and_touch_zero & 0x7FFF_FFFF;
-                let touch_zero = offset_and_touch_zero & 0x8000_0000 != 0;
-                let mut packed_word = 0_u32;
-                let mut packed_bits = 0_u32;
-                let mut output_offset = 0_u32;
-
-                for byte_index in 0..source_len {
-                    let packed_byte = bus.read8(source.wrapping_add(byte_index));
-                    for bit_offset in (0..8).step_by(usize::from(source_width)) {
-                        let value = u32::from((packed_byte >> bit_offset) & source_mask);
-                        let value = if value != 0 || touch_zero {
-                            value.wrapping_add(offset)
-                        } else {
-                            value
-                        };
-                        // The hardware packs each expanded value into the next
-                        // low-order destination field. Values wider than the
-                        // requested field retain their overflow behavior.
-                        packed_word |= value.wrapping_shl(packed_bits);
-                        packed_bits += u32::from(destination_width);
-                        if packed_bits == 32 {
-                            bus.write32(destination.wrapping_add(output_offset), packed_word);
-                            output_offset = output_offset.wrapping_add(4);
-                            packed_word = 0;
-                            packed_bits = 0;
-                        }
-                    }
-                }
-                // Like the BIOS routine, an incomplete final word is not stored.
             }
             // CpuSet: 16-bit or 32-bit copy/fill. Source bit 24 selects fill.
             0x0B => {
