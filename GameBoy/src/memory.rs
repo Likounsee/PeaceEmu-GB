@@ -2723,6 +2723,20 @@ mod tests {
     }
 
     #[test]
+    fn sio_unused_rcnt_bit_does_not_disable_normal_transfer_but_mode_bit_does() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0134, 1 << 14);
+        bus.write16(0x0400_0128, (1 << 7) | 1);
+        bus.advance_cycles(512);
+        assert_eq!(bus.read16(0x0400_0128) & (1 << 7), 0);
+
+        bus.write16(0x0400_0134, 1 << 15);
+        bus.write16(0x0400_0128, (1 << 7) | 1);
+        bus.advance_cycles(4096);
+        assert_ne!(bus.read16(0x0400_0128) & (1 << 7), 0);
+    }
+
+    #[test]
     fn sio_external_clock_transfer_remains_busy_until_clocked_by_peer() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_012A, 0x003C);
@@ -4281,7 +4295,7 @@ mod tests {
 
         assert_eq!(
             bus.gamepak_sequence_cycles(0x0801_FFFE, false, 2, 2),
-            Some(5)
+            Some(6)
         );
         // A caller cannot claim sequential timing for the first halfword
         // of a newly entered 128 KiB block.
@@ -4292,12 +4306,12 @@ mod tests {
         // A 32-bit access straddling the boundary has S then N bus beats.
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0801_FFFE, true, 4),
-            Some(5)
+            Some(4)
         );
         // Entering the block boundary during a burst also restarts N timing.
         assert_eq!(
             bus.gamepak_sequence_cycles(0x0801_FFFC, false, 2, 3),
-            Some(6)
+            Some(7)
         );
     }
 
