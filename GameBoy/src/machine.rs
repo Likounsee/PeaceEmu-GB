@@ -2480,7 +2480,7 @@ mod tests {
         assert_eq!(machine.dma_enabled(0), Some(true));
         assert_eq!(machine.dma_source_address(0), Some(0x0200_0000));
         assert_eq!(machine.dma_destination_address(0), Some(0x0300_0000));
-        assert_eq!(machine.dma_completed_transfers(0), Some(0));
+        assert_eq!(machine.dma_completed_transfers(0), Some(1));
     }
 
     #[test]
@@ -2759,7 +2759,7 @@ mod tests {
         machine.bus_mut().write32(0x0400_00B0, 0x0200_0000);
         machine.bus_mut().write32(0x0400_00B4, 0x0300_0000);
         machine.bus_mut().write16(0x0400_00B8, 1);
-        machine.bus_mut().write16(0x0400_00BA, 0xA260); // HBlank, repeat, destination reload, enable.
+        machine.bus_mut().write16(0x0400_00BA, 0xA360); // HBlank, repeat, fixed source, destination reload.
 
         let steps = machine.run_until_dma_transfer_count(0, 2, 4_000).unwrap();
         assert!(matches!(steps, Some(count) if count > 0 && count <= 4_000));
@@ -3929,7 +3929,7 @@ mod tests {
         );
         assert_eq!(
             machine
-                .run_until_audio_fifo_samples_consumed(0, 3, 1)
+                .run_until_audio_fifo_samples_consumed(0, 5, 0)
                 .unwrap(),
             None
         );
