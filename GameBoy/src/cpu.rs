@@ -2221,11 +2221,6 @@ impl Cpu {
                 let word_count = output_bits.saturating_add(31) / 32;
                 let mut words = vec![0_u32; word_count];
                 let source_mask = (1_u32 << source_width) - 1;
-                let destination_mask = if destination_width == 32 {
-                    u32::MAX
-                } else {
-                    (1_u32 << destination_width) - 1
-                };
                 let data_offset = offset_word & 0x7FFF_FFFF;
                 for index in 0..element_count {
                     let bit = index * usize::from(source_width);
@@ -2375,7 +2370,7 @@ impl Cpu {
                     });
                 }
 
-                let source_mask = (1_u16 << source_width) as u8 - 1;
+                let source_mask = ((1_u16 << source_width) - 1) as u8;
                 let destination_mask = if destination_width == 32 {
                     u32::MAX
                 } else {
@@ -2399,7 +2394,7 @@ impl Cpu {
                         // The hardware packs each expanded value into the next
                         // low-order destination field. Values wider than the
                         // requested field retain their overflow behavior.
-                        packed_word |= value.wrapping_shl(packed_bits) & (destination_mask << packed_bits);
+                        packed_word |= value.wrapping_shl(packed_bits);
                         packed_bits += u32::from(destination_width);
                         if packed_bits == 32 {
                             bus.write32(destination.wrapping_add(output_offset), packed_word);
@@ -8027,8 +8022,31 @@ mod tests {
         cpu.execute_swi(0x0200_0300, 0xEF00_0010, 0x10, false, &mut bus)
             .unwrap();
 
-        assert_eq!(bus.read32(destination), 0x0908_0706);
-        assert_eq!(bus.read32(destination + 4), 0x0A09_0803);
+        assert_eq!(bus.read32(destination), 0x7957_3513);
+    }
+
+    #[test]
+    fn bios_bit_unpack_expands_nibbles_into_two_packed_output_words() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        let info = 0x0200_0200;
+        bus.write32(source, 0x8765_4321);
+        bus.write16(info, 4);
+        bus.write8(info + 2, 4);
+        bus.write8(info + 3, 8);
+        bus.write32(info + 4, 0);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0300);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, info);
+        cpu.execute_swi(0x0200_0300, 0xEF00_0010, 0x10, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read32(destination), 0x0403_0201);
+        assert_eq!(bus.read32(destination + 4), 0x0807_0605);
     }
 
     #[test]
