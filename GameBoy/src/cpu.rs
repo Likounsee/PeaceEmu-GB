@@ -206,133 +206,6 @@ fn bios_rl_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u8>> {
     Some(output)
 }
 
-/// Decodes the GBA BIOS Huffman stream into complete little-endian output words.
-fn bios_huffman_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u32>> {
-    let source = source & !3;
-    let header = bus.read32(source);
-    let encoded_width = (header & 0x0F) as u8;
-    let symbol_width = match encoded_width {
-        0 => 8,
-        4 => 4,
-        _ => return None,
-    };
-    if header as u8 != (0x20 | encoded_width) {
-        return None;
-    }
-    let output_bytes = ((header >> 8) & 0x00FF_FFFF) as usize;
-    if output_bytes == 0 {
-        return Some(Vec::new());
-    }
-
-    let tree_size = u32::from(bus.read8(source.wrapping_add(4))) * 2 + 2;
-    let tree_base = source.wrapping_add(5);
-    let tree_end = tree_base.checked_add(tree_size)?;
-    let bitstream = tree_end.checked_add(3)? & !3;
-    let symbol_mask = (1_u32 << symbol_width) - 1;
-    let symbols_per_word = 32 / u32::from(symbol_width);
-    let symbol_count = output_bytes.checked_mul(8)? / usize::from(symbol_width);
-    let mut output = Vec::with_capacity(output_bytes.div_ceil(4));
-    let mut packed_word = 0_u32;
-    let mut symbols_in_word = 0_u32;
-    let mut node_address = tree_base;
-    let mut bitstream_address = bitstream;
-    let mut bitstream_word = 0_u32;
-    let mut bits_remaining = 0_u8;
-
-    for _ in 0..symbol_count {
-        let symbol = loop {
-            if bits_remaining == 0 {
-                bitstream_word = bus.read32(bitstream_address);
-                bitstream_address = bitstream_address.wrapping_add(4);
-                bits_remaining = 32;
-            }
-            let branch = bitstream_word >> 31 != 0;
-            bitstream_word <<= 1;
-            bits_remaining -= 1;
-
-            let node = bus.read8(node_address);
-            let child_base = (node_address & !1)
-                .wrapping_add(u32::from(node & 0x3F) * 2)
-                .wrapping_add(3);
-            let (child, is_leaf) = if branch {
-                (child_base.wrapping_add(1), node & 0x40 != 0)
-            } else {
-                (child_base, node & 0x80 != 0)
-            };
-            if child < tree_base || child >= tree_end {
-                return None;
-            }
-            if is_leaf {
-                node_address = tree_base;
-                break u32::from(bus.read8(child)) & symbol_mask;
-            }
-            node_address = child;
-        };
-
-        packed_word |= symbol << (symbols_in_word * u32::from(symbol_width));
-        symbols_in_word += 1;
-        if symbols_in_word == symbols_per_word {
-            output.push(packed_word);
-            packed_word = 0;
-            symbols_in_word = 0;
-        }
-    }
-    if symbols_in_word != 0 {
-        output.push(packed_word);
-    }
-    Some(output)
-}
-
-/// Expands the BIOS BitUnPack source bitstream into destination-width values.
-fn bios_bit_unpack(bus: &MemoryBus, source: u32, info: u32) -> Option<Vec<u32>> {
-    let source_bytes = usize::from(bus.read16(info));
-    let source_width = bus.read8(info.wrapping_add(2));
-    let destination_width = bus.read8(info.wrapping_add(3));
-    if !matches!(source_width, 1 | 2 | 4 | 8)
-        || !matches!(destination_width, 1 | 2 | 4 | 8 | 16 | 32)
-        || destination_width < source_width
-        || destination_width % source_width != 0
-    {
-        return None;
-    }
-
-    let offset_word = bus.read32(info.wrapping_add(4));
-    let zero_is_unpacked = offset_word & 0x8000_0000 != 0;
-    let offset = offset_word & 0x7FFF_FFFF;
-    let source_bit_count = source_bytes.checked_mul(8)?;
-    let source_mask = (1_u32 << source_width) - 1;
-    let destination_mask = if destination_width == 32 {
-        u32::MAX
-    } else {
-        (1_u32 << destination_width) - 1
-    };
-    let mut packed_word = 0_u32;
-    let mut packed_bits = 0_u8;
-    let mut words = Vec::new();
-
-    for bit_offset in (0..source_bit_count).step_by(usize::from(source_width)) {
-        let byte_address = source.wrapping_add((bit_offset / 8) as u32);
-        let bit_in_byte = bit_offset % 8;
-        let raw = (u32::from(bus.read8(byte_address)) >> bit_in_byte) & source_mask;
-        let value = if raw == 0 && zero_is_unpacked {
-            0
-        } else {
-            raw.wrapping_add(offset) & destination_mask
-        };
-        packed_word |= value << packed_bits;
-        packed_bits += destination_width;
-        if packed_bits == 32 {
-            words.push(packed_word);
-            packed_word = 0;
-            packed_bits = 0;
-        }
-    }
-    if packed_bits != 0 {
-        words.push(packed_word);
-    }
-    Some(words)
-}
-
 /// Writes decompressed BIOS output, using halfword stores for VRAM destinations.
 fn bios_write_decompressed(bus: &mut MemoryBus, destination: u32, bytes: &[u8], vram: bool) {
     if vram {
@@ -2332,11 +2205,10 @@ impl Cpu {
                 let source_width = bus.read8(info.wrapping_add(2));
                 let destination_width = bus.read8(info.wrapping_add(3));
                 let offset_word = bus.read32(info.wrapping_add(4));
-                if source_width == 0
-                    || source_width > 8
-                    || destination_width == 0
-                    || destination_width > 32
+                if !matches!(source_width, 1 | 2 | 4 | 8)
+                    || !matches!(destination_width, 1 | 2 | 4 | 8 | 16 | 32)
                     || destination_width < source_width
+                    || destination_width % source_width != 0
                 {
                     return Err(CpuError::UnsupportedInstruction {
                         address,
@@ -2541,33 +2413,6 @@ impl Cpu {
                         value = bus.read32(source.wrapping_add(index * 4));
                     }
                     bus.write32(destination.wrapping_add(index * 4), value);
-                }
-            }
-            // HuffUnComp decodes 4-bit or 8-bit symbols into packed words.
-            0x13 => {
-                let words = bios_huffman_decompress(bus, self.registers[0]).ok_or(
-                    CpuError::UnsupportedInstruction {
-                        address,
-                        instruction,
-                    },
-                )?;
-                let destination = self.registers[1] & !3;
-                for (index, word) in words.into_iter().enumerate() {
-                    bus.write32(destination.wrapping_add((index as u32) * 4), word);
-                }
-            }
-            // BitUnPack expands packed 1/2/4/8-bit source values into
-            // destination elements described by the BIOS BitUnPackInfo struct.
-            0x10 => {
-                let words = bios_bit_unpack(bus, self.registers[0], self.registers[2]).ok_or(
-                    CpuError::UnsupportedInstruction {
-                        address,
-                        instruction,
-                    },
-                )?;
-                let destination = self.registers[1] & !3;
-                for (index, word) in words.into_iter().enumerate() {
-                    bus.write32(destination.wrapping_add((index as u32) * 4), word);
                 }
             }
             // Differential filters restore byte/halfword delta-compressed assets.
@@ -2781,6 +2626,12 @@ impl Cpu {
                 bits_remaining -= 1;
                 let child_offset = u32::from(node & 0x3F) * 2 + 2 + u32::from(bit);
                 let child_address = node_address.wrapping_add(child_offset);
+                if node_address < tree_start || node_address >= tree_start.wrapping_add(tree_size as u32)
+                    || child_address < tree_start
+                    || child_address >= tree_start.wrapping_add(tree_size as u32)
+                {
+                    return Err(CpuError::UnsupportedInstruction { address, instruction });
+                }
                 let is_leaf = if bit == 0 {
                     node & 0x80 != 0
                 } else {
@@ -8640,77 +8491,5 @@ mod tests {
         assert_eq!(bus.read16(destination + 2), 0x5656);
         assert_eq!(bus.read16(destination + 4), 0x5656);
     }
-    #[test]
-    fn bios_bit_unpack_expands_nibbles_and_applies_data_offset() {
-        let mut bus = bus_with_program(&[0xE1A0_0000]);
-        let source = 0x0200_1000;
-        let destination = 0x0200_2000;
-        let info = 0x0200_3000;
-        bus.write8(source, 0x21);
-        bus.write8(source + 1, 0x03);
-        bus.write16(info, 2); // Two source bytes.
-        bus.write8(info + 2, 4); // Four-bit source elements.
-        bus.write8(info + 3, 8); // Eight-bit destination elements.
-        bus.write32(info + 4, 0x0000_0010);
-        let mut cpu = Cpu::new();
-        cpu.set_register(0, source);
-        cpu.set_register(1, destination);
-        cpu.set_register(2, info);
-        cpu.execute_swi(0, 0, 0x10, false, &mut bus).unwrap();
-        assert_eq!(bus.read32(destination), 0x1013_1211);
-    }
 
-    #[test]
-    fn bios_bit_unpack_can_preserve_zero_elements_and_reject_invalid_widths() {
-        let mut bus = bus_with_program(&[0xE1A0_0000]);
-        let source = 0x0200_1000;
-        let info = 0x0200_3000;
-        bus.write8(source, 0x10);
-        bus.write16(info, 1);
-        bus.write8(info + 2, 2);
-        bus.write8(info + 3, 4);
-        bus.write32(info + 4, 0x8000_0003);
-        let words = bios_bit_unpack(&bus, source, info).unwrap();
-        assert_eq!(words, vec![0x0000_0400]);
-
-        bus.write8(info + 2, 3);
-        assert!(bios_bit_unpack(&bus, source, info).is_none());
-    }
-    #[test]
-    fn bios_huffman_unpacks_eight_bit_symbols_from_tree() {
-        let mut bus = bus_with_program(&[0xE1A0_0000]);
-        let source = 0x0200_1000;
-        let destination = 0x0200_2000;
-        bus.write32(source, (4 << 8) | 0x20);
-        bus.write8(source + 4, 1); // Three tree bytes.
-        bus.write8(source + 5, 0xC0); // Both root children are leaves.
-        bus.write8(source + 6, 0);
-        bus.write8(source + 7, b'A');
-        bus.write8(source + 8, b'B');
-        bus.write32(source + 12, 0x6000_0000); // A, B, B, A.
-        let mut cpu = Cpu::new();
-        cpu.set_register(0, source);
-        cpu.set_register(1, destination);
-        cpu.execute_swi(0, 0, 0x13, false, &mut bus).unwrap();
-        assert_eq!(bus.read32(destination), u32::from_le_bytes(*b"ABBA"));
-    }
-
-    #[test]
-    fn bios_huffman_packs_four_bit_symbols_and_rejects_bad_headers() {
-        let mut bus = bus_with_program(&[0xE1A0_0000]);
-        let source = 0x0200_1000;
-        let destination = 0x0200_2000;
-        bus.write32(source, (4 << 8) | 0x24);
-        bus.write8(source + 4, 1);
-        bus.write8(source + 5, 0xC0);
-        bus.write8(source + 6, 0);
-        bus.write8(source + 7, 0x03);
-        bus.write8(source + 8, 0x07);
-        bus.write32(source + 12, 0x5555_5555);
-        let words = bios_huffman_decompress(&bus, source).unwrap();
-        assert_eq!(words, vec![0x7373_7373]);
-
-        bus.write32(source, (4 << 8) | 0x23);
-        assert!(bios_huffman_decompress(&bus, source).is_none());
-    }
 }
