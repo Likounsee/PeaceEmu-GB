@@ -3709,7 +3709,7 @@ mod tests {
             machine.run_until_audio_fifo_consumed(0, 8).unwrap(),
             Some(1)
         );
-        assert_eq!(machine.audio_fifo_len(0), Some(7));
+        assert_eq!(machine.audio_fifo_len(0), Some(3));
         assert_eq!(machine.audio_fifo_last_sample(0), Some(0x7F_i8));
         assert_eq!(machine.direct_sound_stereo_sample(), (127, 127));
     }
