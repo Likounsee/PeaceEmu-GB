@@ -3578,7 +3578,7 @@ mod tests {
 
         bus.write16(0x0400_0088, 0);
         bus.write8(0x0400_0089, 0xFF);
-        assert_eq!(bus.read16(0x0400_0088), 0xC000);
+        assert_eq!(bus.read16(0x0400_0088), 0xC300);
 
         bus.write8(0x0400_0088, 0xFF);
         assert_eq!(bus.read16(0x0400_0088), 0xC3FF);
