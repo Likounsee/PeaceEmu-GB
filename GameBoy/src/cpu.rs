@@ -211,8 +211,12 @@ fn bios_huffman_decompress(bus: &MemoryBus, source: u32) -> Option<Vec<u32>> {
     let source = source & !3;
     let header = bus.read32(source);
     let encoded_width = (header & 0x0F) as u8;
-    let symbol_width = if encoded_width == 0 { 8 } else { encoded_width };
-    if !matches!(symbol_width, 4 | 8) || header as u8 != (0x20 | encoded_width) {
+    let symbol_width = match encoded_width {
+        0 => 8,
+        4 => 4,
+        _ => return None,
+    };
+    if header as u8 != (0x20 | encoded_width) {
         return None;
     }
     let output_bytes = ((header >> 8) & 0x00FF_FFFF) as usize;
@@ -8677,12 +8681,13 @@ mod tests {
         let mut bus = bus_with_program(&[0xE1A0_0000]);
         let source = 0x0200_1000;
         let destination = 0x0200_2000;
-        bus.write32(source, (4 << 8) | 0x28);
+        bus.write32(source, (4 << 8) | 0x20);
         bus.write8(source + 4, 1); // Three tree bytes.
         bus.write8(source + 5, 0xC0); // Both root children are leaves.
-        bus.write8(source + 6, b'A');
-        bus.write8(source + 7, b'B');
-        bus.write32(source + 8, 0x6000_0000); // A, B, B, A.
+        bus.write8(source + 6, 0);
+        bus.write8(source + 7, b'A');
+        bus.write8(source + 8, b'B');
+        bus.write32(source + 12, 0x6000_0000); // A, B, B, A.
         let mut cpu = Cpu::new();
         cpu.set_register(0, source);
         cpu.set_register(1, destination);
@@ -8698,9 +8703,10 @@ mod tests {
         bus.write32(source, (4 << 8) | 0x24);
         bus.write8(source + 4, 1);
         bus.write8(source + 5, 0xC0);
-        bus.write8(source + 6, 0x03);
-        bus.write8(source + 7, 0x07);
-        bus.write32(source + 8, 0x5555_5555);
+        bus.write8(source + 6, 0);
+        bus.write8(source + 7, 0x03);
+        bus.write8(source + 8, 0x07);
+        bus.write32(source + 12, 0x5555_5555);
         let words = bios_huffman_decompress(&bus, source).unwrap();
         assert_eq!(words, vec![0x7373_7373]);
 
