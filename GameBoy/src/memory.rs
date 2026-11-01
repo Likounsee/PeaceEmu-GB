@@ -781,12 +781,12 @@ impl MemoryBus {
 
     /// Returns total Game Pak bus cycles for an 8-, 16-, or 32-bit access.
     ///
-    /// ROM uses a 16-bit external data bus: byte and halfword accesses consume
-    /// one halfword access, while a word consumes the requested first access
-    /// plus a sequential second halfword. SRAM uses an 8-bit bus, so wider
-    /// accesses consume one SRAM wait-state duration per byte. This helper
-    /// reports bus duration only. The CPU applies excess latency to instruction
-    /// fetches and selected scalar/multiple data accesses; DMA stalls and full bus
+    /// ROM and Flash use a 16-bit external data bus: byte and halfword accesses
+    /// consume one halfword access, while a word consumes the requested first
+    /// access plus a sequential second halfword. SRAM uses an 8-bit bus, so wider
+    /// accesses consume one SRAM wait-state duration per byte. This helper reports
+    /// bus duration only. The CPU applies excess latency to instruction fetches
+    /// and selected scalar/multiple data accesses; DMA stalls and full bus
     /// contention remain outside the timing model.
     /// Unsupported widths and addresses outside the Game Pak window return None.
     pub fn gamepak_access_cycles_for_width(
@@ -4341,6 +4341,30 @@ mod tests {
             flash_bus.gamepak_access_cycles_for_width(0x0E00_FFFF, false, 4),
             None
         );
+    }
+
+    #[test]
+    fn flash_and_sram_sequences_scale_differently_with_waitcnt() {
+        let flash_cart =
+            cartridge_with_save_signature(b"").with_save_type(Some(crate::SaveType::Flash64K));
+        let mut flash_bus = MemoryBus::new(flash_cart);
+        let mut sram_bus = MemoryBus::new(cartridge());
+
+        for (waitcnt, halfword_cycles) in [(0, 4), (1, 3), (2, 2), (3, 8)] {
+            flash_bus.write16(0x0400_0204, waitcnt);
+            sram_bus.write16(0x0400_0204, waitcnt);
+
+            // Each 32-bit Flash transfer is two halfwords; SRAM transfers
+            // four individual bytes. Two transfers preserve that distinction.
+            assert_eq!(
+                flash_bus.gamepak_sequence_cycles(0x0E00_0000, false, 4, 2),
+                Some(u64::from(halfword_cycles) * 4)
+            );
+            assert_eq!(
+                sram_bus.gamepak_sequence_cycles(0x0E00_0000, false, 4, 2),
+                Some(u64::from(halfword_cycles) * 8)
+            );
+        }
     }
 
     #[test]
