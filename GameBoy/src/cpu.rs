@@ -8390,7 +8390,7 @@ mod tests {
     #[test]
     fn irq_user_bank_stm_and_ldm_transfer_user_sp_lr() {
         // STMIA r0!, {r13-r14}^ ; LDMIA r1!, {r13-r14}^
-        let mut bus = bus_with_program(&[0xE8E0_C000, 0xE8F1_C000]);
+        let mut bus = bus_with_program(&[0xE8E0_6000, 0xE8F1_6000]);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
         cpu.set_register(13, 0x0300_7E00);
@@ -8418,7 +8418,7 @@ mod tests {
     #[test]
     fn irq_ldm_user_bank_with_pc_performs_exception_return() {
         // LDMIA r0, {r13-r15}^
-        let mut bus = bus_with_program(&[0xE8D0_E000]);
+        let mut bus = bus_with_program(&[0xE8F0_E000]);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
         cpu.set_register(13, 0x0300_7000);
@@ -8445,7 +8445,7 @@ mod tests {
         let source = 0x0200_1000;
         let destination = 0x0200_2000;
         bus.write32(source, 0x0000_0810); // LZ77, eight output bytes.
-        bus.write8(source + 4, 0x40); // Four literals, then one back-reference.
+        bus.write8(source + 4, 0x10); // Four literals, then one back-reference.
         for (offset, byte) in [b'A', b'B', b'C', b'D'].into_iter().enumerate() {
             bus.write8(source + 5 + offset as u32, byte);
         }
