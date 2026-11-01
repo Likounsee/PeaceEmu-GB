@@ -7116,6 +7116,12 @@ mod tests {
             stopped: false,
             bios_wait_mask: None,
             pc: 0x0800_0003,
+            processor_mode: 0x1F,
+            irq_disabled: false,
+            user_sp_lr: [0; 2],
+            irq_sp_lr: [0; 2],
+            spsr_irq: 0,
+            spsr_irq_valid: false,
         });
 
         assert!(!cpu.is_thumb());
