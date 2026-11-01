@@ -3814,7 +3814,10 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let a4 = cpu.register(0).unwrap();
-        assert_eq!(a4, (7_040_000.0_f64 * 2.0_f64.powf(-111.0 / 12.0)).round() as u32);
+        assert_eq!(
+            a4,
+            (7_040_000.0_f64 * 2.0_f64.powf(-111.0 / 12.0)).round() as u32
+        );
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69);
