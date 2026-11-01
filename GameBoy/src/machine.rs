@@ -1489,7 +1489,7 @@ impl GbaMachine {
     /// A timer overflow consumes one signed PCM byte. The method observes queue occupancy, so
     /// it also detects consumption when consecutive PCM samples have identical
     /// values. Returns Some(n) after n instructions, or None for an invalid
-    /// FIFO, an initially empty FIFO, STOP, or an exhausted instruction budget.
+    /// FIFO, STOP, or an exhausted instruction budget.
     pub fn run_until_audio_fifo_consumed(
         &mut self,
         fifo: usize,
