@@ -8491,5 +8491,4 @@ mod tests {
         assert!(!cpu.is_stopped());
         assert_eq!(cpu.register(15), Some(0x0200_0004));
     }
-
 }
