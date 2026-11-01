@@ -764,7 +764,10 @@ mod tests {
         assert_eq!(whole.status_bits(), chunked.status_bits());
         assert_eq!(whole.square[0].phase, chunked.square[0].phase);
         assert_eq!(whole.square[0].volume, chunked.square[0].volume);
-        assert_eq!(whole.square[0].envelope_timer, chunked.square[0].envelope_timer);
+        assert_eq!(
+            whole.square[0].envelope_timer,
+            chunked.square[0].envelope_timer
+        );
         assert_eq!(whole.noise.lfsr, chunked.noise.lfsr);
         assert_eq!(whole.noise.timer, chunked.noise.timer);
         assert_eq!(whole.noise.volume, chunked.noise.volume);
