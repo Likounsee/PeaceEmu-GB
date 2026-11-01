@@ -1140,19 +1140,17 @@ impl MemoryBus {
         // up idle/high; link-cable transfers are not clocked by this bus yet.
         if (0x0400_0120..=0x0400_0127).contains(&address) {
             let offset = (address - 0x0400_0120) as usize;
-            let value = if (self.sio_control >> 12) & 3 == 1 {
-                self.sio_data32
-            } else {
-                u32::from(self.sio_multi[offset / 2])
-            };
-            let shift = if (self.sio_control >> 12) & 3 == 1 {
-                offset * 8
-            } else {
-                (offset & 1) * 8
-            };
-            return ((value >> shift) & 0xFF) as u8;
+            if (self.sio_control >> 12) & 3 == 1 {
+                return if offset < 4 {
+                    (self.sio_data32 >> (offset * 8)) as u8
+                } else {
+                    0xFF
+                };
+            }
+            let value = self.sio_multi[offset / 2];
+            return ((value >> ((offset & 1) * 8)) & 0xFF) as u8;
         }
-        if address == 0x0400_012A {
+        if (address & !1) == 0x0400_012A {
             return self.sio_data8;
         }
         if (0x0400_0128..=0x0400_0129).contains(&address) {
@@ -1862,23 +1860,22 @@ impl MemoryBus {
         // WAITCNT exposes SRAM/Game Pak wait-state, PHI, and prefetch controls;
         // bit 15 reads as zero; the modeled timing and high-byte controls are preserved.
         // SIO control and transmit data registers are writable halfwords.
-        if address == 0x0400_0128 {
-            self.sio_control = u16::from(value) & 0x700F;
+        if (address & !1) == 0x0400_0128 {
+            self.sio_control = u16::from(value) & 0x30CF;
             return;
         }
         if address == 0x0400_012A {
             self.sio_data8 = value as u8;
             return;
         }
-        if address == 0x0400_0134 {
+        if (address & !1) == 0x0400_0134 {
             self.sio_rcnt = u16::from(value) & 0xC00F;
             return;
         }
         if (address & !3) == 0x0400_0120 && self.sio_control >> 12 & 3 == 1 {
             let shift = (address & 2) * 8;
             let mask = 0xFFFF_u32 << shift;
-            self.sio_data32 =
-                (self.sio_data32 & !mask) | (u32::from(value) << shift);
+            self.sio_data32 = (self.sio_data32 & !mask) | (u32::from(value) << shift);
             return;
         }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
@@ -1965,12 +1962,12 @@ impl MemoryBus {
             let shift = (address - 0x0400_0128) * 8;
             let mask = 0xFF_u16 << shift;
             self.sio_control = (self.sio_control & !mask) | (u16::from(value) << shift);
-            self.sio_control &= 0x700F;
+            self.sio_control &= 0x30CF;
             return;
         }
         if (0x0400_0134..=0x0400_0135).contains(&address) {
             let shift = (address - 0x0400_0134) * 8;
-            let mask = (if address == 0x0400_0134 { 0x00FF } else { 0xFF00 }) as u16;
+            let mask = if address == 0x0400_0134 { 0x00FF } else { 0xFF00 };
             self.sio_rcnt = (self.sio_rcnt & !mask) | (u16::from(value) << shift & mask);
             self.sio_rcnt &= 0xC00F;
             return;
@@ -2574,7 +2571,7 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0126), 0xFFFF);
 
         bus.write16(0x0400_0128, 0xFFFF);
-        assert_eq!(bus.read16(0x0400_0128), 0x700F);
+        assert_eq!(bus.read16(0x0400_0128), 0x30CF);
         bus.write16(0x0400_0134, 0xFFFF);
         assert_eq!(bus.read16(0x0400_0134), 0xC00F);
     }
