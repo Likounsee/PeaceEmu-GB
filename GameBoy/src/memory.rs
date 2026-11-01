@@ -5596,7 +5596,7 @@ mod tests {
         bus.write8(0x0400_0062, 0x80); // Square 1, 50% duty.
         bus.write8(0x0400_0063, 0xF0); // Maximum envelope volume.
         bus.write8(0x0400_0065, 0x80); // Trigger.
-        bus.write16(0x0400_0080, 0x0701); // NR50 volume 7, route square 1 right.
+        bus.write16(0x0400_0080, 0x0107); // NR50 right volume 7, NR51 routes square 1 right.
 
         let full = bus.psg_stereo_sample();
         assert_eq!(full.1, 240);
