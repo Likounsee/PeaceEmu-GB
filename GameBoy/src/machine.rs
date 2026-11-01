@@ -2495,7 +2495,10 @@ mod tests {
         machine.bus_mut().advance_cycles(227 * 1232 + 272);
         assert_eq!(machine.video_vblank_events(), 1);
         let snapshot = machine.diagnostic_snapshot();
-        assert_eq!(snapshot.dma_completed_transfers, [Some(1), Some(0), Some(0), Some(0)]);
+        assert_eq!(
+            snapshot.dma_completed_transfers,
+            [Some(1), Some(0), Some(0), Some(0)]
+        );
         assert_eq!(snapshot.video_hblank_events, 228);
         assert_eq!(snapshot.video_vblank_events, 1);
         assert_eq!(machine.diagnostic_snapshot(), snapshot);
