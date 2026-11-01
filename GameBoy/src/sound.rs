@@ -447,12 +447,15 @@ impl Psg {
         }
         if self.wave.enabled && self.wave.volume_code != 0 {
             let sample_index = (self.wave.position / 2) as usize;
-            let bank_offset = if self.wave.two_bank_mode {
-                0
+            // In 64-sample mode playback begins at the selected bank and
+            // then traverses the other bank. In 32-sample mode only the
+            // selected bank is addressed.
+            let sample_index = if self.wave.two_bank_mode {
+                (self.wave.bank_select * 16 + sample_index) & 31
             } else {
-                self.wave.bank_select * 16
+                self.wave.bank_select * 16 + sample_index
             };
-            let sample_byte = self.wave_ram[bank_offset + sample_index];
+            let sample_byte = self.wave_ram[sample_index];
             let nibble = if self.wave.position & 1 == 0 {
                 sample_byte >> 4
             } else {
@@ -652,10 +655,12 @@ mod tests {
         psg.write(0x72, 0x20);
         psg.write(0x74, 0xFF);
         psg.write(0x75, 0x87);
-        assert_eq!(psg.channel_samples()[2], -14);
+        // Two-bank playback starts from the selected bank (bank 1),
+        // then continues through bank 0 after 32 samples.
+        assert_eq!(psg.channel_samples()[2], 14);
         psg.advance(8 * 32);
         assert_eq!(psg.wave.position, 32);
-        assert_eq!(psg.channel_samples()[2], 14);
+        assert_eq!(psg.channel_samples()[2], -14);
     }
 
     #[test]
