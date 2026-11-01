@@ -2218,24 +2218,6 @@ impl Cpu {
                 self.registers[1] = 1;
                 self.registers[3] = 0x4000;
             }
-            // SoundBiasChange selects one of the two BIOS PWM bias targets.
-            // Preserve the amplitude-resolution bits in SOUNDBIAS.
-            0x19 => {
-                let current = bus.read16(0x0400_0088);
-                let bias = if self.registers[0] == 0 { 0 } else { 0x0200 };
-                bus.write16(0x0400_0088, (current & !0x03FF) | bias);
-            }
-            // MidiKey2Freq reads the base frequency from WaveData+4 and
-            // applies the MIDI key and 1/256-semitone fine adjustment.
-            0x1F => {
-                let wave_data = self.registers[0];
-                let base_frequency = bus.read32(wave_data.wrapping_add(4));
-                let key = (self.registers[1] & 0xFF) as f32;
-                let fine = (self.registers[2] & 0xFF) as f32;
-                let semitones = (180.0_f32 - key - fine / 256.0) / 12.0;
-                let divisor = 2.0_f32.powf(semitones);
-                self.registers[0] = (base_frequency as f32 / divisor) as u32;
-            }
             // ArcTan: interpret R0 as signed 1.14 tangent and return a 3.12 angle.
             0x09 => {
                 let tangent = (self.registers[0] as i16) as f64 / 16_384.0;
@@ -3832,7 +3814,7 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let a4 = cpu.register(0).unwrap();
-        assert_eq!(a4, (7_040_000.0_f32 / 2.0_f32.powf(111.0 / 12.0)) as u32);
+        assert_eq!(a4, (7_040_000.0_f64 * 2.0_f64.powf(-111.0 / 12.0)).round() as u32);
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69);
