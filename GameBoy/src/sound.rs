@@ -224,7 +224,14 @@ impl Psg {
                     channel.enabled = false;
                 }
             }
-            Self::clock_envelope(&mut channel.volume, channel.initial_volume, channel.envelope_increase, channel.envelope_period, &mut channel.envelope_timer, cycles);
+            Self::clock_envelope(
+                &mut channel.volume,
+                channel.initial_volume,
+                channel.envelope_increase,
+                channel.envelope_period,
+                &mut channel.envelope_timer,
+                cycles,
+            );
         }
         if self.wave.enabled {
             let mut remaining = cycles;
@@ -260,11 +267,25 @@ impl Psg {
                     self.noise.enabled = false;
                 }
             }
-            Self::clock_envelope(&mut self.noise.volume, self.noise.initial_volume, self.noise.envelope_increase, self.noise.envelope_period, &mut self.noise.envelope_timer, cycles);
+            Self::clock_envelope(
+                &mut self.noise.volume,
+                self.noise.initial_volume,
+                self.noise.envelope_increase,
+                self.noise.envelope_period,
+                &mut self.noise.envelope_timer,
+                cycles,
+            );
         }
     }
 
-    fn clock_envelope(volume: &mut u8, _initial: u8, increase: bool, period: u8, timer: &mut u32, cycles: u32) {
+    fn clock_envelope(
+        volume: &mut u8,
+        _initial: u8,
+        increase: bool,
+        period: u8,
+        timer: &mut u32,
+        cycles: u32,
+    ) {
         if period == 0 {
             return;
         }
