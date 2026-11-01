@@ -1,8 +1,0 @@
-/target/
-**/target/
-
-# Emulator-generated persistent save data
-*.sav
-*.srm
-*.flash
-*.eeprom

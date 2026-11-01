@@ -631,7 +631,7 @@ mod tests {
             psg.advance(256);
         }
         assert_eq!(psg.status_bits() & 1, 0);
-    } 
+    }
     #[test]
     fn envelope_clock_is_invariant_to_cycle_chunking() {
         let mut one_shot = Psg::default();
@@ -679,5 +679,4 @@ mod tests {
         assert_eq!(psg.noise.volume, 3);
         assert_eq!(psg.noise.envelope_timer, 262_144 - 9);
     }
-
 }
