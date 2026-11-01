@@ -749,5 +749,4 @@ mod tests {
 
         assert_eq!(psg.status_bits() & 0b1001, 0);
     }
-
 }
