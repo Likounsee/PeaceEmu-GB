@@ -2923,7 +2923,7 @@ impl Cpu {
         match register {
             13 if self.mode == 0x12 => self.user_sp_lr[0] = value,
             14 if self.mode == 0x12 => self.user_sp_lr[1] = value,
-            15 => self.registers[15] = value & !3,
+            15 => self.registers[15] = value,
             _ => self.registers[register] = value,
         }
     }
@@ -8332,6 +8332,4 @@ mod tests {
         assert_eq!(cpu.register(14), Some(0x0800_2000));
         assert_eq!(cpu.register(15), Some(0x0800_4000));
     }
-
-
 }
