@@ -5677,6 +5677,44 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0102) & !0x00C3, 0);
     }
     #[test]
+    #[test]
+    fn timer_audio_and_video_state_are_invariant_to_cycle_chunking() {
+        let mut whole = MemoryBus::new(cartridge());
+        let mut chunked = MemoryBus::new(cartridge());
+
+        for bus in [&mut whole, &mut chunked] {
+            bus.write16(0x0400_0084, 0x0080);
+            bus.write16(0x0400_0082, (1 << 8) | (1 << 9));
+            bus.write32(0x0400_00A0, 0x807F_01FF);
+            bus.write32(0x0400_00A0, 0x4433_2211);
+            bus.write16(0x0400_0100, 0xFFF0);
+            bus.write16(0x0400_0102, 0x00C0); // Timer 0, prescaler /1, IRQ and enable.
+            bus.write16(0x0400_0104, 0xFFFE);
+            bus.write16(0x0400_0106, 0x0084); // Timer 1 cascades from timer 0.
+            bus.write16(0x0400_0004, 1 << 4); // HBlank IRQ enable.
+        }
+
+        let total = 1232 * 3 + 777;
+        whole.advance_cycles(total);
+        for chunk in [1, 7, 31, 256, 3, 1024, 511, 2_640] {
+            chunked.advance_cycles(chunk);
+        }
+        let already_advanced = 1 + 7 + 31 + 256 + 3 + 1024 + 511 + 2_640;
+        chunked.advance_cycles(total - already_advanced);
+
+        assert_eq!(whole.timer_counter, chunked.timer_counter);
+        assert_eq!(whole.timer_prescaler_phase, chunked.timer_prescaler_phase);
+        assert_eq!(whole.audio_fifos, chunked.audio_fifos);
+        assert_eq!(whole.audio_last_samples, chunked.audio_last_samples);
+        assert_eq!(whole.audio_fifo_samples_consumed, chunked.audio_fifo_samples_consumed);
+        assert_eq!(whole.video_cycles_in_line, chunked.video_cycles_in_line);
+        assert_eq!(whole.vcount, chunked.vcount);
+        assert_eq!(whole.dispstat, chunked.dispstat);
+        assert_eq!(whole.video_hblank_events, chunked.video_hblank_events);
+        assert_eq!(whole.video_vblank_events, chunked.video_vblank_events);
+        assert_eq!(whole.interrupt_flags, chunked.interrupt_flags);
+    }
+
     fn video_event_counters_track_hblank_and_vblank_edges_and_reset_on_power_cycle() {
         let mut bus = MemoryBus::new(cartridge());
         assert_eq!(bus.video_hblank_events(), 0);
