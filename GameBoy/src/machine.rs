@@ -1918,6 +1918,7 @@ impl GbaMachine {
     pub fn power_cycle(&mut self) {
         self.bus.power_cycle();
         self.cpu.reset(CARTRIDGE_ENTRY_POINT);
+        self.cpu.initialize_gba_stacks();
         self.instructions_executed = 0;
         self.cycles_elapsed = 0;
     }
