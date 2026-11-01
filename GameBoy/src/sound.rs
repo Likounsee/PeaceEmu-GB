@@ -256,22 +256,28 @@ impl Psg {
         if ticks != 0 {
             for channel in &mut self.square {
                 if channel.length_enabled {
-                    channel.length = channel.length.saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
+                    channel.length = channel
+                        .length
+                        .saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
                     if channel.length == 0 {
                         channel.enabled = false;
                     }
                 }
             }
             if self.wave.length_enabled {
-                self.wave.length =
-                    self.wave.length.saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
+                self.wave.length = self
+                    .wave
+                    .length
+                    .saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
                 if self.wave.length == 0 {
                     self.wave.enabled = false;
                 }
             }
             if self.noise.length_enabled {
-                self.noise.length =
-                    self.noise.length.saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
+                self.noise.length = self
+                    .noise
+                    .length
+                    .saturating_sub(ticks.min(u32::from(u16::MAX)) as u16);
                 if self.noise.length == 0 {
                     self.noise.enabled = false;
                 }
@@ -884,5 +890,4 @@ mod tests {
         psg.advance(62 * 65_536);
         assert_eq!(psg.status_bits() & 8, 0);
     }
-
 }
