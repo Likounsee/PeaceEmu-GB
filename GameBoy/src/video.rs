@@ -3563,6 +3563,23 @@ mod tests {
     }
 
     #[test]
+    fn affine_bitmap_transform_preserves_signed_fixed_point_and_mosaic_origins() {
+        let mut bus = bus();
+        bus.write16(0x0400_0020, 0xFF00); // PA = -1.0.
+        bus.write16(0x0400_0026, 0x0100); // PD = +1.0.
+        bus.write16(0x0400_0028, 4 << 8);
+        bus.write16(0x0400_002C, 6 << 8);
+        let transform = BitmapTransform::new(&bus, 240, 160, true, 4, 2, false);
+
+        // Every pixel in a mosaic cell samples its upper-left coordinate.
+        assert_eq!(transform.source_coordinates(0, 0), Some((4, 6)));
+        assert_eq!(transform.source_coordinates(3, 1), Some((4, 6)));
+        // The next cell applies the negative PA step and positive PD step.
+        assert_eq!(transform.source_coordinates(4, 2), Some((0, 8)));
+        assert_eq!(transform.source_coordinates(7, 3), Some((0, 8)));
+    }
+
+    #[test]
     fn invalid_display_mode_is_rejected_without_forced_blank() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 6);
