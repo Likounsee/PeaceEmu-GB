@@ -518,7 +518,9 @@ impl Psg {
         } else {
             u32::from(divisor) * 16
         };
-        base.saturating_mul(1_u32 << shift.min(13))
+        // NR43 exposes a four-bit clock shift (0..=15). The largest
+        // hardware period still fits in u32: 7 * 16 * 2^15.
+        base.saturating_mul(1_u32 << shift.min(15))
     }
     fn envelope_period(period: u8) -> u32 {
         u32::from(period.max(1)) * 262_144
@@ -596,6 +598,15 @@ mod tests {
         assert_eq!(psg.channel_samples()[2], 14);
         psg.advance(8);
         assert_eq!(psg.channel_samples()[2], -16);
+    }
+
+    #[test]
+    fn noise_period_honors_full_four_bit_clock_shift_range() {
+        assert_eq!(Psg::noise_period(0, 0), 8);
+        assert_eq!(Psg::noise_period(1, 0), 16);
+        assert_eq!(Psg::noise_period(7, 13), 917_504);
+        assert_eq!(Psg::noise_period(7, 15), 3_670_016);
+        assert_eq!(Psg::noise_period(7, 0xFF), 3_670_016);
     }
 
     #[test]
