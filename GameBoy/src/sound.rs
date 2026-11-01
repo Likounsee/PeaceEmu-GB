@@ -146,7 +146,7 @@ impl Psg {
                 self.wave.dac_enabled = value & 0x80 != 0;
                 self.wave.two_bank_mode = value & 0x40 != 0;
                 self.wave.bank_select = usize::from(value & 0x20 != 0);
-            },
+            }
             0x72 => self.wave.volume_code = (value >> 5) & 3,
             0x73 => self.wave.length = 256 - u16::from(value),
             0x74 => self.wave.frequency = (self.wave.frequency & 0x0700) | u16::from(value),
@@ -348,7 +348,11 @@ impl Psg {
         }
         if channel.sweep_shift != 0 {
             channel.sweep_shadow = channel.frequency;
-            channel.sweep_timer = if channel.sweep_period == 0 { 8 } else { channel.sweep_period };
+            channel.sweep_timer = if channel.sweep_period == 0 {
+                8
+            } else {
+                channel.sweep_period
+            };
             channel.sweep_enabled = channel.sweep_period != 0 || channel.sweep_shift != 0;
             channel.sweep_negate_used = false;
             if Self::sweep_calculate(channel).is_none() {
