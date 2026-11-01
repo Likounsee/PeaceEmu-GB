@@ -121,6 +121,10 @@ pub struct MemoryBus {
     video_cycles_in_line: u16,
     /// Current visible/blanking scanline counter (0..227).
     vcount: u16,
+    /// Cumulative HBlank edges since power-on.
+    video_hblank_events: u64,
+    /// Cumulative VBlank entries since power-on.
+    video_vblank_events: u64,
     /// DISPSTAT writable controls plus live VBlank/HBlank/VCOUNT-match status.
     dispstat: u16,
     /// Sound FIFO A/B byte queues (hardware capacity: 32 bytes each).
@@ -185,6 +189,8 @@ impl MemoryBus {
             timer_prescaler_phase: [0; 4],
             video_cycles_in_line: 0,
             vcount: 0,
+            video_hblank_events: 0,
+            video_vblank_events: 0,
             // VCOUNT starts at line 0, so its compare status is initially active.
             dispstat: 1 << 2,
             audio_fifos: std::array::from_fn(|_| VecDeque::with_capacity(32)),
@@ -1412,6 +1418,7 @@ impl MemoryBus {
     }
 
     fn enter_hblank(&mut self) {
+        self.video_hblank_events = self.video_hblank_events.saturating_add(1);
         self.dispstat |= 1 << 1;
         // HBlank DMA transfers are for visible scanlines only. HBlank status
         // and its IRQ still occur during VBlank, but DMA must not fire there.
@@ -1430,6 +1437,7 @@ impl MemoryBus {
         }
         self.dispstat &= !(1 << 1);
         if self.vcount == 160 {
+            self.video_vblank_events = self.video_vblank_events.saturating_add(1);
             self.dispstat |= 1;
             self.trigger_dma_timing(1);
             if self.dispstat & (1 << 3) != 0 {
@@ -1449,6 +1457,16 @@ impl MemoryBus {
         } else {
             self.dispstat &= !(1 << 2);
         }
+    }
+
+    /// Returns the cumulative number of HBlank edges since power-on.
+    pub fn video_hblank_events(&self) -> u64 {
+        self.video_hblank_events
+    }
+
+    /// Returns the cumulative number of VBlank entries (frames) since power-on.
+    pub fn video_vblank_events(&self) -> u64 {
+        self.video_vblank_events
     }
 
     /// Returns the current scanline counter (VCOUNT), in the range 0..227.
@@ -5474,4 +5492,28 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0102) & 0x00C3, 0x00C3);
         assert_eq!(bus.read16(0x0400_0102) & !0x00C3, 0);
     }
+    #[test]
+    fn video_event_counters_track_hblank_and_vblank_edges_and_reset_on_power_cycle() {
+        let mut bus = MemoryBus::new(cartridge());
+        assert_eq!(bus.video_hblank_events(), 0);
+        assert_eq!(bus.video_vblank_events(), 0);
+
+        bus.advance_cycles(959);
+        assert_eq!(bus.video_hblank_events(), 0);
+        bus.advance_cycles(1);
+        assert_eq!(bus.video_hblank_events(), 1);
+        bus.advance_cycles(227 * 1232 + 272);
+        assert_eq!(bus.video_hblank_events(), 228);
+        assert_eq!(bus.video_vblank_events(), 1);
+
+        // HBlank also occurs on blanked scanlines; VBlank enters only once per frame.
+        bus.advance_cycles(1232);
+        assert_eq!(bus.video_hblank_events(), 229);
+        assert_eq!(bus.video_vblank_events(), 1);
+
+        bus.power_cycle();
+        assert_eq!(bus.video_hblank_events(), 0);
+        assert_eq!(bus.video_vblank_events(), 0);
+    }
+
 }
