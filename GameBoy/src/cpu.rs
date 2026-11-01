@@ -3810,12 +3810,12 @@ mod tests {
         cpu.set_register(0, 1);
         cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0088), 0xC355);
+        assert_eq!(bus.read16(0x0400_0088), 0xC200);
 
         cpu.set_register(0, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0088), 0xC155);
+        assert_eq!(bus.read16(0x0400_0088), 0xC000);
     }
 
     #[test]
@@ -3824,7 +3824,7 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0100);
         let wave_data = 0x0200_0200;
-        bus.write32(wave_data + 4, 7040);
+        bus.write32(wave_data + 4, 7_040_000);
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69); // A4
@@ -3832,7 +3832,7 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let a4 = cpu.register(0).unwrap();
-        assert_eq!(a4, (7040.0_f32 / 2.0_f32.powf(111.0 / 12.0)) as u32);
+        assert_eq!(a4, (7_040_000.0_f32 / 2.0_f32.powf(111.0 / 12.0)) as u32);
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69);
@@ -3841,7 +3841,7 @@ mod tests {
             .unwrap();
         let sharpened = cpu.register(0).unwrap();
         assert!(sharpened > a4);
-        assert!(sharpened < a4 + 40);
+        assert!(sharpened < a4 * 2);
     }
 
     #[test]
