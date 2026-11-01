@@ -1750,6 +1750,17 @@ impl GbaMachine {
         self.cycles_elapsed
     }
 
+    /// Performs a full power cycle and restarts execution at the cartridge entry point.
+    ///
+    /// Unlike reset_cpu, this also clears volatile RAM and peripheral state.
+    /// Battery-backed cartridge save data is retained by the memory bus.
+    pub fn power_cycle(&mut self) {
+        self.bus.power_cycle();
+        self.cpu.reset(CARTRIDGE_ENTRY_POINT);
+        self.instructions_executed = 0;
+        self.cycles_elapsed = 0;
+    }
+
     /// Resets the CPU to the cartridge entry point and clears diagnostic counters.
     ///
     /// RAM and peripheral state are deliberately preserved; this is a CPU reset,
@@ -2177,6 +2188,23 @@ mod tests {
         assert_eq!(machine.instructions_executed(), before + executed as u64);
         assert_eq!(machine.bus().video_scanline(), 0);
         assert!(machine.bus().video_vcount_match());
+    }
+
+    #[test]
+    fn machine_power_cycle_resets_cpu_counters_and_volatile_memory() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.bus_mut().write8(0x0200_0000, 0xA5);
+        machine.cpu.set_register(0, 0x1234_5678);
+        machine.instructions_executed = 17;
+        machine.cycles_elapsed = 1234;
+
+        machine.power_cycle();
+
+        assert_eq!(machine.cpu.register(0), Some(0));
+        assert_eq!(machine.cpu.register(15), Some(CARTRIDGE_ENTRY_POINT));
+        assert_eq!(machine.instructions_executed(), 0);
+        assert_eq!(machine.cycles_elapsed(), 0);
+        assert_eq!(machine.bus().read8(0x0200_0000), 0);
     }
 
     #[test]
