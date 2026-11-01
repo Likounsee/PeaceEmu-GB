@@ -3820,7 +3820,7 @@ mod tests {
         bus.reset_sio_registers();
 
         assert_eq!(bus.read16(0x0400_0120), 0);
-        assert_eq!(bus.read16(0x0400_0128), 0);
+        assert_eq!(bus.read16(0x0400_0128), 1 << 2);
         assert_eq!(bus.read16(0x0400_011E), 0xABCD);
         // 0x130 is outside the modeled SIO window and reads as open bus.
         assert_eq!(bus.read16(0x0400_0130), 0xFFFF);
