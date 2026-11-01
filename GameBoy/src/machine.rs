@@ -192,6 +192,15 @@ impl GbaMachine {
     /// On an unsupported instruction, the CPU returns an error and this call
     /// does not increment the successful-instruction counter.
     pub fn step(&mut self) -> Result<u32, CpuError> {
+        if self.bus.interrupt_master_enabled()
+            && self.bus.pending_interrupts() != 0
+            && self.cpu.enter_irq()
+        {
+            const IRQ_ENTRY_CYCLES: u32 = 3;
+            self.bus.advance_cycles(IRQ_ENTRY_CYCLES);
+            self.cycles_elapsed = self.cycles_elapsed.saturating_add(u64::from(IRQ_ENTRY_CYCLES));
+            return Ok(IRQ_ENTRY_CYCLES);
+        }
         let (outcome, cycles) = self.cpu.step_with_cycles(&mut self.bus)?;
         if !matches!(outcome, crate::StepOutcome::Halted) {
             self.instructions_executed = self.instructions_executed.saturating_add(1);
@@ -4424,4 +4433,21 @@ mod tests {
             before.video_cycles_into_scanline
         );
     }
+    #[test]
+    fn machine_services_enabled_irq_before_fetching_the_next_instruction() {
+        let mut machine = GbaMachine::new(cartridge());
+        machine.cpu.set_register(15, 0x0200_0100);
+        machine.bus_mut().write16(0x0400_0200, 1);
+        machine.bus_mut().write16(0x0400_0208, 1);
+        machine.bus_mut().request_interrupt(1);
+        let before = machine.instructions_executed();
+        assert_eq!(machine.step().unwrap(), 3);
+        assert_eq!(machine.cpu().register(15), Some(0x18));
+        assert_eq!(machine.cpu().processor_mode(), 0x12);
+        assert_eq!(machine.cpu().register(14), Some(0x0200_0104));
+        assert_eq!(machine.instructions_executed(), before);
+        assert_eq!(machine.cycles_elapsed(), 3);
+    }
+
+
 }
