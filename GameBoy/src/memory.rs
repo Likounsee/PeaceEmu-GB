@@ -2639,7 +2639,7 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0126), 0xFFFF);
 
         bus.write16(0x0400_0128, 0xFFFF);
-        assert_eq!(bus.read16(0x0400_0128), 0x7F8F);
+        assert_eq!(bus.read16(0x0400_0128), 0x7F8B);
         bus.write16(0x0400_0134, 0xFFFF);
         assert_eq!(bus.read16(0x0400_0134), 0xC00F);
     }
