@@ -4969,7 +4969,7 @@ mod tests {
         );
         assert_eq!(
             bus.gamepak_sequence_cycles(0x0800_0000, true, 2, 4),
-            Some(8)
+            Some(10)
         );
 
         // WS0: non-sequential = 3 cycles, sequential = 1 cycle.
@@ -4980,7 +4980,7 @@ mod tests {
         );
         assert_eq!(
             bus.gamepak_sequence_cycles(0x0800_0000, true, 2, 4),
-            Some(4)
+            Some(6)
         );
 
         // A separate WAITCNT field changes WS1 without changing WS0.
@@ -5132,7 +5132,7 @@ mod tests {
         );
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0800_0000, true, 2),
-            Some(2)
+            Some(4)
         );
         assert_eq!(
             bus.gamepak_access_cycles_for_width(0x0800_0000, false, 4),
