@@ -2358,8 +2358,7 @@ impl Cpu {
                 let destination_width = bus.read8(info.wrapping_add(3));
                 let offset_and_touch_zero = bus.read32(info.wrapping_add(4));
                 let valid_source_width = matches!(source_width, 1 | 2 | 4 | 8);
-                let valid_destination_width =
-                    matches!(destination_width, 1 | 2 | 4 | 8 | 16 | 32);
+                let valid_destination_width = matches!(destination_width, 1 | 2 | 4 | 8 | 16 | 32);
                 if !valid_source_width
                     || !valid_destination_width
                     || destination_width < source_width
@@ -2371,11 +2370,6 @@ impl Cpu {
                 }
 
                 let source_mask = ((1_u16 << source_width) - 1) as u8;
-                let destination_mask = if destination_width == 32 {
-                    u32::MAX
-                } else {
-                    (1_u32 << destination_width) - 1
-                };
                 let offset = offset_and_touch_zero & 0x7FFF_FFFF;
                 let touch_zero = offset_and_touch_zero & 0x8000_0000 != 0;
                 let mut packed_word = 0_u32;
