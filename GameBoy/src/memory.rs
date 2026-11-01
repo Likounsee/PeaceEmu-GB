@@ -2114,6 +2114,28 @@ impl MemoryBus {
             }
             return;
         }
+        // SIO transmit registers are mode-dependent; receive slots remain read-only.
+        let sio_address = address & !1;
+        if sio_address == 0x0400_0128 {
+            self.sio_control = value & 0x30CF;
+            return;
+        }
+        if sio_address == 0x0400_012A {
+            self.sio_data8 = value as u8;
+            return;
+        }
+        if sio_address == 0x0400_0134 {
+            self.sio_rcnt = value & 0xC00F;
+            return;
+        }
+        if (0x0400_0120..=0x0400_0123).contains(&sio_address)
+            && self.sio_control >> 12 & 3 == 1
+        {
+            let shift = (sio_address - 0x0400_0120) * 8;
+            let mask = 0xFFFF_u32 << shift;
+            self.sio_data32 = (self.sio_data32 & !mask) | (u32::from(value) << shift);
+            return;
+        }
         if (0x0400_0204..=0x0400_0205).contains(&address) {
             self.wait_control = value & 0x7FFF;
             return;
