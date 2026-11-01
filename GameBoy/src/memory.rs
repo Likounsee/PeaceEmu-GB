@@ -188,6 +188,22 @@ impl MemoryBus {
         }
     }
 
+    /// Performs a hardware power cycle, clearing volatile memory and peripheral state.
+    ///
+    /// Cartridge identity and battery-backed save contents (SRAM, Flash, or EEPROM)
+    /// are preserved, while RAM, I/O registers, timers, video timing, DMA state,
+    /// keypad state, and Direct Sound queues return to their power-on values.
+    pub fn power_cycle(&mut self) {
+        let cartridge = self.cartridge.clone();
+        let sram = self.sram.clone();
+        let flash = self.flash.clone();
+        let eeprom = self.eeprom.clone();
+        *self = Self::new(cartridge);
+        self.sram = sram;
+        self.flash = flash;
+        self.eeprom = eeprom;
+    }
+
     /// Returns read-only external work RAM (EWRAM, 256 KiB).
     ///
     /// Use bus reads and writes for emulated accesses so mirroring and bus
@@ -3172,6 +3188,36 @@ mod tests {
         let error = bus.load_sram_data(&[0; SRAM_SIZE + 1]).unwrap_err();
         assert_eq!(error.actual, SRAM_SIZE + 1);
         assert_eq!(bus.sram_data(), before.as_slice());
+    }
+
+    #[test]
+    fn power_cycle_clears_volatile_state_but_preserves_battery_saves() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write8(0x0200_0000, 0xA5);
+        bus.write8(0x0300_0000, 0x5A);
+        bus.write16(0x0500_0000, 0x1234);
+        bus.write16(0x0600_0000, 0x5678);
+        bus.write16(0x0700_0000, 0x9ABC);
+        bus.write16(0x0400_0200, 1);
+        bus.write16(0x0400_0208, 1);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.write16(0x0400_0100, 0x00C0);
+        bus.write32(0x0400_00A0, 0x4433_2211);
+        bus.write8(0x0E00_0000, 0xC3);
+
+        bus.power_cycle();
+
+        assert_eq!(bus.read8(0x0200_0000), 0);
+        assert_eq!(bus.read8(0x0300_0000), 0);
+        assert_eq!(bus.read16(0x0500_0000), 0);
+        assert_eq!(bus.read16(0x0600_0000), 0);
+        assert_eq!(bus.read16(0x0700_0000), 0);
+        assert_eq!(bus.interrupt_enable_mask(), 0);
+        assert!(!bus.interrupt_master_enabled());
+        assert_eq!(bus.timer_control(0), Some(0));
+        assert_eq!(bus.audio_fifo_len(0), Some(0));
+        assert_eq!(bus.video_scanline(), 0);
+        assert_eq!(bus.read8(0x0E00_0000), 0xC3);
     }
 
     #[test]
