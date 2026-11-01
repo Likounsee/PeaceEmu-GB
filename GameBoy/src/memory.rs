@@ -127,6 +127,8 @@ pub struct MemoryBus {
     audio_fifos: [VecDeque<u8>; 2],
     /// Last signed PCM sample held when a sound FIFO underflows.
     audio_last_samples: [i8; 2],
+    /// Cumulative timer-driven PCM byte consumptions since the last power cycle.
+    audio_fifo_samples_consumed: [u64; 2],
 }
 
 /// Error returned when loading save data whose size does not match the device capacity.
@@ -185,6 +187,7 @@ impl MemoryBus {
             dispstat: 1 << 2,
             audio_fifos: std::array::from_fn(|_| VecDeque::with_capacity(32)),
             audio_last_samples: [0; 2],
+            audio_fifo_samples_consumed: [0; 2],
         }
     }
 
@@ -278,6 +281,14 @@ impl MemoryBus {
     }
 
     /// Returns the most recently latched signed PCM sample for FIFO A (0) or B (1).
+    /// Returns the number of PCM bytes consumed by timer overflows since power-on.
+    ///
+    /// The counter advances only when a queued byte is popped; underflow and
+    /// queue resets do not increment it. Returns None for an invalid index.
+    pub fn audio_fifo_samples_consumed(&self, fifo: usize) -> Option<u64> {
+        self.audio_fifo_samples_consumed.get(fifo).copied()
+    }
+
     pub fn audio_fifo_last_sample(&self, fifo: usize) -> Option<i8> {
         self.audio_last_samples.get(fifo).copied()
     }
@@ -850,6 +861,8 @@ impl MemoryBus {
             // only a successful pop changes the output latch.
             if let Some(sample) = self.audio_fifos[fifo].pop_front() {
                 self.audio_last_samples[fifo] = sample as i8;
+                self.audio_fifo_samples_consumed[fifo] =
+                    self.audio_fifo_samples_consumed[fifo].saturating_add(1);
             }
             if self.audio_fifos[fifo].len() <= 16 {
                 self.trigger_audio_fifo_dma(fifo);
