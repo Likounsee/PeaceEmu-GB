@@ -2688,6 +2688,29 @@ mod tests {
     }
 
     #[test]
+    fn sio_completion_is_consistent_with_timer_fast_and_cycle_paths() {
+        let mut fast_path = MemoryBus::new(cartridge());
+        let mut cycle_path = MemoryBus::new(cartridge());
+        for bus in [&mut fast_path, &mut cycle_path] {
+            bus.write16(0x0400_0128, (1 << 14) | (1 << 7) | 1);
+        }
+        // Enabling timer 0 forces advance_cycles through its per-cycle path.
+        cycle_path.write16(0x0400_0100, 0xFFFE);
+        cycle_path.write16(0x0400_0102, 0x0080);
+
+        fast_path.advance_cycles(511);
+        cycle_path.advance_cycles(511);
+        assert_ne!(fast_path.read16(0x0400_0128) & (1 << 7), 0);
+        assert_ne!(cycle_path.read16(0x0400_0128) & (1 << 7), 0);
+        fast_path.advance_cycles(1);
+        cycle_path.advance_cycles(1);
+        assert_eq!(fast_path.read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(cycle_path.read16(0x0400_0128) & (1 << 7), 0);
+        assert_eq!(fast_path.interrupt_request_flags() & (1 << 7), 1 << 7);
+        assert_eq!(cycle_path.interrupt_request_flags() & (1 << 7), 1 << 7);
+    }
+
+    #[test]
     fn sio_external_clock_transfer_remains_busy_until_clocked_by_peer() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_012A, 0x003C);
