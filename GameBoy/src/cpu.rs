@@ -99,6 +99,18 @@ pub struct CpuSnapshot {
     pub bios_wait_mask: Option<u16>,
     /// Stored program-counter value.
     pub pc: u32,
+    /// Current ARM processor mode bits.
+    pub processor_mode: u32,
+    /// CPSR IRQ-disable bit.
+    pub irq_disabled: bool,
+    /// Shared User/System r13-r14 bank.
+    pub user_sp_lr: [u32; 2],
+    /// IRQ r13-r14 bank.
+    pub irq_sp_lr: [u32; 2],
+    /// IRQ saved program status register.
+    pub spsr_irq: u32,
+    /// Whether the IRQ SPSR is valid.
+    pub spsr_irq_valid: bool,
 }
 
 /// ARM7TDMI CPU state with partial ARM and Thumb instruction support.
@@ -272,6 +284,11 @@ impl Cpu {
         self.irq_disabled
     }
 
+    /// Sets CPSR.I for a debugger or a test harness.
+    pub fn set_irq_disabled(&mut self, disabled: bool) {
+        self.irq_disabled = disabled;
+    }
+
     /// Enters IRQ mode and saves the interrupted CPSR in SPSR_irq.
     pub(crate) fn enter_irq(&mut self) -> bool {
         if self.irq_disabled || self.mode == 0x12 || (self.stopped && !self.halted) {
@@ -362,6 +379,12 @@ impl Cpu {
             stopped: self.stopped,
             bios_wait_mask: self.bios_wait_mask,
             pc: self.registers[15],
+            processor_mode: self.mode,
+            irq_disabled: self.irq_disabled,
+            user_sp_lr: self.user_sp_lr,
+            irq_sp_lr: self.irq_sp_lr,
+            spsr_irq: self.spsr_irq,
+            spsr_irq_valid: self.spsr_irq_valid,
         }
     }
 
@@ -384,6 +407,12 @@ impl Cpu {
         self.halted = snapshot.halted;
         self.stopped = snapshot.stopped;
         self.bios_wait_mask = snapshot.bios_wait_mask;
+        self.mode = snapshot.processor_mode;
+        self.irq_disabled = snapshot.irq_disabled;
+        self.user_sp_lr = snapshot.user_sp_lr;
+        self.irq_sp_lr = snapshot.irq_sp_lr;
+        self.spsr_irq = snapshot.spsr_irq;
+        self.spsr_irq_valid = snapshot.spsr_irq_valid;
         self.last_fetch_next = None;
     }
 
@@ -4481,7 +4510,7 @@ mod tests {
         cpu.set_register(15, 0x0800_0000);
         assert_eq!(cpu.registers()[0], 0x1234_5678);
         assert_eq!(cpu.registers()[15], 0x0800_0000);
-        assert_eq!(cpu.cpsr_flags(), 0);
+        assert_eq!(cpu.cpsr_flags(), 0x1F);
 
         // A failed conditional instruction leaves flags untouched, while reset
         // clears the flags and returns the CPU to ARM state.
@@ -4840,7 +4869,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
 
         // MRS executes in ARM state, so the modeled T bit is clear.
-        assert_eq!(cpu.register(2), Some(0xB000_0000));
+        assert_eq!(cpu.register(2), Some(0xB000_001F));
         assert!(!cpu.is_thumb());
         assert!(cpu.flags().negative);
         assert!(cpu.flags().carry);
@@ -7738,14 +7767,20 @@ mod tests {
             stopped: false,
             bios_wait_mask: None,
             pc: 0x0800_0003,
+            processor_mode: 0x1F,
+            irq_disabled: false,
+            user_sp_lr: [0; 2],
+            irq_sp_lr: [0; 2],
+            spsr_irq: 0,
+            spsr_irq_valid: false,
         };
         let mut cpu = Cpu::new();
         cpu.restore_snapshot(snapshot);
 
         assert!(cpu.is_thumb());
         assert_eq!(cpu.register(15), Some(0x0800_0002));
-        assert_eq!(cpu.cpsr_flags(), 0xD000_0020);
-        assert_eq!(cpu.snapshot().cpsr, 0xD000_0020);
+        assert_eq!(cpu.cpsr_flags(), 0xD000_003F);
+        assert_eq!(cpu.snapshot().cpsr, 0xD000_003F);
     }
 
     #[test]
@@ -7764,7 +7799,7 @@ mod tests {
         let outcome = cpu.step(&mut bus).unwrap();
 
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
-        assert_eq!(cpu.register(0), Some(0xA000_0000));
+        assert_eq!(cpu.register(0), Some(0xA000_001F));
         assert_eq!(cpu.register(15), Some(0x0200_0004));
         assert_eq!(cpu.cpsr_flags() & (1 << 5), 0);
     }
@@ -7788,7 +7823,7 @@ mod tests {
                 overflow: false,
             }
         );
-        assert_eq!(cpu.cpsr_flags(), 0x6000_0000);
+        assert_eq!(cpu.cpsr_flags(), 0x6000_001F);
         assert_eq!(cpu.register(15), Some(0x0200_0004));
     }
 
