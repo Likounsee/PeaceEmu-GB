@@ -2085,8 +2085,8 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
-            // SoftReset returns to the cartridge entry point. The emulator does
-            // not model banked mode stacks, so only the System stack is restored.
+            // SoftReset selects its entry point from the BIOS IWRAM selector,
+            // clears the reserved BIOS work area, and restores modeled stacks.
             0x00 => {
                 // The BIOS chooses the reset target before clearing its
                 // reserved IWRAM window. 03007FFAh selects ROM when zero and
@@ -7815,6 +7815,38 @@ mod tests {
         assert_eq!(bus.pending_interrupts(), 1 << 1);
         assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
         assert!(!cpu.is_halted());
+    }
+
+    #[test]
+    fn bios_intr_wait_survives_irq_handler_and_rechecks_software_flags() {
+        let mut bus = bus_with_program(&[]);
+        bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0);
+        cpu.set_register(1, 1);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0004, 0x04, false, &mut bus)
+            .unwrap();
+
+        assert!(cpu.is_halted());
+        assert!(bus.interrupt_master_enabled());
+        assert_eq!(cpu.snapshot().bios_wait_mask, Some(1));
+
+        // An unrelated IRQ handler must run without cancelling IntrWait.
+        assert!(cpu.enter_irq());
+        assert_eq!(cpu.snapshot().bios_wait_mask, Some(1));
+        bus.set_bios_interrupt_flags(1 << 1);
+        assert!(cpu.restore_irq_exception_state());
+        cpu.refresh_bios_interrupt_wait(&mut bus);
+        assert!(cpu.is_halted());
+        assert_eq!(cpu.snapshot().bios_wait_mask, Some(1));
+
+        // The selected source is recorded by the guest IRQ handler in IWRAM.
+        bus.set_bios_interrupt_flags((1 << 0) | (1 << 1));
+        cpu.refresh_bios_interrupt_wait(&mut bus);
+        assert!(!cpu.is_halted());
+        assert_eq!(cpu.snapshot().bios_wait_mask, None);
+        assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
     }
 
     #[test]
