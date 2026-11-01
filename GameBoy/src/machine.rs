@@ -2217,9 +2217,8 @@ mod tests {
         ];
 
         for (save_type, save_image) in cases {
-            let mut machine =
-                GbaMachine::new(cartridge().with_save_type(Some(save_type)));
-            assert_eq!(machine.load_save_data(&save_image).unwrap(), true);
+            let mut machine = GbaMachine::new(cartridge().with_save_type(Some(save_type)));
+            assert!(machine.load_save_data(&save_image).unwrap());
             machine.bus_mut().write8(0x0200_0000, 0xA5);
             machine.bus_mut().write8(0x0300_0000, 0x5A);
             machine.bus_mut().write16(0x0400_0102, 0x0080);
