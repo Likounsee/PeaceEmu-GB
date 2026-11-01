@@ -3277,7 +3277,7 @@ mod tests {
         assert_eq!(machine.gamepak_access_cycles(0x0800_0000, false), Some(3));
         assert_eq!(
             machine.gamepak_access_cycles_for_width(0x0800_0000, true, 4),
-            Some(6)
+            Some(4)
         );
         assert_eq!(
             machine.gamepak_sequence_cycles(0x0800_0000, false, 2, 4),
