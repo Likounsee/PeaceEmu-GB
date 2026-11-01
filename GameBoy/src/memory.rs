@@ -3718,6 +3718,7 @@ mod tests {
     #[test]
     fn bios_sio_register_reset_clears_window_without_touching_neighboring_io() {
         let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0128, 1 << 12);
         bus.write16(0x0400_0120, 0x1234);
         bus.write16(0x0400_0128, 0x5678);
         bus.write16(0x0400_011E, 0xABCD);
@@ -3741,6 +3742,7 @@ mod tests {
         bus.write32(0x0400_00A0, 0x4433_2211);
         bus.write32(0x0400_00A4, 0x8877_6655);
         bus.audio_last_samples = [12, -34];
+        bus.write16(0x0400_0128, 1 << 12);
         bus.write16(0x0400_0120, 0x1234);
         bus.write16(0x0400_0200, 1);
 
