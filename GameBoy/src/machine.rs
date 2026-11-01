@@ -4182,6 +4182,8 @@ mod tests {
         assert_eq!(machine.pending_interrupts() & unrelated, unrelated);
         assert_eq!(machine.pending_interrupts() & selected, 0);
 
+        // This helper measures IF state without taking the CPU's real IRQ exception.
+        machine.cpu.set_irq_disabled(true);
         let before = machine.instructions_executed();
         assert_eq!(machine.run_until_interrupt_mask(selected, 2).unwrap(), 2);
         assert_eq!(machine.instructions_executed(), before + 2);
@@ -4202,6 +4204,7 @@ mod tests {
         machine.bus_mut().write16(0x0400_0200, selected);
         machine.bus_mut().write16(0x0400_0208, 1);
         machine.request_interrupt(selected);
+        machine.cpu.set_irq_disabled(true);
 
         assert_eq!(
             machine.run_until_next_interrupt_mask(selected, 2).unwrap(),
