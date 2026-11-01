@@ -265,13 +265,13 @@ impl Cpu {
         if self.mode == 0x12 {
             return;
         }
-        let flags = bus.read16(0x0300_7FF8);
+        let flags = bus.bios_interrupt_flags();
         let matched = flags & mask;
         if matched == 0 {
             self.halted = true;
             return;
         }
-        bus.write16(0x0300_7FF8, flags & !matched);
+        bus.set_bios_interrupt_flags(flags & !matched);
         self.bios_wait_mask = None;
         self.halted = false;
         self.last_fetch_next = None;
@@ -2126,13 +2126,13 @@ impl Cpu {
                 // this word; IF itself remains owned by the guest handler.
                 bus.write16(0x0400_0208, 1); // IntrWait always enables IME.
                 if discard_old {
-                    let flags = bus.read16(0x0300_7FF8);
-                    bus.write16(0x0300_7FF8, flags & !mask);
+                    let flags = bus.bios_interrupt_flags();
+                    bus.set_bios_interrupt_flags(flags & !mask);
                 }
-                let flags = bus.read16(0x0300_7FF8);
+                let flags = bus.bios_interrupt_flags();
                 let matched = flags & mask;
                 if matched != 0 {
-                    bus.write16(0x0300_7FF8, flags & !matched);
+                    bus.set_bios_interrupt_flags(flags & !matched);
                     self.bios_wait_mask = None;
                     self.halted = false;
                 } else {
@@ -7326,17 +7326,17 @@ mod tests {
         restored.restore_snapshot(snapshot);
         assert_eq!(restored.snapshot().bios_wait_mask, Some(1));
 
-        bus.write16(0x0300_7FF8, 2);
+        bus.set_bios_interrupt_flags(2);
         assert_eq!(
             restored.step_with_cycles(&mut bus).unwrap().0,
             StepOutcome::Halted
         );
-        bus.write16(0x0300_7FF8, 3);
+        bus.set_bios_interrupt_flags(3);
         assert!(!matches!(
             restored.step_with_cycles(&mut bus).unwrap().0,
             StepOutcome::Halted
         ));
-        assert_eq!(bus.read16(0x0300_7FF8), 2);
+        assert_eq!(bus.bios_interrupt_flags(), 2);
     }
 
     #[test]
@@ -7700,7 +7700,7 @@ mod tests {
 
         // IF alone cannot finish IntrWait; the guest IRQ handler must set
         // the corresponding BIOS software flag in IWRAM.
-        bus.write16(0x0300_7FF8, 1 << 0);
+        bus.set_bios_interrupt_flags(1 << 0);
         assert!(!matches!(cpu.step(&mut bus).unwrap(), StepOutcome::Halted));
         assert!(!cpu.is_halted());
         assert_eq!(bus.pending_interrupts(), 1 << 1);
@@ -7746,7 +7746,7 @@ mod tests {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
         bus.request_interrupt((1 << 0) | (1 << 1));
-        bus.write16(0x0300_7FF8, (1 << 0) | (1 << 1));
+        bus.set_bios_interrupt_flags((1 << 0) | (1 << 1));
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0200);
         cpu.set_register(0, 0);
@@ -7758,7 +7758,7 @@ mod tests {
         assert!(!cpu.is_halted());
         assert_eq!(cpu.register(15), Some(0x0200_0204));
         assert_eq!(bus.pending_interrupts(), (1 << 0) | (1 << 1));
-        assert_eq!(bus.read16(0x0300_7FF8), 1 << 1);
+        assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
     }
 
     #[test]
@@ -7799,7 +7799,7 @@ mod tests {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
         bus.request_interrupt(1 << 1);
-        bus.write16(0x0300_7FF8, 1 << 1);
+        bus.set_bios_interrupt_flags(1 << 1);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0200);
         cpu.set_register(0, 0);
@@ -7808,12 +7808,12 @@ mod tests {
             .unwrap();
         assert!(cpu.is_halted());
 
-        bus.write16(0x0300_7FF8, (1 << 0) | (1 << 1));
+        bus.set_bios_interrupt_flags((1 << 0) | (1 << 1));
         let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(!matches!(outcome, StepOutcome::Halted));
         assert!(cycles >= 1);
         assert_eq!(bus.pending_interrupts(), 1 << 1);
-        assert_eq!(bus.read16(0x0300_7FF8), 1 << 1);
+        assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
         assert!(!cpu.is_halted());
     }
 
@@ -7822,7 +7822,7 @@ mod tests {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
         bus.request_interrupt((1 << 0) | (1 << 1));
-        bus.write16(0x0300_7FF8, (1 << 0) | (1 << 1));
+        bus.set_bios_interrupt_flags((1 << 0) | (1 << 1));
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0200);
         cpu.set_register(0, 1);
@@ -7831,7 +7831,7 @@ mod tests {
             .unwrap();
         assert!(cpu.is_halted());
         assert_eq!(bus.pending_interrupts(), (1 << 0) | (1 << 1));
-        assert_eq!(bus.read16(0x0300_7FF8), 1 << 1);
+        assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
 
         let (outcome, _) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(outcome, StepOutcome::Halted);
@@ -7843,21 +7843,21 @@ mod tests {
         let mut bus = bus_with_program(&[]);
         bus.write16(0x0400_0200, (1 << 0) | (1 << 1));
         bus.request_interrupt((1 << 0) | (1 << 1));
-        bus.write16(0x0300_7FF8, (1 << 0) | (1 << 1));
+        bus.set_bios_interrupt_flags((1 << 0) | (1 << 1));
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0200);
         cpu.execute_swi(0x0200_0200, 0xEF00_0005, 0x05, false, &mut bus)
             .unwrap();
         assert!(cpu.is_halted());
         assert_eq!(bus.pending_interrupts(), (1 << 0) | (1 << 1));
-        assert_eq!(bus.read16(0x0300_7FF8), 1 << 1);
+        assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
 
-        bus.write16(0x0300_7FF8, (1 << 0) | (1 << 1));
+        bus.set_bios_interrupt_flags((1 << 0) | (1 << 1));
         let (outcome, _) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(!matches!(outcome, StepOutcome::Halted));
         assert!(!cpu.is_halted());
         assert_eq!(bus.pending_interrupts(), (1 << 0) | (1 << 1));
-        assert_eq!(bus.read16(0x0300_7FF8), 1 << 1);
+        assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
     }
 
     #[test]
@@ -8213,7 +8213,7 @@ mod tests {
 
         assert_eq!(cpu.register(15), Some(0x0800_0000));
         assert_eq!(bus.read32(0x0300_7E00), 0);
-        assert_eq!(bus.read16(0x0300_7FF8), 0);
+        assert_eq!(bus.bios_interrupt_flags(), 0);
         assert_eq!(bus.read32(0x0300_7FFC), 0);
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
         assert_eq!(cpu.register(0), Some(0));
