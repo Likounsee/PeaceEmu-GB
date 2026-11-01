@@ -2352,6 +2352,65 @@ impl Cpu {
                 }
                 self.registers[0] = root as u32;
             }
+            // BitUnPack: expand low-bit-first packed source elements into
+            // a stream of destination elements, emitted as complete words.
+            0x10 => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let info = self.registers[2];
+                let source_len = u32::from(bus.read16(info));
+                let source_width = bus.read8(info.wrapping_add(2));
+                let destination_width = bus.read8(info.wrapping_add(3));
+                let offset_and_touch_zero = bus.read32(info.wrapping_add(4));
+                let valid_source_width = matches!(source_width, 1 | 2 | 4 | 8);
+                let valid_destination_width =
+                    matches!(destination_width, 1 | 2 | 4 | 8 | 16 | 32);
+                if !valid_source_width
+                    || !valid_destination_width
+                    || destination_width < source_width
+                {
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
+                }
+
+                let source_mask = (1_u16 << source_width) as u8 - 1;
+                let destination_mask = if destination_width == 32 {
+                    u32::MAX
+                } else {
+                    (1_u32 << destination_width) - 1
+                };
+                let offset = offset_and_touch_zero & 0x7FFF_FFFF;
+                let touch_zero = offset_and_touch_zero & 0x8000_0000 != 0;
+                let mut packed_word = 0_u32;
+                let mut packed_bits = 0_u32;
+                let mut output_offset = 0_u32;
+
+                for byte_index in 0..source_len {
+                    let packed_byte = bus.read8(source.wrapping_add(byte_index));
+                    for bit_offset in (0..8).step_by(usize::from(source_width)) {
+                        let value = u32::from((packed_byte >> bit_offset) & source_mask);
+                        let value = if value != 0 || touch_zero {
+                            value.wrapping_add(offset)
+                        } else {
+                            value
+                        };
+                        // The hardware packs each expanded value into the next
+                        // low-order destination field. Values wider than the
+                        // requested field retain their overflow behavior.
+                        packed_word |= value.wrapping_shl(packed_bits) & (destination_mask << packed_bits);
+                        packed_bits += u32::from(destination_width);
+                        if packed_bits == 32 {
+                            bus.write32(destination.wrapping_add(output_offset), packed_word);
+                            output_offset = output_offset.wrapping_add(4);
+                            packed_word = 0;
+                            packed_bits = 0;
+                        }
+                    }
+                }
+                // Like the BIOS routine, an incomplete final word is not stored.
+            }
             // CpuSet: 16-bit or 32-bit copy/fill. Source bit 24 selects fill.
             0x0B => {
                 let source = self.registers[0];
@@ -7922,6 +7981,102 @@ mod tests {
         assert!(!cpu.is_halted());
         assert_eq!(bus.pending_interrupts(), (1 << 0) | (1 << 1));
         assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
+    }
+
+    #[test]
+    fn bios_bit_unpack_expands_low_bit_first_and_adds_offset_to_nonzero_values() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        let info = 0x0200_0200;
+        bus.write8(source, 0b1011_0001);
+        bus.write16(info, 1);
+        bus.write8(info + 2, 1);
+        bus.write8(info + 3, 4);
+        bus.write32(info + 4, 1);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0300);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, info);
+        cpu.execute_swi(0x0200_0300, 0xEF00_0010, 0x10, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read32(destination), 0x2022_0002);
+        assert_eq!(cpu.register(15), Some(0x0200_0304));
+    }
+
+    #[test]
+    fn bios_bit_unpack_can_add_offset_to_zero_elements_and_handles_wide_units() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        let info = 0x0200_0200;
+        bus.write32(source, 0x7654_3210);
+        bus.write16(info, 4);
+        bus.write8(info + 2, 8);
+        bus.write8(info + 3, 8);
+        bus.write32(info + 4, 0x8000_0003);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0300);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, info);
+        cpu.execute_swi(0x0200_0300, 0xEF00_0010, 0x10, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read32(destination), 0x0908_0706);
+        assert_eq!(bus.read32(destination + 4), 0x0A09_0803);
+    }
+
+    #[test]
+    fn bios_bit_unpack_drops_incomplete_final_output_word() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        let info = 0x0200_0200;
+        bus.write8(source, 0xFF);
+        bus.write32(destination, 0xA5A5_5A5A);
+        bus.write16(info, 1);
+        bus.write8(info + 2, 1);
+        bus.write8(info + 3, 1);
+        bus.write32(info + 4, 0);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0300);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, info);
+        cpu.execute_swi(0x0200_0300, 0xEF00_0010, 0x10, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read32(destination), 0xA5A5_5A5A);
+    }
+
+    #[test]
+    fn bios_bit_unpack_rejects_unsupported_element_widths_without_writing() {
+        let mut bus = bus_with_program(&[]);
+        let info = 0x0200_0200;
+        let destination = 0x0200_0100;
+        bus.write32(destination, 0xDEAD_BEEF);
+        bus.write16(info, 4);
+        bus.write8(info + 2, 3);
+        bus.write8(info + 3, 8);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0300);
+        cpu.set_register(0, 0x0200_0000);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, info);
+
+        assert!(matches!(
+            cpu.execute_swi(0x0200_0300, 0xEF00_0010, 0x10, false, &mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(bus.read32(destination), 0xDEAD_BEEF);
+        assert_eq!(cpu.register(15), Some(0x0200_0300));
     }
 
     #[test]
