@@ -734,6 +734,46 @@ mod tests {
         assert_eq!(psg.noise.envelope_timer, 262_144 - 9);
     }
     #[test]
+    fn oscillator_and_envelope_state_are_invariant_to_cycle_chunking() {
+        let mut whole = Psg::default();
+        let mut chunked = Psg::default();
+        for psg in [&mut whole, &mut chunked] {
+            psg.set_master_enabled(true);
+            psg.write(0x63, 0xA9);
+            psg.write(0x65, 0xC0);
+            psg.write(0x79, 0xB3);
+            psg.write(0x7C, 0x07);
+            psg.write(0x7D, 0xC0);
+        }
+
+        let total = 1_048_579;
+        whole.advance(total);
+        let mut remaining = total;
+        for chunk in [1, 7, 31, 255, 4_096, 65_537, 17, 8_192] {
+            let step = chunk.min(remaining);
+            chunked.advance(step);
+            remaining -= step;
+        }
+        while remaining != 0 {
+            let step = remaining.min(32_771);
+            chunked.advance(step);
+            remaining -= step;
+        }
+
+        assert_eq!(whole.channel_samples(), chunked.channel_samples());
+        assert_eq!(whole.status_bits(), chunked.status_bits());
+        assert_eq!(whole.square[0].phase, chunked.square[0].phase);
+        assert_eq!(whole.square[0].volume, chunked.square[0].volume);
+        assert_eq!(whole.square[0].envelope_timer, chunked.square[0].envelope_timer);
+        assert_eq!(whole.noise.lfsr, chunked.noise.lfsr);
+        assert_eq!(whole.noise.timer, chunked.noise.timer);
+        assert_eq!(whole.noise.volume, chunked.noise.volume);
+        assert_eq!(whole.noise.envelope_timer, chunked.noise.envelope_timer);
+        assert_eq!(whole.length_clock, chunked.length_clock);
+        assert_eq!(whole.sweep_clock, chunked.sweep_clock);
+    }
+
+    #[test]
     fn square_dac_disable_stops_channel_until_retriggered() {
         let mut psg = Psg::default();
         psg.set_master_enabled(true);
