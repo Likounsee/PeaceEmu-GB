@@ -6,3 +6,10 @@ edition = "2021"
 license = "MIT"
 rust-version = "1.78"
 repository = "https://github.com/Likounsee/PeaceEmu-GB"
+
+[[bin]]
+name = "peaceemu-gba"
+path = "src/bin/peaceemu.rs"
+
+[dependencies]
+minifb = "0.27"
