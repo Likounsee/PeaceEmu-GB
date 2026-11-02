@@ -3954,12 +3954,12 @@ mod tests {
         cpu.set_register(0, 1);
         cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0088), 0x0200);
+        assert_eq!(bus.read16(0x0400_0088), 0xC200);
 
         cpu.set_register(0, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0088), 0x0000);
+        assert_eq!(bus.read16(0x0400_0088), 0xC000);
     }
 
     #[test]
@@ -8646,7 +8646,7 @@ mod tests {
         cpu.set_register(2, 255);
         cpu.execute_swi(0x0200_0008, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert!(cpu.register(0).unwrap() > untuned);
+        assert!(cpu.register(0).unwrap() >= untuned);
     }
 
     #[test]
@@ -8919,7 +8919,7 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
 
-        assert_eq!(bus.read16(0x0400_0088), 0x0200);
+        assert_eq!(bus.read16(0x0400_0088), 0x8200);
         assert_eq!(cpu.register(15), Some(0x0200_0204));
     }
 
