@@ -1419,9 +1419,7 @@ impl MemoryBus {
             let offset = 0xB0 + channel * 12 + 10;
             let control = u16::from_le_bytes([self.io[offset], self.io[offset + 1]]);
             let game_pak_drq = channel == 3 && control & (1 << 11) != 0;
-            control & 0x8000 != 0
-                && !game_pak_drq
-                && matches!((control >> 12) & 3, 1 | 2)
+            control & 0x8000 != 0 && !game_pak_drq && matches!((control >> 12) & 3, 1 | 2)
         })
     }
 
