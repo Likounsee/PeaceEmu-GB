@@ -6270,7 +6270,6 @@ mod tests {
         assert_eq!(bus.read16(0x0400_0102) & !0x00C3, 0);
     }
     #[test]
-    #[test]
     fn timer_audio_and_video_state_are_invariant_to_cycle_chunking() {
         let mut whole = MemoryBus::new(cartridge());
         let mut chunked = MemoryBus::new(cartridge());
