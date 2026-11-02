@@ -2144,12 +2144,16 @@ impl Cpu {
             // and applies the requested MIDI key and 1/256-semitone fine tune.
             0x1F => {
                 let wave_data = self.registers[0];
-                let key = f64::from((self.registers[1] & 0xFF) as u8);
-                let fine = f64::from((self.registers[2] & 0xFF) as u8);
-                let base_frequency = f64::from(bus.read32(wave_data.wrapping_add(4)));
-                let semitones = (180.0 - key - fine / 256.0) / 12.0;
-                let frequency = base_frequency / 2.0_f64.powf(semitones);
-                self.registers[0] = frequency.clamp(0.0, f64::from(u32::MAX)) as u32;
+                // The reference BIOS calculation uses single-precision
+                // floating point (exp2f), then truncates when storing R0.
+                // Keep the same precision and conversion order so edge pitches
+                // do not drift by one or more frequency units versus hardware.
+                let key = f32::from((self.registers[1] & 0xFF) as u8);
+                let fine = f32::from((self.registers[2] & 0xFF) as u8);
+                let base_frequency = bus.read32(wave_data.wrapping_add(4)) as f32;
+                let semitones = (180.0_f32 - key - fine / 256.0_f32) / 12.0_f32;
+                let frequency = base_frequency / 2.0_f32.powf(semitones);
+                self.registers[0] = frequency.clamp(0.0, u32::MAX as f32) as u32;
             }
             // GetBiosChecksum identifies the standard GBA/GBA SP BIOS in HLE.
             // The reference BIOS checksum is the unsigned sum of its 16 KiB image.
@@ -3976,10 +3980,9 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let a4 = cpu.register(0).unwrap();
-        assert_eq!(
-            a4,
-            (7_040_000.0_f64 * 2.0_f64.powf(-111.0 / 12.0)).round() as u32
-        );
+        let expected_a4 =
+            (7_040_000.0_f32 / 2.0_f32.powf(111.0_f32 / 12.0_f32)) as u32;
+        assert_eq!(a4, expected_a4);
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69);
