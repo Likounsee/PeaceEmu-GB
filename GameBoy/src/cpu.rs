@@ -2138,6 +2138,60 @@ impl Cpu {
             0x0D => {
                 self.registers[0] = 0xBAAE_187F;
             }
+            // BgAffineSet builds one or more BG affine matrices and reference
+            // coordinates from the BIOS 20-byte source structures.
+            0x0E => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let count = self.registers[2];
+                for index in 0..count {
+                    let input = source.wrapping_add(index.wrapping_mul(20));
+                    let output = destination.wrapping_add(index.wrapping_mul(16));
+                    let texture_x = bus.read32(input) as i32;
+                    let texture_y = bus.read32(input.wrapping_add(4)) as i32;
+                    let screen_x = bus.read16(input.wrapping_add(8)) as i16;
+                    let screen_y = bus.read16(input.wrapping_add(10)) as i16;
+                    let scale_x = bus.read16(input.wrapping_add(12)) as i16;
+                    let scale_y = bus.read16(input.wrapping_add(14)) as i16;
+                    let angle = bus.read16(input.wrapping_add(16));
+                    let [pa, pb, pc, pd] =
+                        Self::bios_affine_coefficients(scale_x, scale_y, angle);
+                    bus.write16(output, pa as u16);
+                    bus.write16(output.wrapping_add(2), pb as u16);
+                    bus.write16(output.wrapping_add(4), pc as u16);
+                    bus.write16(output.wrapping_add(6), pd as u16);
+                    let dx = texture_x.wrapping_sub(
+                        i32::from(pa) * i32::from(screen_x)
+                            + i32::from(pb) * i32::from(screen_y),
+                    );
+                    let dy = texture_y.wrapping_sub(
+                        i32::from(pc) * i32::from(screen_x)
+                            + i32::from(pd) * i32::from(screen_y),
+                    );
+                    bus.write32(output.wrapping_add(8), dx as u32);
+                    bus.write32(output.wrapping_add(12), dy as u32);
+                }
+            }
+            // ObjAffineSet writes each four-halfword matrix using the caller's
+            // byte stride, allowing matrices to be embedded in OAM attributes.
+            0x0F => {
+                let source = self.registers[0];
+                let destination = self.registers[1];
+                let stride = self.registers[2];
+                let count = self.registers[3];
+                for index in 0..count {
+                    let input = source.wrapping_add(index.wrapping_mul(8));
+                    let output = destination.wrapping_add(index.wrapping_mul(stride));
+                    let scale_x = bus.read16(input) as i16;
+                    let scale_y = bus.read16(input.wrapping_add(2)) as i16;
+                    let angle = bus.read16(input.wrapping_add(4));
+                    let [pa, pb, pc, pd] =
+                        Self::bios_affine_coefficients(scale_x, scale_y, angle);
+                    for (offset, coefficient) in [pa, pb, pc, pd].into_iter().enumerate() {
+                        bus.write16(output.wrapping_add((offset as u32).wrapping_mul(stride)), coefficient as u16);
+                    }
+                }
+            }
             // ArcTan accepts a signed Q2.14 tangent and returns a signed
             // 16-bit angle where one full turn is 0x10000 units.
             0x09 => {
@@ -2575,6 +2629,25 @@ impl Cpu {
             self.registers[15] = address.wrapping_add(4) & !3;
         }
         Ok(())
+    }
+
+    /// Calculates the signed 8.8 affine matrix coefficients used by BIOS
+    /// BgAffineSet and ObjAffineSet. Angles use a full 16-bit turn.
+    fn bios_affine_coefficients(scale_x: i16, scale_y: i16, angle: u16) -> [i16; 4] {
+        let radians = f64::from(angle) * (core::f64::consts::TAU / 65_536.0);
+        let cosine = radians.cos();
+        let sine = radians.sin();
+        let coefficient = |scale: i16, factor: f64| {
+            (f64::from(scale) * factor)
+                .round()
+                .clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16
+        };
+        [
+            coefficient(scale_x, cosine),
+            coefficient(scale_x, -sine),
+            coefficient(scale_y, sine),
+            coefficient(scale_y, cosine),
+        ]
     }
 
     /// Reproduces the GBA BIOS fixed-point ArcTan polynomial.
@@ -8586,6 +8659,67 @@ mod tests {
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(cpu.flags(), flags);
         assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn bios_bg_affine_set_builds_matrix_and_reference_coordinates() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_1000;
+        let destination = 0x0200_2000;
+        bus.write32(source, 0x0000_1800); // Texture X, 24.8.
+        bus.write32(source + 4, 0x0000_2400); // Texture Y, 24.8.
+        bus.write16(source + 8, 10); // Screen X.
+        bus.write16(source + 10, 20); // Screen Y.
+        bus.write16(source + 12, 0x0100); // X scale 1.0.
+        bus.write16(source + 14, 0x0200); // Y scale 2.0.
+        bus.write16(source + 16, 0); // Zero-degree rotation.
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 1);
+        cpu.execute_swi(0x0200_0000, 0xEF00_000E, 0x0E, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(destination), 0x0100);
+        assert_eq!(bus.read16(destination + 2), 0);
+        assert_eq!(bus.read16(destination + 4), 0);
+        assert_eq!(bus.read16(destination + 6), 0x0200);
+        assert_eq!(bus.read32(destination + 8), 0x0000_0E00);
+        assert_eq!(bus.read32(destination + 12), 0x0000_1000);
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn bios_obj_affine_set_honors_matrix_stride_and_rotation() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_1000;
+        let destination = 0x0200_2000;
+        bus.write16(source, 0x0100);
+        bus.write16(source + 2, 0x0180);
+        bus.write16(source + 4, 0x4000); // Quarter turn.
+        bus.write16(source + 8, 0x0200);
+        bus.write16(source + 10, 0x0100);
+        bus.write16(source + 12, 0); // Zero rotation.
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 8); // Interleaved OAM matrix stride.
+        cpu.set_register(3, 2);
+        cpu.execute_swi(0x0200_0000, 0xEF00_000F, 0x0F, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(destination), 0);
+        assert_eq!(bus.read16(destination + 8), 0xFF00);
+        assert_eq!(bus.read16(destination + 16), 0x0180);
+        assert_eq!(bus.read16(destination + 24), 0);
+        assert_eq!(bus.read16(destination + 32), 0x0200);
+        assert_eq!(bus.read16(destination + 40), 0);
+        assert_eq!(bus.read16(destination + 48), 0);
+        assert_eq!(bus.read16(destination + 56), 0x0100);
     }
 
     #[test]
