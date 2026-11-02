@@ -3568,10 +3568,10 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_000D, 0x0D, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(0), 0xBAAE_187F);
-        assert_eq!(cpu.register(1), 0x8765_4321);
-        assert_eq!(cpu.register(3), 0xDEAD_BEEF);
-        assert_eq!(cpu.register(15), 0x0200_0204);
+        assert_eq!(cpu.register(0).unwrap(), 0xBAAE_187F);
+        assert_eq!(cpu.register(1).unwrap(), 0x8765_4321);
+        assert_eq!(cpu.register(3).unwrap(), 0xDEAD_BEEF);
+        assert_eq!(cpu.register(15).unwrap(), 0x0200_0204);
     }
 
     #[test]
@@ -3771,19 +3771,19 @@ mod tests {
         cpu.set_register(0, 0);
         cpu.execute_swi(0x0200_0200, 0xEF00_0009, 0x09, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0).unwrap(), 0);
+        assert_eq!(cpu.register(0).unwrap().unwrap(), 0);
 
         cpu.set_register(0, 0);
         cpu.set_register(1, 0x4000);
         cpu.execute_swi(0x0200_0204, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0).unwrap() as i32, 0x4000);
+        assert_eq!(cpu.register(0).unwrap().unwrap() as i32, 0x4000);
 
         cpu.set_register(0, 0xC000);
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0208, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0).unwrap() as i32, 0x8000);
+        assert_eq!(cpu.register(0).unwrap().unwrap() as i32, 0x8000);
     }
 
     #[test]
@@ -3803,7 +3803,7 @@ mod tests {
         cpu.reset(0x0200_0004);
         assert!(!cpu.is_halted());
         cpu.step_with_cycles(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(7));
+        assert_eq!(cpu.register(0).unwrap(), Some(7));
     }
 
     #[test]
@@ -3816,7 +3816,7 @@ mod tests {
         assert!(matches!(stop, StepOutcome::Executed { .. }));
         assert!(cpu.is_stopped());
         assert!(!cpu.is_halted());
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
 
         let snapshot = cpu.snapshot();
         let mut restored = Cpu::new();
@@ -3858,20 +3858,20 @@ mod tests {
         let (halt, _) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(matches!(halt, StepOutcome::Executed { .. }));
         assert!(cpu.is_halted());
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
 
-        let pc = cpu.register(15).unwrap();
+        let pc = cpu.register(15).unwrap().unwrap();
         let (idle, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(idle, StepOutcome::Halted);
         assert_eq!(cycles, 1);
-        assert_eq!(cpu.register(15), Some(pc));
+        assert_eq!(cpu.register(15).unwrap(), Some(pc));
 
         bus.write16(0x0400_0200, 1 << 0); // Enable VBlank IRQ.
         bus.request_interrupt(1 << 0);
         let (resumed, _) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(matches!(resumed, StepOutcome::Executed { .. }));
         assert!(!cpu.is_halted());
-        assert_eq!(cpu.register(0), Some(7));
+        assert_eq!(cpu.register(0).unwrap(), Some(7));
     }
 
     #[test]
@@ -4002,7 +4002,7 @@ mod tests {
         cpu.set_register(2, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        let a4 = cpu.register(0).unwrap();
+        let a4 = cpu.register(0).unwrap().unwrap();
         let expected_a4 = (7_040_000.0_f32 / 2.0_f32.powf(111.0_f32 / 12.0_f32)) as u32;
         assert_eq!(a4, expected_a4);
 
@@ -4011,7 +4011,7 @@ mod tests {
         cpu.set_register(2, 128); // Half a semitone higher.
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        let sharpened = cpu.register(0).unwrap();
+        let sharpened = cpu.register(0).unwrap().unwrap();
         assert!(sharpened > a4);
         assert!(sharpened < a4 * 2);
     }
@@ -4029,7 +4029,7 @@ mod tests {
         cpu.set_register(2, 0x80);
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        let expected = cpu.register(0);
+        let expected = cpu.register(0).unwrap();
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 0x145);
@@ -4037,7 +4037,7 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(0), expected);
+        assert_eq!(cpu.register(0).unwrap(), expected);
     }
 
     #[test]
@@ -4054,7 +4054,7 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(0), Some(u32::MAX));
+        assert_eq!(cpu.register(0).unwrap(), Some(u32::MAX));
     }
 
     #[test]
@@ -4065,12 +4065,12 @@ mod tests {
         cpu.set_register(0, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_0009, 0x09, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
 
         cpu.set_register(0, 16_384);
         cpu.execute_swi(0x0200_0100, 0xEF00_0009, 0x09, false, &mut bus)
             .unwrap();
-        let angle = cpu.register(0).unwrap() as i32;
+        let angle = cpu.register(0).unwrap().unwrap() as i32;
         assert!(angle == 0x2000);
     }
 
@@ -4083,19 +4083,19 @@ mod tests {
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
 
         cpu.set_register(0, 0);
         cpu.set_register(1, 16_384);
         cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(0x4000));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x4000));
 
         cpu.set_register(0, (-16_384_i32) as u32);
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(0x8000));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x8000));
     }
 
     #[test]
@@ -4109,18 +4109,18 @@ mod tests {
         cpu.set_register(1, u32::MAX);
         cpu.execute_swi(0x0200_0100, 0xEF00_0006, 0x06, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(i32::MIN as u32));
-        assert_eq!(cpu.register(1), Some(0));
-        assert_eq!(cpu.register(3), Some(0x8000_0000));
+        assert_eq!(cpu.register(0).unwrap(), Some(i32::MIN as u32));
+        assert_eq!(cpu.register(1).unwrap(), Some(0));
+        assert_eq!(cpu.register(3).unwrap(), Some(0x8000_0000));
 
         // DivArm swaps R0/R1 before dividing.
         cpu.set_register(0, 3);
         cpu.set_register(1, 10);
         cpu.execute_swi(0x0200_0104, 0xEF00_0007, 0x07, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(3));
-        assert_eq!(cpu.register(1), Some(1));
-        assert_eq!(cpu.register(3), Some(3));
+        assert_eq!(cpu.register(0).unwrap(), Some(3));
+        assert_eq!(cpu.register(1).unwrap(), Some(1));
+        assert_eq!(cpu.register(3).unwrap(), Some(3));
     }
 
     #[test]
@@ -4132,9 +4132,9 @@ mod tests {
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_0006, 0x06, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(1));
-        assert_eq!(cpu.register(1), Some((-7_i32) as u32));
-        assert_eq!(cpu.register(3), Some(1));
+        assert_eq!(cpu.register(0).unwrap(), Some(1));
+        assert_eq!(cpu.register(1).unwrap(), Some((-7_i32) as u32));
+        assert_eq!(cpu.register(3).unwrap(), Some(1));
     }
 
     #[test]
@@ -4190,7 +4190,7 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_0010, 0x10, false, &mut bus)
             .unwrap();
         assert_eq!(bus.read32(0x0300_0000), 0x1013_1211);
-        assert_eq!(cpu.register(15), Some(0x0200_0104));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0104));
     }
 
     #[test]
@@ -4244,7 +4244,7 @@ mod tests {
         assert!(!cpu.is_halted());
         let (outcome, _) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
-        assert_eq!(cpu.register(0), Some(7));
+        assert_eq!(cpu.register(0).unwrap(), Some(7));
 
         cpu.reset(0x0200_0000);
         cpu.set_register(0, 1);
@@ -4269,7 +4269,7 @@ mod tests {
         cpu.set_execution_state(true);
         cpu.set_register(15, 0x0200_0003);
         assert!(cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
         assert!(cpu.flags().negative);
         assert!(cpu.flags().carry);
         assert!(cpu.flags().overflow);
@@ -4277,7 +4277,7 @@ mod tests {
 
         cpu.set_execution_state(false);
         assert!(!cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
         assert!(cpu.flags().negative);
     }
 
@@ -4311,8 +4311,8 @@ mod tests {
         cpu.set_register(2, 0xFFFF_FFFF);
         cpu.set_register(3, 2);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0xFFFF_FFFE));
-        assert_eq!(cpu.register(1), Some(1));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xFFFF_FFFE));
+        assert_eq!(cpu.register(1).unwrap(), Some(1));
     }
 
     #[test]
@@ -4331,8 +4331,8 @@ mod tests {
             overflow: true,
         });
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(u32::MAX)); // -6 + 5 = -1
-        assert_eq!(cpu.register(1), Some(u32::MAX));
+        assert_eq!(cpu.register(0).unwrap(), Some(u32::MAX)); // -6 + 5 = -1
+        assert_eq!(cpu.register(1).unwrap(), Some(u32::MAX));
         assert!(cpu.flags().negative);
         assert!(!cpu.flags().zero);
         assert!(cpu.flags().carry);
@@ -4347,8 +4347,8 @@ mod tests {
         let error = cpu.step(&mut bus).unwrap_err();
         assert_eq!(error.address(), 0x0200_0000);
         assert_eq!(error.instruction(), 0xF000_0000);
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
         assert_eq!(cpu.flags(), ConditionFlags::default());
 
         bus.write16(0x0200_0000, 0xDE00); // Undefined Thumb conditional branch.
@@ -4357,7 +4357,7 @@ mod tests {
         let error = cpu.step(&mut bus).unwrap_err();
         assert_eq!(error.address(), 0x0200_0000);
         assert_eq!(error.instruction(), 0xDE00);
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
     }
 
     #[test]
@@ -4368,12 +4368,12 @@ mod tests {
         cpu.set_register(0, (-17_i32) as u32);
         cpu.set_register(1, 5);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some((-3_i32) as u32));
-        assert_eq!(cpu.register(1), Some((-2_i32) as u32));
-        assert_eq!(cpu.register(3), Some(3));
+        assert_eq!(cpu.register(0).unwrap(), Some((-3_i32) as u32));
+        assert_eq!(cpu.register(1).unwrap(), Some((-2_i32) as u32));
+        assert_eq!(cpu.register(3).unwrap(), Some(3));
         cpu.set_register(0, 0xFFFF_FFFF);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(65_535));
+        assert_eq!(cpu.register(0).unwrap(), Some(65_535));
     }
 
     #[test]
@@ -4384,7 +4384,7 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.set_register(15, 0x0200_0000);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xBAAE_187F));
 
         cpu.set_register(0, 0x0200_0100);
         cpu.set_register(1, 0x0200_0200);
@@ -4478,7 +4478,7 @@ mod tests {
                 &mut bus,
             )
             .unwrap();
-            assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+            assert_eq!(cpu.register(0).unwrap(), Some(0xBAAE_187F));
         }
     }
 
@@ -4527,7 +4527,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             b"ABAB"
         );
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
     }
 
     #[test]
@@ -4569,7 +4569,7 @@ mod tests {
         assert!(cpu
             .execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
             .is_err());
-        assert_eq!(cpu.register(15), Some(0x0200_0200));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0200));
     }
 
     #[test]
@@ -4602,7 +4602,7 @@ mod tests {
         assert!(cpu
             .execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
             .is_err());
-        assert_eq!(cpu.register(15), Some(0x0200_0200));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0200));
     }
 
     #[test]
@@ -4752,7 +4752,7 @@ mod tests {
         cpu.set_register(1, 0x0200_0200);
 
         assert!(cpu.step(&mut bus).is_err());
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
         assert_eq!(bus.read8(0x0200_0200), 0);
     }
 
@@ -4769,7 +4769,7 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read8(0x0200_0200), 0xA5);
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -4919,8 +4919,8 @@ mod tests {
         cpu.set_register(15, 0x0200_0000);
         cpu.set_register(0, 144);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(12));
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(0).unwrap(), Some(12));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
         assert!(cpu.thumb);
     }
 
@@ -4940,11 +4940,11 @@ mod tests {
             cpu.step(&mut bus).unwrap();
         }
 
-        assert_eq!(cpu.register(0), Some(0));
-        assert_eq!(cpu.register(1), Some(16));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
+        assert_eq!(cpu.register(1).unwrap(), Some(16));
         assert!(cpu.flags().zero);
         assert!(!cpu.flags().negative);
-        assert_eq!(cpu.register(15), Some(0x0200_000A));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_000A));
     }
 
     #[test]
@@ -5164,7 +5164,7 @@ mod tests {
 
         assert!(matches!(outcome, StepOutcome::ConditionFailed { .. }));
         assert_eq!(cycles, 1);
-        assert_eq!(cpu.register(0), Some(0x0200_0000));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0000));
         assert_eq!(bus.read16(0x0400_0202) & (1 << 3), 1 << 3);
     }
 
@@ -5184,8 +5184,8 @@ mod tests {
 
         assert!(matches!(outcome, StepOutcome::ConditionFailed { .. }));
         assert_eq!(cycles, 1);
-        assert_eq!(cpu.register(0), Some(0));
-        assert_eq!(cpu.register(15), Some(0x0300_0004));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0300_0004));
         // Overflow reloads the configured value, which is FFFF here;
         // the timer IRQ flag is the observable proof that the tick occurred.
         assert_eq!(bus.read16(0x0400_0100), 0xFFFF);
@@ -5211,7 +5211,7 @@ mod tests {
             })
         );
         assert!(cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
     }
 
     #[test]
@@ -5226,7 +5226,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
 
         assert_eq!(cpu.register(8), Some(0x0200_0006));
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -5248,7 +5248,7 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
 
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
         assert_eq!(
             cpu.flags(),
             ConditionFlags {
@@ -5271,14 +5271,14 @@ mod tests {
         bus.write16(0x0200_0000, 0xD001);
         let (_, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(cycles, 1);
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
 
         // BNE +2 is taken because Z is clear.
         cpu.set_register(15, 0x0200_0000);
         bus.write16(0x0200_0000, 0xD101);
         let (_, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(cycles, 3);
-        assert_eq!(cpu.register(15), Some(0x0200_0006));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0006));
 
         // A taken BNE with displacement -2 lands at address+2, the same PC
         // as sequential execution. It must still pay the pipeline-refill cost.
@@ -5286,7 +5286,7 @@ mod tests {
         bus.write16(0x0200_0000, 0xD1FF);
         let (_, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(cycles, 3);
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
     }
 
     #[test]
@@ -5301,7 +5301,7 @@ mod tests {
 
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
         assert_eq!(cycles, 1);
-        assert_eq!(cpu.register(0), Some(42));
+        assert_eq!(cpu.register(0).unwrap(), Some(42));
         assert_eq!(bus.read16(0x0400_0100), 0xFFFF);
     }
 
@@ -5317,8 +5317,8 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         cpu.step(&mut bus).unwrap();
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(42));
-        assert_eq!(cpu.register(1), Some(50));
+        assert_eq!(cpu.register(0).unwrap(), Some(42));
+        assert_eq!(cpu.register(1).unwrap(), Some(50));
         assert!(cpu.flags().zero);
         assert!(cpu.flags().carry);
     }
@@ -5416,7 +5416,7 @@ mod tests {
         assert_eq!(cpu.mode, 0x1F);
         assert!(cpu.is_thumb());
         assert!(cpu.irq_disabled);
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -5441,7 +5441,7 @@ mod tests {
         assert_eq!(cpu.mode, 0x1F);
         assert!(cpu.is_thumb());
         assert!(!cpu.irq_disabled);
-        assert_eq!(cpu.register(15), Some(0x0800_0100));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_0100));
         assert!(!cpu.spsr_irq_valid);
     }
 
@@ -5458,7 +5458,7 @@ mod tests {
             Err(CpuError::UnsupportedInstruction { .. })
         ));
         assert_eq!(cpu.mode, 0x10);
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
     }
 
     #[test]
@@ -5521,8 +5521,8 @@ mod tests {
             cpu.step(&mut bus),
             Ok(StepOutcome::ConditionFailed { .. })
         ));
-        assert_eq!(cpu.register(0), Some(0));
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -5532,7 +5532,7 @@ mod tests {
         cpu.reset(0x0200_0000);
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(14), Some(0x0200_0004));
-        assert_eq!(cpu.register(15), Some(0x0200_0008));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0008));
     }
 
     #[test]
@@ -5556,7 +5556,7 @@ mod tests {
         cpu.set_register(13, 0x0200_0010);
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(2), Some(0x1122_3344));
-        assert_eq!(cpu.register(3), Some(0xAABB_CCDD));
+        assert_eq!(cpu.register(3).unwrap(), Some(0xAABB_CCDD));
         assert_eq!(cpu.register(13), Some(0x0200_0018));
     }
 
@@ -5579,7 +5579,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(bus.read32(0x0200_0104), 0x0200_0100);
-        assert_eq!(cpu.register(1), Some(0x0200_0108));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0108));
 
         // Use a fresh base to exercise the lowest-register case.
         cpu.set_register(0, 0x0200_0120);
@@ -5587,7 +5587,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_0120), 0x0200_0128);
         assert_eq!(bus.read32(0x0200_0124), 0xAABB_CCDD);
-        assert_eq!(cpu.register(0), Some(0x0200_0128));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0128));
     }
 
     #[test]
@@ -5602,7 +5602,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(bus.read32(0x0200_0104), 0x0200_0100);
-        assert_eq!(cpu.register(1), Some(0x0200_0108));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0108));
 
         // STMIA r0!, {r0, r1}: base is the lowest register, so the updated
         // base is stored in its slot.
@@ -5614,7 +5614,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_0120), 0x0200_0128);
         assert_eq!(bus.read32(0x0200_0124), 0xAABB_CCDD);
-        assert_eq!(cpu.register(0), Some(0x0200_0128));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0128));
     }
 
     #[test]
@@ -5629,7 +5629,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_0118), 0x0200_0118);
         assert_eq!(bus.read32(0x0200_011C), 0xAABB_CCDD);
-        assert_eq!(cpu.register(0), Some(0x0200_0118));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0118));
 
         // STMDB r1!, {r0, r1}: because r0 is listed first, r1's slot
         // contains the original base even though write-back decrements r1.
@@ -5641,7 +5641,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_0118), 0x1122_3344);
         assert_eq!(bus.read32(0x0200_011C), 0x0200_0120);
-        assert_eq!(cpu.register(1), Some(0x0200_0118));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0118));
     }
 
     #[test]
@@ -5660,15 +5660,15 @@ mod tests {
         cpu.reset(0x0200_0000);
         cpu.set_register(1, 0x0200_0100);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(1), Some(0xAABB_CCDD));
+        assert_eq!(cpu.register(1).unwrap(), Some(0xAABB_CCDD));
         assert_eq!(cpu.register(2), Some(0x1122_3344));
 
         // When Rn is not the lowest register in the list, write-back wins.
         cpu.set_register(1, 0x0200_0200);
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(2), Some(0x5566_7788));
-        assert_eq!(cpu.register(3), Some(0x99AA_BBCC));
-        assert_eq!(cpu.register(1), Some(0x0200_0208));
+        assert_eq!(cpu.register(3).unwrap(), Some(0x99AA_BBCC));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0208));
     }
 
     #[test]
@@ -5681,7 +5681,7 @@ mod tests {
         cpu.set_register(0, 0x0200_0100);
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_013C), 0x0200_000C);
-        assert_eq!(cpu.register(0), Some(0x0200_0140));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0140));
 
         // LDMDB r1!, {} loads PC from base - 4 while decrementing by 0x40.
         let mut bus = bus_with_program(&[0xE931_0000]);
@@ -5690,8 +5690,8 @@ mod tests {
         cpu.reset(0x0200_0000);
         cpu.set_register(1, 0x0200_0120);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(15), Some(0x0200_0040));
-        assert_eq!(cpu.register(1), Some(0x0200_00E0));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0040));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_00E0));
     }
 
     #[test]
@@ -5713,7 +5713,7 @@ mod tests {
         cpu.reset(0x0200_0004);
         cpu.set_register(1, 0x0200_0101);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(3), Some(0xFFFF_FF80));
+        assert_eq!(cpu.register(3).unwrap(), Some(0xFFFF_FF80));
     }
 
     #[test]
@@ -5760,7 +5760,7 @@ mod tests {
         cpu.set_register(5, 0x42);
 
         assert_eq!(cpu.step_with_cycles(&mut bus).unwrap().1, 4);
-        assert_eq!(cpu.register(1), Some(0x1234_5678));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x1234_5678));
         assert_eq!(bus.read32(0x0200_0100), 0xAABB_CCDD);
         assert_eq!(cpu.step_with_cycles(&mut bus).unwrap().1, 4);
         assert_eq!(cpu.register(4), Some(0xDD));
@@ -5787,7 +5787,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(2), Some(0xFFFF_FFFF));
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(3), Some(0xFFFF_80FF));
+        assert_eq!(cpu.register(3).unwrap(), Some(0xFFFF_80FF));
     }
 
     #[test]
@@ -5805,7 +5805,7 @@ mod tests {
         cpu.set_register(5, 0x42);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(1), Some(0x1234_5678));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x1234_5678));
         assert_eq!(bus.read32(0x0200_0100), 0xAABB_CCDD);
 
         cpu.step(&mut bus).unwrap();
@@ -5832,7 +5832,7 @@ mod tests {
                 instruction,
             })
         );
-        assert_eq!(cpu.register(1), Some(0xDEAD_BEEF));
+        assert_eq!(cpu.register(1).unwrap(), Some(0xDEAD_BEEF));
         assert_eq!(bus.read32(0x0200_0100), 0x1234_5678);
     }
 
@@ -5847,8 +5847,8 @@ mod tests {
         cpu.set_register(2, 0xFFFF_FFFF);
         cpu.set_register(3, 2);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0xFFFF_FFFE));
-        assert_eq!(cpu.register(1), Some(1));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xFFFF_FFFE));
+        assert_eq!(cpu.register(1).unwrap(), Some(1));
     }
 
     #[test]
@@ -5866,8 +5866,8 @@ mod tests {
         cpu.flags.carry = true;
         cpu.flags.overflow = true;
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0xFFFF_FFFF));
-        assert_eq!(cpu.register(1), Some(0xFFFF_FFFF));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xFFFF_FFFF));
+        assert_eq!(cpu.register(1).unwrap(), Some(0xFFFF_FFFF));
         assert!(cpu.flags().negative);
         assert!(!cpu.flags().zero);
         // Long multiply with S set updates N/Z only.
@@ -5887,8 +5887,8 @@ mod tests {
         cpu.set_register(3, 3);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0xFFFF_FFFA));
-        assert_eq!(cpu.register(1), Some(0xFFFF_FFFF));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xFFFF_FFFA));
+        assert_eq!(cpu.register(1).unwrap(), Some(0xFFFF_FFFF));
 
         // UMLAL adds unsigned (0xFFFF_FFFE * 3) to the previous 64-bit result.
         cpu.set_register(0, 0xFFFF_FFFA);
@@ -5896,8 +5896,8 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         let expected = (u64::from(0xFFFF_FFFF_u32) << 32) | u64::from(0xFFFF_FFFA_u32);
         let expected = expected.wrapping_add(u64::from(0xFFFF_FFFE_u32) * 3);
-        assert_eq!(cpu.register(0), Some(expected as u32));
-        assert_eq!(cpu.register(1), Some((expected >> 32) as u32));
+        assert_eq!(cpu.register(0).unwrap(), Some(expected as u32));
+        assert_eq!(cpu.register(1).unwrap(), Some((expected >> 32) as u32));
     }
 
     #[test]
@@ -5918,8 +5918,8 @@ mod tests {
                 instruction,
             })
         );
-        assert_eq!(cpu.register(0), Some(7));
-        assert_eq!(cpu.register(1), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(7));
+        assert_eq!(cpu.register(1).unwrap(), Some(0));
     }
 
     #[test]
@@ -5937,12 +5937,12 @@ mod tests {
         cpu.set_register(5, 9);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(42));
+        assert_eq!(cpu.register(0).unwrap(), Some(42));
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(3), Some(57));
+        assert_eq!(cpu.register(3).unwrap(), Some(57));
         cpu.set_register(1, 0);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
         assert!(cpu.flags().zero);
         assert!(!cpu.flags().negative);
     }
@@ -5960,13 +5960,13 @@ mod tests {
         cpu.thumb = true;
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(7));
+        assert_eq!(cpu.register(0).unwrap(), Some(7));
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(12));
+        assert_eq!(cpu.register(0).unwrap(), Some(12));
         cpu.step(&mut bus).unwrap();
         assert!(cpu.flags().zero);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(15), Some(0x0200_000A));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_000A));
     }
 
     #[test]
@@ -5982,14 +5982,14 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(14), Some(0x0200_0004));
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
         assert_eq!(cpu.register(14), Some(0x0200_0005));
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(7));
+        assert_eq!(cpu.register(0).unwrap(), Some(7));
     }
 
     #[test]
@@ -6007,10 +6007,10 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(14), Some(0x0200_0004));
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
         assert_eq!(cpu.register(14), Some(0x0200_1005));
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(9));
+        assert_eq!(cpu.register(0).unwrap(), Some(9));
     }
 
     #[test]
@@ -6064,7 +6064,7 @@ mod tests {
                 instruction,
             })
         );
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
     }
 
     #[test]
@@ -6075,7 +6075,7 @@ mod tests {
         cpu.set_register(2, 0x0000_0003);
         cpu.set_register(3, 4);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0x0000_0030));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0000_0030));
     }
 
     #[test]
@@ -6089,9 +6089,9 @@ mod tests {
         cpu.set_register(13, 0x0200_0100);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0x0200_0008));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0008));
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(1), Some(0x0200_0108));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0108));
     }
 
     #[test]
@@ -6141,7 +6141,7 @@ mod tests {
         assert_eq!(cpu.register(13), Some(0x0200_0118));
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(2), Some(0x1122_3344));
-        assert_eq!(cpu.register(3), Some(0xAABB_CCDD));
+        assert_eq!(cpu.register(3).unwrap(), Some(0xAABB_CCDD));
         assert_eq!(cpu.register(13), Some(0x0200_0120));
     }
 
@@ -6160,13 +6160,13 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(bus.read32(0x0200_0104), 0xAABB_CCDD);
-        assert_eq!(cpu.register(0), Some(0x0200_0108));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0108));
 
         cpu.set_register(0, 0x0200_0100);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(3), Some(0x1122_3344));
+        assert_eq!(cpu.register(3).unwrap(), Some(0x1122_3344));
         assert_eq!(cpu.register(4), Some(0xAABB_CCDD));
-        assert_eq!(cpu.register(0), Some(0x0200_0108));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_0108));
     }
 
     #[test]
@@ -6184,7 +6184,7 @@ mod tests {
             })
         );
         assert!(!cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
     }
 
     #[test]
@@ -6199,12 +6199,12 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
         assert!(cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0008));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0008));
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(2), Some(1));
         cpu.step(&mut bus).unwrap();
         assert!(!cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0010));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0010));
     }
 
     #[test]
@@ -6218,7 +6218,7 @@ mod tests {
         cpu.set_register(1, 0x8000_0001);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
         assert!(!cpu.flags().negative);
         assert!(cpu.flags().carry);
 
@@ -6258,7 +6258,7 @@ mod tests {
         cpu.set_register(7, 1);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(2));
+        assert_eq!(cpu.register(0).unwrap(), Some(2));
         assert!(cpu.flags().carry);
 
         cpu.step(&mut bus).unwrap();
@@ -6274,7 +6274,7 @@ mod tests {
         assert!(cpu.flags().carry);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(u32::MAX));
+        assert_eq!(cpu.register(0).unwrap(), Some(u32::MAX));
         assert!(cpu.flags().negative);
     }
 
@@ -6293,7 +6293,7 @@ mod tests {
         cpu.set_register(3, 1);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
         assert!(cpu.flags().zero);
         assert!(cpu.flags().carry);
 
@@ -6314,10 +6314,10 @@ mod tests {
         cpu.thumb = true;
 
         assert!(cpu.set_register(15, 0x0200_0003));
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(7));
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(0).unwrap(), Some(7));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -6341,7 +6341,7 @@ mod tests {
         cpu.set_register(7, 32);
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
         assert!(cpu.flags().carry); // LSL by 32 takes bit 0 into carry.
 
         cpu.step(&mut bus).unwrap();
@@ -6393,7 +6393,7 @@ mod tests {
                 }),
                 "instruction 0x{instruction:08X}"
             );
-            assert_eq!(cpu.register(0), Some(3));
+            assert_eq!(cpu.register(0).unwrap(), Some(3));
         }
     }
 
@@ -6535,8 +6535,8 @@ mod tests {
         load_cpu.thumb = true;
         load_cpu.set_register(0, 0x0200_0100);
         load_cpu.step(&mut load_bus).unwrap();
-        assert_eq!(load_cpu.register(15), Some(0x0200_0020));
-        assert_eq!(load_cpu.register(0), Some(0x0200_0140));
+        assert_eq!(load_cpu.register(15).unwrap(), Some(0x0200_0020));
+        assert_eq!(load_cpu.register(0).unwrap(), Some(0x0200_0140));
         assert!(load_cpu.is_thumb());
 
         // Empty STMIA stores the Thumb-visible PC and advances by 0x40 too.
@@ -6548,7 +6548,7 @@ mod tests {
         store_cpu.set_register(0, 0x0200_0100);
         store_cpu.step(&mut store_bus).unwrap();
         assert_eq!(store_bus.read32(0x0200_0100), 0x0200_0004);
-        assert_eq!(store_cpu.register(0), Some(0x0200_0140));
+        assert_eq!(store_cpu.register(0).unwrap(), Some(0x0200_0140));
     }
 
     #[test]
@@ -6563,7 +6563,7 @@ mod tests {
 
         assert_eq!(cycles, 3);
         assert!(cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0200_0100));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0100));
     }
 
     #[test]
@@ -6607,11 +6607,11 @@ mod tests {
 
         let (_, first_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(first_cycles, 1);
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
 
         let (_, second_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert_eq!(second_cycles, 3);
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -6669,7 +6669,7 @@ mod tests {
         cpu.thumb = true;
         cpu.set_register(13, 0x0200_0101);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0x7812_3456));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x7812_3456));
     }
 
     #[test]
@@ -6757,7 +6757,7 @@ mod tests {
                 instruction,
             })
         );
-        assert_eq!(cpu.register(1), Some(0x0200_0100));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0100));
     }
 
     #[test]
@@ -6776,7 +6776,7 @@ mod tests {
                 }),
                 "instruction 0x{instruction:08X}"
             );
-            assert_eq!(cpu.register(15), Some(0x0200_0000));
+            assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
         }
     }
 
@@ -6797,7 +6797,7 @@ mod tests {
                 }),
                 "instruction 0x{instruction:08X}"
             );
-            assert_eq!(cpu.register(15), Some(0x0200_0000));
+            assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
             assert_eq!(bus.read32(0x0200_0004), 0);
         }
     }
@@ -6816,7 +6816,7 @@ mod tests {
             })
         );
         // The invalid write-back must not redirect execution through r15.
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
     }
 
     #[test]
@@ -6839,7 +6839,7 @@ mod tests {
                 "instruction 0x{instruction:08X}"
             );
             // Rejection must happen before a data access or base write-back.
-            assert_eq!(cpu.register(1), Some(0x0200_0100));
+            assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0100));
             assert_eq!(bus.read32(0x0200_0100), 0xAABB_CCDD);
         }
     }
@@ -6859,7 +6859,7 @@ mod tests {
                 instruction: 0xE491_1004,
             })
         );
-        assert_eq!(cpu.register(1), Some(0x0200_0100));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0100));
     }
 
     #[test]
@@ -6909,8 +6909,8 @@ mod tests {
         bus.write32(0x0200_0104, 0x8765_4321);
         bus.write16(0x0200_0000, 0xC803);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0x1234_5678));
-        assert_eq!(cpu.register(1), Some(0x8765_4321));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x1234_5678));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x8765_4321));
 
         // LDMIA r1!, {r0, r1}: when the base is not the lowest listed
         // register, write-back wins over the loaded value for r1.
@@ -6921,8 +6921,8 @@ mod tests {
         bus.write32(0x0200_0124, 0x1122_3344);
         bus.write16(0x0200_0000, 0xC903);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0xAABB_CCDD));
-        assert_eq!(cpu.register(1), Some(0x0200_0128));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xAABB_CCDD));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0128));
     }
 
     #[test]
@@ -6970,8 +6970,8 @@ mod tests {
         cpu.step(&mut bus).unwrap();
 
         assert_eq!(bus.read32(0x0200_0100), 0x1234_5678);
-        assert_eq!(cpu.register(1), Some(0x0200_0100));
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_0100));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
     #[test]
     fn arm_scalar_gamepak_data_access_adds_waitcnt_latency() {
@@ -7183,14 +7183,14 @@ mod tests {
         rom_cpu.reset(0x0200_0000);
         rom_cpu.set_register(1, 0x0800_0100);
         let (_, rom_cycles) = rom_cpu.step_with_cycles(&mut rom_bus).unwrap();
-        assert_eq!(rom_cpu.register(1), Some(0x0800_0104));
+        assert_eq!(rom_cpu.register(1).unwrap(), Some(0x0800_0104));
 
         let mut ram_bus = bus_with_program(&[instruction, 0xE1A0_0000]);
         let mut ram_cpu = Cpu::new();
         ram_cpu.reset(0x0200_0000);
         ram_cpu.set_register(1, 0x0300_0100);
         let (_, ram_cycles) = ram_cpu.step_with_cycles(&mut ram_bus).unwrap();
-        assert_eq!(ram_cpu.register(1), Some(0x0300_0104));
+        assert_eq!(ram_cpu.register(1).unwrap(), Some(0x0300_0104));
 
         assert!(rom_cycles > ram_cycles);
     }
@@ -7252,7 +7252,7 @@ mod tests {
 
         let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
-        assert_eq!(cpu.register(0), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
         assert!(cycles > 3);
     }
 
@@ -7464,7 +7464,7 @@ mod tests {
         bus.write16(0x0400_0204, 1 << 4);
 
         let (_, branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
-        assert_eq!(cpu.register(15), Some(0x0800_00C2));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_00C2));
         let (_, after_branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
 
         assert!(branch_cycles >= 3);
@@ -7490,7 +7490,7 @@ mod tests {
         let (_, branch_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         let (_, sequential_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
 
-        assert_eq!(cpu.register(15), Some(0x0800_00C4));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_00C4));
         assert!(branch_cycles > sequential_cycles);
     }
 
@@ -7506,7 +7506,7 @@ mod tests {
         let (_, second_cycles) = cpu.step_with_cycles(&mut bus).unwrap();
 
         assert!(first_cycles > second_cycles);
-        assert_eq!(cpu.register(0), Some(1));
+        assert_eq!(cpu.register(0).unwrap(), Some(1));
     }
 
     #[test]
@@ -7543,7 +7543,7 @@ mod tests {
         };
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0x8000_0000));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x8000_0000));
         assert_eq!(
             cpu.flags(),
             ConditionFlags {
@@ -7555,7 +7555,7 @@ mod tests {
         );
 
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0), Some(0x8000_0001));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x8000_0001));
         assert!(cpu.flags().negative);
         assert!(!cpu.flags().overflow);
     }
@@ -7571,11 +7571,11 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(14), Some(0x0200_0004));
-        assert_eq!(cpu.register(15), Some(0x0200_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0002));
 
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.register(14), Some(0x0200_0005));
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
         assert!(cpu.is_thumb());
     }
 
@@ -7678,7 +7678,7 @@ mod tests {
         });
 
         assert!(!cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0800_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_0000));
     }
 
     #[test]
@@ -7703,7 +7703,7 @@ mod tests {
                 instruction: 0x0A00_0000,
             }
         );
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
         assert_eq!(cpu.flags(), before_flags);
     }
 
@@ -7923,13 +7923,13 @@ mod tests {
         cpu.set_register(0, 0x0000_4000);
         cpu.execute_swi(0x0200_0200, 0xEF00_0009, 0x09, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(0x0000_2000));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0000_2000));
 
         cpu.set_register(0, 0xFFFF_C000);
         cpu.set_register(1, 0x0000_4000);
         cpu.execute_swi(0x0200_0204, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(0x0000_6000));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0000_6000));
     }
 
     #[test]
@@ -7950,7 +7950,7 @@ mod tests {
             cpu.set_register(0, input);
             cpu.execute_swi(0x0200_0200, 0xEF00_0008, 0x08, false, &mut bus)
                 .unwrap();
-            assert_eq!(cpu.register(0), Some(expected), "sqrt({input})");
+            assert_eq!(cpu.register(0).unwrap(), Some(expected), "sqrt({input})");
         }
     }
 
@@ -8114,7 +8114,7 @@ mod tests {
             .unwrap();
 
         assert!(!cpu.is_halted());
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
         assert_eq!(bus.pending_interrupts(), (1 << 0) | (1 << 1));
         assert_eq!(bus.bios_interrupt_flags(), 1 << 1);
     }
@@ -8271,7 +8271,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(bus.read32(destination), 0x2022_0002);
-        assert_eq!(cpu.register(15), Some(0x0200_0304));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0304));
     }
 
     #[test]
@@ -8366,7 +8366,7 @@ mod tests {
             Err(CpuError::UnsupportedInstruction { .. })
         ));
         assert_eq!(bus.read32(destination), 0xDEAD_BEEF);
-        assert_eq!(cpu.register(15), Some(0x0200_0300));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0300));
     }
 
     #[test]
@@ -8479,7 +8479,7 @@ mod tests {
 
         assert!(cpu.set_register(15, 0x0800_0003));
         assert!(!cpu.is_halted());
-        assert_eq!(cpu.register(15), Some(0x0800_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_0000));
         assert_eq!(cpu.snapshot().bios_wait_mask, None);
     }
 
@@ -8499,10 +8499,10 @@ mod tests {
         assert!(!cpu.is_stopped());
 
         assert!(cpu.set_register(15, 0x0800_0003));
-        assert_eq!(cpu.register(15), Some(0x0800_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_0002));
         cpu.set_execution_state(false);
         assert!(!cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0800_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_0000));
     }
 
     #[test]
@@ -8534,7 +8534,7 @@ mod tests {
         cpu.restore_snapshot(snapshot);
 
         assert!(cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x0800_0002));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_0002));
         assert_eq!(cpu.cpsr_flags(), 0xD000_003F);
         assert_eq!(cpu.snapshot().cpsr, 0xD000_003F);
     }
@@ -8555,8 +8555,8 @@ mod tests {
         let outcome = cpu.step(&mut bus).unwrap();
 
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
-        assert_eq!(cpu.register(0), Some(0xA000_001F));
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xA000_001F));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
         assert_eq!(cpu.cpsr_flags() & (1 << 5), 0);
     }
 
@@ -8580,7 +8580,7 @@ mod tests {
             }
         );
         assert_eq!(cpu.cpsr_flags(), 0x6000_001F);
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -8661,10 +8661,10 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
 
-        assert_eq!(cpu.register(0), Some(0xAABB_CCDD));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xAABB_CCDD));
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(cpu.flags(), flags);
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -8697,14 +8697,14 @@ mod tests {
         cpu.set_register(2, 0);
         cpu.execute_swi(0x0200_0000, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(8_000_000));
+        assert_eq!(cpu.register(0).unwrap(), Some(8_000_000));
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69); // A4, 111 semitones below the base key.
         cpu.set_register(2, 0);
         cpu.execute_swi(0x0200_0004, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        let untuned = cpu.register(0).unwrap();
+        let untuned = cpu.register(0).unwrap().unwrap();
         assert_eq!(untuned, 13_139);
 
         cpu.set_register(0, wave_data);
@@ -8712,7 +8712,7 @@ mod tests {
         cpu.set_register(2, 255);
         cpu.execute_swi(0x0200_0008, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert!(cpu.register(0).unwrap() > untuned);
+        assert!(cpu.register(0).unwrap().unwrap() > untuned);
     }
 
     #[test]
@@ -8742,7 +8742,7 @@ mod tests {
         assert_eq!(bus.read16(destination + 6), 0x0200);
         assert_eq!(bus.read32(destination + 8), 0x0000_0E00);
         assert_eq!(bus.read32(destination + 12), 0xFFFF_FC00);
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 
     #[test]
@@ -8785,8 +8785,8 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_000D, 0x0D, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xBAAE_187F));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
     }
 
     #[test]
@@ -8801,10 +8801,10 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_000D, 0x0D, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
-        assert_eq!(cpu.register(1), Some(0x8765_4321));
+        assert_eq!(cpu.register(0).unwrap(), Some(0xBAAE_187F));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x8765_4321));
         assert_eq!(cpu.register(2), Some(0xA5A5_5A5A));
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
     }
 
     #[test]
@@ -8829,13 +8829,13 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xDF00, 0x00, true, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(15), Some(0x0800_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_0000));
         assert_eq!(bus.read32(0x0300_7E00), 0);
         assert_eq!(bus.bios_interrupt_flags(), 0);
         assert_eq!(bus.read32(0x0300_7FFC), 0);
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
-        assert_eq!(cpu.register(0), Some(0));
-        assert_eq!(cpu.register(1), Some(0));
+        assert_eq!(cpu.register(0).unwrap(), Some(0));
+        assert_eq!(cpu.register(1).unwrap(), Some(0));
         assert!(!cpu.is_thumb());
         assert_eq!(cpu.flags(), ConditionFlags::default());
 
@@ -8855,7 +8855,7 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_0000, 0x00, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
         assert_eq!(bus.read8(0x0300_7FFA), 0);
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
         assert!(cpu.enter_irq());
@@ -8875,9 +8875,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(bus.read16(0x0400_0088), 0x0200);
-        assert_eq!(cpu.register(0), Some(0x1234_5678));
-        assert_eq!(cpu.register(1), Some(0x8765_4321));
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x1234_5678));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x8765_4321));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
     }
 
     #[test]
@@ -8892,20 +8892,20 @@ mod tests {
         cpu.set_register(2, 0);
         cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(48_000));
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(0).unwrap(), Some(48_000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
 
         cpu.set_register(0, wave);
         cpu.set_register(1, 168);
         cpu.execute_swi(0x0200_0204, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(24_000));
+        assert_eq!(cpu.register(0).unwrap(), Some(24_000));
 
         cpu.set_register(0, wave);
         cpu.set_register(1, 192);
         cpu.execute_swi(0x0200_0208, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(96_000));
+        assert_eq!(cpu.register(0).unwrap(), Some(96_000));
     }
 
     #[test]
@@ -8922,7 +8922,7 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(0), Some(48_000));
+        assert_eq!(cpu.register(0).unwrap(), Some(48_000));
     }
 
     #[test]
@@ -8939,7 +8939,7 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
 
-        assert_eq!(cpu.register(0), Some(u32::MAX));
+        assert_eq!(cpu.register(0).unwrap(), Some(u32::MAX));
     }
 
     #[test]
@@ -8954,7 +8954,7 @@ mod tests {
         cpu.set_register(2, 128);
         cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        let actual = cpu.register(0).unwrap();
+        let actual = cpu.register(0).unwrap().unwrap();
         let expected = (12_000.0_f64 * 2.0_f64.powf(0.5 / 12.0)) as u32;
         assert_eq!(actual, expected);
     }
@@ -8971,7 +8971,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(bus.read16(0x0400_0088), 0xC000);
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
     }
 
     #[test]
@@ -8986,7 +8986,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(bus.read16(0x0400_0088), 0x8200);
-        assert_eq!(cpu.register(15), Some(0x0200_0204));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0204));
     }
 
     #[test]
@@ -9002,7 +9002,7 @@ mod tests {
 
         cpu.step(&mut bus).unwrap();
 
-        assert_eq!(cpu.register(0), Some(0x33));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x33));
         assert_eq!(bus.read8(0x0200_0101), 0xAB);
         assert_eq!(bus.read32(0x0200_0100), 0x1122_AB44);
         assert_eq!(cpu.flags(), flags);
@@ -9069,7 +9069,7 @@ mod tests {
         assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_0009, false, &bus), 12);
         assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_000A, false, &bus), 24);
         // Estimation is observational: it must not mutate registers or bus state.
-        assert_eq!(cpu.register(0), Some(u32::MAX));
+        assert_eq!(cpu.register(0).unwrap(), Some(u32::MAX));
         bus.write16(0x0400_0100, 0xFFFE);
         assert_eq!(bus.timer_counter(0), Some(0));
     }
@@ -9111,7 +9111,7 @@ mod tests {
         assert_eq!(cpu.processor_mode(), 0x12);
         assert!(cpu.irq_disabled());
         assert!(!cpu.is_thumb());
-        assert_eq!(cpu.register(15), Some(0x18));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x18));
         assert_eq!(cpu.register(14), Some(0x0200_0204));
         assert_eq!(cpu.register(13), Some(0));
         cpu.set_register(15, 0x0200_0000);
@@ -9122,7 +9122,7 @@ mod tests {
         assert!(cpu.is_thumb());
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
         assert_eq!(cpu.register(14), Some(0x1234_5678));
-        assert_eq!(cpu.register(15), Some(0x0200_0200));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0200));
     }
 
     #[test]
@@ -9133,7 +9133,7 @@ mod tests {
         assert!(cpu.enter_irq());
         cpu.set_register(15, 0x0200_0000);
         cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.register(0).unwrap() & 0x1F, 0x1F);
+        assert_eq!(cpu.register(0).unwrap().unwrap() & 0x1F, 0x1F);
         cpu.set_register(1, 0xA000_0000);
         cpu.set_register(15, 0x0200_0004);
         cpu.step(&mut bus).unwrap();
@@ -9157,7 +9157,7 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read32(0x0200_1000), 0x0300_7E00);
         assert_eq!(bus.read32(0x0200_1004), 0x0800_1234);
-        assert_eq!(cpu.register(0), Some(0x0200_1008));
+        assert_eq!(cpu.register(0).unwrap(), Some(0x0200_1008));
 
         bus.write32(0x0200_2000, 0x0300_7D00);
         bus.write32(0x0200_2004, 0x0800_5678);
@@ -9165,7 +9165,7 @@ mod tests {
         assert_eq!(cpu.user_sp_lr, [0x0300_7D00, 0x0800_5678]);
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
         assert_eq!(cpu.register(14), Some(0x0200_0104));
-        assert_eq!(cpu.register(1), Some(0x0200_2008));
+        assert_eq!(cpu.register(1).unwrap(), Some(0x0200_2008));
     }
 
     #[test]
@@ -9191,7 +9191,7 @@ mod tests {
         assert!(cpu.is_thumb());
         assert_eq!(cpu.register(13), Some(0x0300_7100));
         assert_eq!(cpu.register(14), Some(0x0800_2000));
-        assert_eq!(cpu.register(15), Some(0x0800_4000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0800_4000));
     }
     #[test]
     fn bios_lz77_uncompresses_literals_and_back_references() {
@@ -9251,7 +9251,7 @@ mod tests {
         assert_eq!(cycles, 1);
         assert!(cpu.is_halted());
         assert!(!cpu.is_stopped());
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
     }
 
     #[test]
@@ -9267,13 +9267,13 @@ mod tests {
         assert_eq!(outcome, StepOutcome::Halted);
         assert_eq!(cycles, 0);
         assert!(cpu.is_stopped());
-        assert_eq!(cpu.register(15), Some(0x0200_0000));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0000));
 
         bus.set_button_pressed(crate::memory::GbaButton::A, true);
         let (outcome, cycles) = cpu.step_with_cycles(&mut bus).unwrap();
         assert!(matches!(outcome, StepOutcome::Executed { .. }));
         assert!(cycles > 0);
         assert!(!cpu.is_stopped());
-        assert_eq!(cpu.register(15), Some(0x0200_0004));
+        assert_eq!(cpu.register(15).unwrap(), Some(0x0200_0004));
     }
 }
