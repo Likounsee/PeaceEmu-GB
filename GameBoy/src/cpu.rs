@@ -7941,6 +7941,32 @@ mod tests {
     }
 
     #[test]
+    fn bios_arctan2_swi_uses_signed_low_halfwords() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+
+        // High argument bits are not part of the BIOS' signed Q2.14 inputs.
+        cpu.set_register(0, 0x1234_C000);
+        cpu.set_register(1, 0xABCD_4000);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0).unwrap(), 0x0000_6000);
+
+        cpu.set_register(0, 0xFFFF_8000);
+        cpu.set_register(1, 0x0000_0000);
+        cpu.execute_swi(0x0200_0204, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0).unwrap(), 0x0000_8000);
+
+        cpu.set_register(0, 0x0000_0000);
+        cpu.set_register(1, 0xFFFF_8000);
+        cpu.execute_swi(0x0200_0208, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0).unwrap(), 0x0000_C000);
+    }
+
+    #[test]
     fn bios_sqrt_handles_zero_perfect_squares_and_u32_max() {
         let mut bus = bus_with_program(&[]);
         let mut cpu = Cpu::new();
