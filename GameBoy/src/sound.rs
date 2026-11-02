@@ -759,6 +759,12 @@ mod tests {
             psg.set_master_enabled(true);
             psg.write(0x63, 0xA9);
             psg.write(0x65, 0xC0);
+            psg.write(0x70, 0x80);
+            psg.write(0x72, 0x20);
+            psg.write(0x74, 0xF0);
+            psg.write(0x75, 0x87);
+            psg.write_wave_ram(0, 0xF1);
+            psg.write_wave_ram(1, 0x2E);
             psg.write(0x79, 0xB3);
             psg.write(0x7C, 0x07);
             psg.write(0x7D, 0xC0);
@@ -781,6 +787,10 @@ mod tests {
         assert_eq!(whole.channel_samples(), chunked.channel_samples());
         assert_eq!(whole.status_bits(), chunked.status_bits());
         assert_eq!(whole.square[0].phase, chunked.square[0].phase);
+        assert_eq!(whole.square[0].timer, chunked.square[0].timer);
+        assert_eq!(whole.wave.position, chunked.wave.position);
+        assert_eq!(whole.wave.timer, chunked.wave.timer);
+        assert_eq!(whole.channel_samples()[2], chunked.channel_samples()[2]);
         assert_eq!(whole.square[0].volume, chunked.square[0].volume);
         assert_eq!(
             whole.square[0].envelope_timer,
