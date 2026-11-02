@@ -1350,7 +1350,7 @@ impl MemoryBus {
 
     /// Returns and clears all queued stereo PCM samples in chronological order.
     ///
-    /// Samples are signed 16-bit stereo at [`AUDIO_SAMPLE_RATE`] Hz. The queue
+    /// Samples are signed 16-bit stereo at [`crate::AUDIO_SAMPLE_RATE`] Hz. The queue
     /// is bounded to one quarter second; if a frontend falls behind, the oldest
     /// samples are discarded rather than allowing unbounded memory growth.
     pub fn drain_audio_samples(&mut self) -> Vec<(i16, i16)> {
@@ -6354,5 +6354,4 @@ mod tests {
         assert_eq!(samples.len(), 8_192);
         assert!(samples.iter().all(|sample| *sample == (0, 0)));
     }
-
 }
