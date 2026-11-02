@@ -763,7 +763,7 @@ fn render_text_backgrounds(
     display_control: u16,
     obj_tile_cache: &mut [Option<[u8; 64]>],
     oam_snapshot: &[u8; 1024],
-    allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
+    allowed_lines: &[[u16; SCREEN_HEIGHT]; 128],
     windows: &WindowConfig,
     frame: &mut VideoFrame,
 ) {
@@ -1242,7 +1242,7 @@ fn read_oam16(snapshot: &[u8; 1024], address: u32) -> u16 {
 fn object_scanline_mask(
     oam_snapshot: &[u8; 1024],
     display_control: u16,
-) -> [[bool; SCREEN_HEIGHT]; 128] {
+) -> [[u16; SCREEN_HEIGHT]; 128] {
     const NORMAL_BUDGET: u16 = 1210;
     const HBLANK_FREE_BUDGET: u16 = 954;
     const INSPECTION_CYCLES: u16 = 2;
@@ -1251,7 +1251,7 @@ fn object_scanline_mask(
     } else {
         NORMAL_BUDGET
     };
-    let mut allowed_lines = [[false; SCREEN_HEIGHT]; 128];
+    let mut allowed_pixels = [[0_u16; SCREEN_HEIGHT]; 128];
 
     for line in 0..SCREEN_HEIGHT {
         let mut remaining = budget;
@@ -1280,250 +1280,86 @@ fn object_scanline_mask(
                 _ => None,
             };
 
-            let cost = if (!affine && attr0 & (1 << 9) != 0)
+            let invalid = (!affine && attr0 & (1 << 9) != 0)
                 || object_mode == 3
-                || dimensions.is_none()
-            {
-                INSPECTION_CYCLES
-            } else if let Some((width, height)) = dimensions {
-                let canvas_width = if affine && attr0 & (1 << 9) != 0 {
-                    width * 2
-                } else {
-                    width
-                };
-                let canvas_height = if affine && attr0 & (1 << 9) != 0 {
-                    height * 2
-                } else {
-                    height
-                };
-                let raw_y = i32::from(attr0 & 0x00FF);
-                let origin_y = if raw_y >= 256 - canvas_height {
-                    raw_y - 256
-                } else {
-                    raw_y
-                };
-                let raw_x = i32::from(attr1 & 0x01FF);
-                let origin_x = if raw_x >= 512 - canvas_width {
-                    raw_x - 512
-                } else {
-                    raw_x
-                };
-                let intersects_y = (origin_y..origin_y + canvas_height).contains(&(line as i32));
-                let intersects_x = origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
+                || dimensions.is_none();
+            if invalid {
+                if remaining < INSPECTION_CYCLES {
+                    break;
+                }
+                remaining -= INSPECTION_CYCLES;
+                continue;
+            }
 
-                if !intersects_y || !intersects_x {
-                    INSPECTION_CYCLES
-                } else if affine {
-                    10 + (canvas_width as u16 * 2)
+            let (width, height) = dimensions.expect("valid OBJ dimensions");
+            let canvas_width = if affine && attr0 & (1 << 9) != 0 {
+                width * 2
+            } else {
+                width
+            };
+            let canvas_height = if affine && attr0 & (1 << 9) != 0 {
+                height * 2
+            } else {
+                height
+            };
+            let raw_y = i32::from(attr0 & 0x00FF);
+            let origin_y = if raw_y >= 256 - canvas_height {
+                raw_y - 256
+            } else {
+                raw_y
+            };
+            let raw_x = i32::from(attr1 & 0x01FF);
+            let origin_x = if raw_x >= 512 - canvas_width {
+                raw_x - 512
+            } else {
+                raw_x
+            };
+            let intersects_y = (origin_y..origin_y + canvas_height).contains(&(line as i32));
+            let intersects_x =
+                origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
+
+            if !intersects_y || !intersects_x {
+                if remaining < INSPECTION_CYCLES {
+                    break;
+                }
+                remaining -= INSPECTION_CYCLES;
+                continue;
+            }
+
+            // OBJ rendering proceeds from the left edge. When the remaining
+            // budget is insufficient, only the prefix that fits is drawn.
+            let drawable_width = if affine {
+                if remaining <= 10 {
+                    0
                 } else {
-                    canvas_width as u16
+                    canvas_width.min(i32::from((remaining - 10) / 2))
                 }
             } else {
-                INSPECTION_CYCLES
+                canvas_width.min(i32::from(remaining))
             };
-
-            if cost > remaining {
-                break;
+            if drawable_width > 0 {
+                allowed_pixels[index][line] = drawable_width as u16;
             }
-            remaining -= cost;
 
-            let is_drawable =
-                dimensions.is_some() && object_mode != 3 && (affine || attr0 & (1 << 9) == 0);
-            if is_drawable {
-                if let Some((width, height)) = dimensions {
-                    let canvas_height = if affine && attr0 & (1 << 9) != 0 {
-                        height * 2
-                    } else {
-                        height
-                    };
-                    let raw_y = i32::from(attr0 & 0x00FF);
-                    let origin_y = if raw_y >= 256 - canvas_height {
-                        raw_y - 256
-                    } else {
-                        raw_y
-                    };
-                    let raw_x = i32::from(attr1 & 0x01FF);
-                    let canvas_width = if affine && attr0 & (1 << 9) != 0 {
-                        width * 2
-                    } else {
-                        width
-                    };
-                    let origin_x = if raw_x >= 512 - canvas_width {
-                        raw_x - 512
-                    } else {
-                        raw_x
-                    };
-                    if (origin_y..origin_y + canvas_height).contains(&(line as i32))
-                        && origin_x < SCREEN_WIDTH as i32
-                        && origin_x + canvas_width > 0
-                    {
-                        allowed_lines[index][line] = true;
-                    }
+            let consumed = if affine {
+                if drawable_width == 0 {
+                    remaining
+                } else {
+                    10 + drawable_width as u16 * 2
                 }
+            } else {
+                drawable_width as u16
+            };
+            remaining = remaining.saturating_sub(consumed);
+            if drawable_width < canvas_width {
+                break;
             }
         }
     }
 
-    allowed_lines
+    allowed_pixels
 }
 
-/// Alpha-composites a bitmap BG2 pixel with the backdrop when BLDCNT selects
-/// alpha mode and both layers are selected as first/second targets. Window
-/// color-effect permission is checked per pixel by the caller.
-fn composite_bitmap_background_pixel(
-    bus: &MemoryBus,
-    source: u32,
-    backdrop: u32,
-    effects_allowed: bool,
-) -> u32 {
-    if !effects_allowed {
-        return source;
-    }
-    let control = bus.read16(0x0400_0050);
-    // BG2 is selected as a first target by bit 2; backdrop is second target bit 13.
-    if (control >> 6) & 3 != 1 || control & (1 << 2) == 0 || control & (1 << 13) == 0 {
-        return source;
-    }
-    let coefficients = bus.read16(0x0400_0052);
-    let eva = (coefficients & 0x1F).min(16);
-    let evb = ((coefficients >> 8) & 0x1F).min(16);
-    blend_argb555(source, backdrop, eva, evb)
-}
-
-/// Returns EVA/EVB when bitmap modes show the backdrop instead of BG2 and
-/// the backdrop is selected as BLDCNT's second alpha-blending target.
-fn bitmap_backdrop_alpha_blend(bus: &MemoryBus) -> Option<(u16, u16)> {
-    let blend_control = bus.read16(0x0400_0050);
-    // Semi-transparent OBJ pixels force alpha blending regardless of the
-    // global BLDCNT effect-mode bits; only the selected second target matters.
-    if blend_control & (1 << 13) == 0 {
-        return None;
-    }
-    let coefficients = bus.read16(0x0400_0052);
-    Some((
-        (coefficients & 0x1F).min(16),
-        ((coefficients >> 8) & 0x1F).min(16),
-    ))
-}
-
-/// Returns EVA/EVB for bitmap BG2 when it is enabled as a second blend target.
-fn bitmap_alpha_blend_mode5(bus: &MemoryBus) -> Option<(u16, u16)> {
-    let control = bus.read16(0x0400_0050);
-    // In mode 5 the visible second target varies per pixel: BG2 inside its
-    // centered viewport, backdrop outside it (or where a window masks BG2).
-    if control & ((1 << 10) | (1 << 13)) == 0 {
-        return None;
-    }
-    let coefficients = bus.read16(0x0400_0052);
-    Some((
-        (coefficients & 0x1F).min(16),
-        ((coefficients >> 8) & 0x1F).min(16),
-    ))
-}
-
-fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16)> {
-    if display_control & (1 << 10) == 0 {
-        return None;
-    }
-    let blend_control = bus.read16(0x0400_0050);
-    // Semi-transparent OBJ pixels force alpha blending regardless of BLDCNT's
-    // global effect mode. The actual second target is selected per pixel:
-    // BG2 (bit 10) when visible, or backdrop (bit 13) when a window masks BG2.
-    if blend_control & ((1 << 10) | (1 << 13)) == 0 {
-        return None;
-    }
-    let coefficients = bus.read16(0x0400_0052);
-    Some((
-        (coefficients & 0x1F).min(16),
-        ((coefficients >> 8) & 0x1F).min(16),
-    ))
-}
-
-/// Returns BG2 brightness/darkness settings for bitmap modes when BG2 is a first target.
-/// Alpha blending is handled separately because it needs the second compositing target.
-fn bitmap_brightness_effect(
-    bus: &MemoryBus,
-    _display_control: u16,
-    target_bit: u16,
-) -> Option<(bool, u16)> {
-    let control = bus.read16(0x0400_0050);
-    if control & (1 << target_bit) == 0 {
-        return None;
-    }
-    let brighten = match (control >> 6) & 3 {
-        2 => true,
-        3 => false,
-        _ => return None,
-    };
-    Some((brighten, (bus.read16(0x0400_0054) & 0x1F).min(16)))
-}
-
-/// Composites a first-target tiled background over the currently visible layer.
-///
-/// BLDCNT alpha mode blends a BG pixel only when its layer is selected as a
-/// first target and the pixel immediately behind it is selected as a second
-/// target. The backdrop uses target bit 13; BG0..BG3 use bits 8..11.
-fn composite_background_pixel(
-    bus: &MemoryBus,
-    bg: u32,
-    destination: usize,
-    source: u32,
-    layer_buffer: &[u8],
-    target_color: u32,
-) -> u32 {
-    let control = bus.read16(0x0400_0050);
-    if (control >> 6) & 3 != 1 || control & (1 << bg) == 0 {
-        return source;
-    }
-    let Some(&target_layer) = layer_buffer.get(destination) else {
-        return source;
-    };
-    let target_mask = if target_layer == 5 {
-        control & (1 << 13) != 0
-    } else {
-        control & (1 << (8 + target_layer)) != 0
-    };
-    if !target_mask {
-        return source;
-    }
-    let coefficients = bus.read16(0x0400_0052);
-    let eva = (coefficients & 0x1F).min(16);
-    let evb = ((coefficients >> 8) & 0x1F).min(16);
-    blend_argb555(source, target_color, eva, evb)
-}
-
-/// Applies GBA BLDY brightness or darkness to an opaque RGB555-derived color.
-fn apply_brightness_effect(color: u32, effect: Option<(bool, u16)>) -> u32 {
-    let Some((brighten, coefficient)) = effect else {
-        return color;
-    };
-    let transform = |shift: u32| {
-        let channel = ((color >> shift) & 0xFF) >> 3;
-        let amount = u32::from(coefficient);
-        let result = if brighten {
-            channel + (((31 - channel) * amount) >> 4)
-        } else {
-            channel - ((channel * amount) >> 4)
-        };
-        (result.min(31) << 3) | (result.min(31) >> 2)
-    };
-    0xFF00_0000 | (transform(16) << 16) | (transform(8) << 8) | transform(0)
-}
-
-fn blend_argb555(source: u32, target: u32, eva: u16, evb: u16) -> u32 {
-    let blend_channel = |shift: u32| {
-        let source = (source >> shift) & 0xFF;
-        let target = (target >> shift) & 0xFF;
-        let source5 = source >> 3;
-        let target5 = target >> 3;
-        let value = ((source5 * u32::from(eva) + target5 * u32::from(evb)) >> 4).min(31);
-        (value << 3) | (value >> 2)
-    };
-    0xFF00_0000 | (blend_channel(16) << 16) | (blend_channel(8) << 8) | blend_channel(0)
-}
-
-/// Draws regular (non-affine) OBJ sprites for the requested priority.
-/// OBJ is composited after backgrounds of the same priority; lower OAM indices
 /// win ties, so entries are visited from 127 down to 0.
 fn render_regular_objects(
     bus: &MemoryBus,
@@ -1669,7 +1505,8 @@ fn render_regular_objects(
             if !(0..SCREEN_HEIGHT as i32).contains(&screen_y) {
                 continue;
             }
-            if !allowed_lines[index as usize][screen_y as usize] {
+            let allowed_width = u32::from(allowed_lines[index as usize][screen_y as usize]);
+            if allowed_width == 0 {
                 continue;
             }
             let sampled_y = if mosaic_enabled {
@@ -1678,6 +1515,9 @@ fn render_regular_objects(
                 dy
             };
             for dx in 0..bounding_width {
+                if dx >= allowed_width {
+                    break;
+                }
                 let screen_x = origin_x + dx as i32;
                 if !(0..SCREEN_WIDTH as i32).contains(&screen_x) {
                     continue;
@@ -3328,7 +3168,7 @@ mod tests {
 
         let allowed = object_scanline_mask(&oam, 0);
         assert!(allowed[..32].iter().all(|lines| lines[0]));
-        assert!(!allowed[32][0]);
+        assert_eq!(allowed[32][0], 0);
         assert!(allowed[32][8]);
     }
 
@@ -3355,7 +3195,7 @@ mod tests {
         }
         let allowed = object_scanline_mask(&oam, 0);
         assert!(allowed[..18].iter().all(|lines| lines[0]));
-        assert!(!allowed[18][0]);
+        assert_eq!(allowed[18][0], 58);
     }
 
     #[test]
@@ -3369,7 +3209,7 @@ mod tests {
         let normal = object_scanline_mask(&oam, 0);
         let hblank_free = object_scanline_mask(&oam, 1 << 5);
         assert!(normal[14][0]);
-        assert!(!hblank_free[14][0]);
+        assert_eq!(hblank_free[14][0], 58);
     }
 
     #[test]
@@ -3382,7 +3222,7 @@ mod tests {
         }
         let allowed = object_scanline_mask(&oam, 0);
         assert!(allowed[..4].iter().all(|lines| lines[0]));
-        assert!(!allowed[4][0]);
+        assert_eq!(allowed[4][0], 68);
     }
 
     fn object_rendering_budget_resets_for_each_scanline() {
