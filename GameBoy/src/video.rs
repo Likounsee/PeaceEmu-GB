@@ -3331,7 +3331,7 @@ mod tests {
 
         let allowed = object_scanline_mask(&oam, 0);
         assert!(allowed[..32].iter().all(|lines| lines[0]));
-        assert!(allowed[32][0]);
+        assert!(!allowed[32][0]);
         assert!(allowed[32][8]);
     }
 
