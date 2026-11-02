@@ -3377,7 +3377,7 @@ mod tests {
         let mut oam = [0_u8; 1024];
         for index in 0..5_usize {
             let base = index * 8;
-            oam[base..base + 2].copy_from_slice(&((1 << 8) | (1 << 9)).to_le_bytes());
+            oam[base..base + 2].copy_from_slice(&((1_u16 << 8) | (1_u16 << 9)).to_le_bytes());
             oam[base + 2..base + 4].copy_from_slice(&(3_u16 << 14).to_le_bytes());
         }
         let allowed = object_scanline_mask(&oam, 0);
