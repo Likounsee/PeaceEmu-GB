@@ -3994,6 +3994,30 @@ mod tests {
     }
 
     #[test]
+    fn bios_midi_key_to_frequency_uses_low_eight_bits_of_key_and_fine() {
+        let mut bus = bus_with_program(&[]);
+        let wave_data = 0x0200_0200;
+        bus.write32(wave_data + 4, 7_040_000);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 0x45);
+        cpu.set_register(2, 0x80);
+        cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+        let expected = cpu.register(0);
+
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 0x145);
+        cpu.set_register(2, 0x180);
+        cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), expected);
+    }
+
+    #[test]
     fn bios_midi_key_to_frequency_saturates_large_pitch_results() {
         let mut bus = bus_with_program(&[]);
         let mut cpu = Cpu::new();
