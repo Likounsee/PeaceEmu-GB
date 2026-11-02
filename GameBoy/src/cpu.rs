@@ -3995,6 +3995,23 @@ mod tests {
     }
 
     #[test]
+    fn bios_midi_key_to_frequency_saturates_large_pitch_results() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0100);
+        let wave_data = 0x0200_0200;
+        bus.write32(wave_data + 4, u32::MAX);
+
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 0x1FF); // Only the low eight key bits are used.
+        cpu.set_register(2, 0x1FF); // Only the low eight fine-pitch bits are used.
+        cpu.execute_swi(0x0200_0100, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), Some(u32::MAX));
+    }
+
+    #[test]
     fn bios_arctan_returns_zero_and_positive_quarter_turn_approximation() {
         let mut bus = bus_with_program(&[]);
         let mut cpu = Cpu::new();
