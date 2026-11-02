@@ -8625,7 +8625,7 @@ mod tests {
         assert_eq!(bus.read16(destination + 4), 0);
         assert_eq!(bus.read16(destination + 6), 0x0200);
         assert_eq!(bus.read32(destination + 8), 0x0000_0E00);
-        assert_eq!(bus.read32(destination + 12), 0x0000_1000);
+        assert_eq!(bus.read32(destination + 12), 0xFFFF_FC00);
         assert_eq!(cpu.register(15), Some(0x0200_0004));
     }
 
