@@ -2271,10 +2271,10 @@ mod tests {
         bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop
         bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ pixel
         bus.write16(VRAM_BASE, 0x03E0); // Green BG2 at viewport origin
-        bus.write16(0x0601_0000, 0x1111);
+        bus.write16(0x0601_4000, 0x1111); // First available OBJ tile in bitmap mode
         bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ
         bus.write16(0x0700_0002, 0);
-        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0700_0004, 512); // Tile 512 is the first bitmap-mode OBJ tile
         bus.write16(0x0400_0050, (1 << 6) | (1 << 13)); // Alpha; backdrop only as target 2
         bus.write16(0x0400_0052, (8 << 8) | 8);
 
