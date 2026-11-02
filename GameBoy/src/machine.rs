@@ -1660,6 +1660,14 @@ impl GbaMachine {
     pub fn audio_stereo_sample(&self) -> (i16, i16) {
         self.bus.audio_stereo_sample()
     }
+    /// Drains queued signed 16-bit stereo PCM samples at the native GBA sample rate.
+    ///
+    /// Call this regularly from the frontend audio callback. Samples are returned
+    /// oldest first; an empty vector means the emulated clock has not produced a
+    /// new sample since the previous drain.
+    pub fn drain_audio_samples(&mut self) -> Vec<(i16, i16)> {
+        self.bus.drain_audio_samples()
+    }
 
     /// Runs until the next fresh VBlank entry and returns the rendered frame.
     ///
