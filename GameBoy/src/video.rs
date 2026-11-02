@@ -3208,7 +3208,7 @@ mod tests {
         }
         let normal = object_scanline_mask(&oam, 0);
         let hblank_free = object_scanline_mask(&oam, 1 << 5);
-        assert!(normal[14][0]);
+        assert_eq!(normal[14][0], 64);
         assert_eq!(hblank_free[14][0], 58);
     }
 
