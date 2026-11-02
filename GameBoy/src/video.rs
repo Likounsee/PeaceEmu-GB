@@ -536,6 +536,13 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     } else {
         None
     };
+    // Mode 5's BG2 occupies only a centered 160×128 viewport; semitransparent
+    // OBJ pixels outside it must see the backdrop as their underlying layer.
+    let mut mode5_layers = if mode == 5 {
+        Some(vec![5_u8; SCREEN_WIDTH * SCREEN_HEIGHT])
+    } else {
+        None
+    };
 
     match mode {
         0..=2 => render_text_backgrounds(
@@ -700,6 +707,9 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                             backdrop_color,
                             effects_allowed,
                         );
+                        if let Some(layers) = mode5_layers.as_deref_mut() {
+                            layers[target] = 2;
+                        }
                     }
                 }
             }
@@ -723,12 +733,16 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 &mut obj_tile_cache,
                 &oam_snapshot,
                 &allowed_lines,
-                bitmap_alpha_blend(bus, display_control),
+                if mode == 5 {
+                    bitmap_alpha_blend_mode5(bus)
+                } else {
+                    bitmap_alpha_blend(bus, display_control)
+                },
                 bitmap_brightness_effect(bus, display_control, 4),
                 None,
                 &windows,
                 &mut frame,
-                None,
+                mode5_layers.as_deref_mut(),
             );
         }
     }
@@ -1316,6 +1330,17 @@ fn bitmap_backdrop_alpha_blend(bus: &MemoryBus) -> Option<(u16, u16)> {
 }
 
 /// Returns EVA/EVB for bitmap BG2 when it is enabled as a second blend target.
+fn bitmap_alpha_blend_mode5(bus: &MemoryBus) -> Option<(u16, u16)> {
+    let control = bus.read16(0x0400_0050);
+    // In mode 5 the visible second target varies per pixel: BG2 inside its
+    // centered viewport, backdrop outside it (or where a window masks BG2).
+    if control & ((1 << 10) | (1 << 13)) == 0 {
+        return None;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    Some(((coefficients & 0x1F).min(16), ((coefficients >> 8) & 0x1F).min(16)))
+}
+
 fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16)> {
     if display_control & (1 << 10) == 0 {
         return None;
@@ -1667,8 +1692,23 @@ fn render_regular_objects(
                     // modes, use the actual layer visible beneath this OBJ.
                     if windows.effects_allowed(screen_x as usize, screen_y as usize) {
                         if mode >= 3 {
-                            if let Some((eva, evb)) = bitmap_blend {
-                                blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                            let target_is_selected = if let Some(layers) = layer_buffer.as_deref() {
+                                let target_layer = layers[destination];
+                                let control = bus.read16(0x0400_0050);
+                                if target_layer == 5 {
+                                    control & (1 << 13) != 0
+                                } else {
+                                    control & (1 << 10) != 0
+                                }
+                            } else {
+                                bitmap_blend.is_some()
+                            };
+                            if target_is_selected {
+                                if let Some((eva, evb)) = bitmap_blend {
+                                    blend_argb555(source_color, frame.pixels[destination], eva, evb)
+                                } else {
+                                    source_color
+                                }
                             } else {
                                 source_color
                             }
@@ -2222,6 +2262,27 @@ mod tests {
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
         // With no second target selected, the source pixel remains visible.
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn mode5_semi_transparent_obj_uses_backdrop_outside_bitmap_viewport() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 5 | (1 << 10) | (1 << 12)); // Mode 5, BG2 + OBJ
+        bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ pixel
+        bus.write16(VRAM_BASE, 0x03E0); // Green BG2 at viewport origin
+        bus.write16(0x0601_0000, 0x1111);
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 0);
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 13)); // Alpha; backdrop only as target 2
+        bus.write16(0x0400_0052, (8 << 8) | 8);
+
+        let frame = render_bitmap_frame(&bus).expect("mode 5 should render");
+        // (0,0) is outside the centered bitmap: backdrop is the second target.
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
+        // (40,16) is the BG2 viewport origin: BG2 is not a selected second target.
+        assert_eq!(frame.pixel(40, 16), Some(0xFFFF_0000));
     }
 
     #[test]
