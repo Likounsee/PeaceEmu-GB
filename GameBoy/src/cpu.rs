@@ -2625,8 +2625,14 @@ impl Cpu {
         if abs_x > abs_y || (abs_x == abs_y && !(x < 0 && y < 0)) {
             let ratio = ((i64::from(y) << 14) / i64::from(x)) as i32;
             let angle = i32::from(Self::bios_arctan(ratio));
-            (if x < 0 { 0x8000_i32 } else if y < 0 { 0x1_0000 } else { 0 })
-                .wrapping_add(angle) as u16
+            (if x < 0 {
+                0x8000_i32
+            } else if y < 0 {
+                0x1_0000
+            } else {
+                0
+            })
+            .wrapping_add(angle) as u16
         } else {
             let ratio = ((i64::from(x) << 14) / i64::from(y)) as i32;
             let angle = i32::from(Self::bios_arctan(ratio));
