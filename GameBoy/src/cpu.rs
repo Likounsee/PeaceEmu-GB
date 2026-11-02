@@ -2133,6 +2133,19 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
+            // ArcTan accepts a signed Q2.14 tangent and returns a signed
+            // 16-bit angle where one full turn is 0x10000 units.
+            0x09 => {
+                let tangent = self.registers[0] as i16 as i32;
+                self.registers[0] = Self::bios_arctan(tangent) as i32 as u32;
+            }
+            // ArcTan2 accepts signed Q2.14 X/Y coordinates and returns the
+            // clockwise angle in 16-bit turn units (0x4000 = 90 degrees).
+            0x0A => {
+                let x = self.registers[0] as i16 as i32;
+                let y = self.registers[1] as i16 as i32;
+                self.registers[0] = u32::from(Self::bios_arctan2(x, y));
+            }
             // SoftReset selects its entry point from the BIOS IWRAM selector,
             // clears the reserved BIOS work area, and restores modeled stacks.
             0x00 => {
@@ -2578,6 +2591,47 @@ impl Cpu {
             self.registers[15] = address.wrapping_add(4) & !3;
         }
         Ok(())
+    }
+
+    /// Reproduces the GBA BIOS fixed-point ArcTan polynomial.
+    ///
+    /// Input and output are signed Q2.14 values/turn units respectively.
+    /// The polynomial intentionally uses wrapping 32-bit products and
+    /// arithmetic shifts, matching the ARM BIOS routine.
+    fn bios_arctan(input: i32) -> i16 {
+        let mut a = input.wrapping_mul(input).wrapping_shr(14).wrapping_neg();
+        let mut b = (0x00A9_i32.wrapping_mul(a) >> 14).wrapping_add(0x0390);
+        b = (b.wrapping_mul(a) >> 14).wrapping_add(0x091C);
+        b = (b.wrapping_mul(a) >> 14).wrapping_add(0x0FB6);
+        b = (b.wrapping_mul(a) >> 14).wrapping_add(0x16AA);
+        b = (b.wrapping_mul(a) >> 14).wrapping_add(0x2081);
+        b = (b.wrapping_mul(a) >> 14).wrapping_add(0x3651);
+        b = (b.wrapping_mul(a) >> 14).wrapping_add(0xA2F9);
+        a = input.wrapping_mul(b) >> 16;
+        a as i16
+    }
+
+    /// GBA BIOS ArcTan2 quadrant handling, using signed Q2.14 coordinates.
+    fn bios_arctan2(x: i32, y: i32) -> u16 {
+        if y == 0 {
+            return if x < 0 { 0x8000 } else { 0 };
+        }
+        if x == 0 {
+            return if y < 0 { 0xC000 } else { 0x4000 };
+        }
+
+        let abs_x = x.unsigned_abs();
+        let abs_y = y.unsigned_abs();
+        if abs_x > abs_y || (abs_x == abs_y && !(x < 0 && y < 0)) {
+            let ratio = ((i64::from(y) << 14) / i64::from(x)) as i32;
+            let angle = i32::from(Self::bios_arctan(ratio));
+            (if x < 0 { 0x8000_i32 } else if y < 0 { 0x1_0000 } else { 0 })
+                .wrapping_add(angle) as u16
+        } else {
+            let ratio = ((i64::from(x) << 14) / i64::from(y)) as i32;
+            let angle = i32::from(Self::bios_arctan(ratio));
+            (0x4000_i32 + if y < 0 { 0x8000 } else { 0 }).wrapping_sub(angle) as u16
+        }
     }
 
     /// Decodes the BIOS Huffman stream (SWI 0x13), supporting 4-bit and 8-bit symbols.
@@ -7736,6 +7790,44 @@ mod tests {
             .unwrap();
         assert_eq!(bus.read32(0x0200_0100), 0xCAFE_BABE);
         assert_eq!(bus.read16(0x0500_0010), 0xABCD);
+    }
+
+    #[test]
+    fn bios_arctan_matches_fixed_point_axis_and_diagonal_values() {
+        assert_eq!(Cpu::bios_arctan(0), 0);
+        assert_eq!(Cpu::bios_arctan(0x4000), 0x2000);
+        assert_eq!(Cpu::bios_arctan(-0x4000), -0x2000);
+        assert_eq!(Cpu::bios_arctan(0x2000), 0x12E4);
+    }
+
+    #[test]
+    fn bios_arctan2_handles_all_quadrants_and_axes() {
+        let unit = 0x4000;
+        assert_eq!(Cpu::bios_arctan2(unit, 0), 0x0000);
+        assert_eq!(Cpu::bios_arctan2(0, unit), 0x4000);
+        assert_eq!(Cpu::bios_arctan2(-unit, 0), 0x8000);
+        assert_eq!(Cpu::bios_arctan2(0, -unit), 0xC000);
+        assert_eq!(Cpu::bios_arctan2(unit, unit), 0x2000);
+        assert_eq!(Cpu::bios_arctan2(-unit, unit), 0x6000);
+        assert_eq!(Cpu::bios_arctan2(-unit, -unit), 0xA000);
+        assert_eq!(Cpu::bios_arctan2(unit, -unit), 0xE000);
+    }
+
+    #[test]
+    fn bios_arctan_swi_sign_extends_result_and_arctan2_returns_turn_units() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0x0000_4000);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0009, 0x09, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(0x0000_2000));
+
+        cpu.set_register(0, 0xFFFF_C000);
+        cpu.set_register(1, 0x0000_4000);
+        cpu.execute_swi(0x0200_0204, 0xEF00_000A, 0x0A, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(0x0000_6000));
     }
 
     #[test]
