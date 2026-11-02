@@ -538,7 +538,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     };
     // Mode 5's BG2 occupies only a centered 160×128 viewport; semitransparent
     // OBJ pixels outside it must see the backdrop as their underlying layer.
-    let mut mode5_layers = if mode == 5 {
+    let mut bitmap_layers = if mode >= 3 {
         Some(vec![5_u8; SCREEN_WIDTH * SCREEN_HEIGHT])
     } else {
         None
@@ -595,6 +595,9 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                             backdrop_color,
                             effects_allowed,
                         );
+                        if let Some(layers) = bitmap_layers.as_deref_mut() {
+                            layers[destination] = 2;
+                        }
                     }
                 }
             }
@@ -649,6 +652,9 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                             palette[0],
                             effects_allowed,
                         );
+                        if let Some(layers) = bitmap_layers.as_deref_mut() {
+                            layers[destination] = 2;
+                        }
                     }
                 }
             }
@@ -707,7 +713,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                             backdrop_color,
                             effects_allowed,
                         );
-                        if let Some(layers) = mode5_layers.as_deref_mut() {
+                        if let Some(layers) = bitmap_layers.as_deref_mut() {
                             layers[target] = 2;
                         }
                     }
@@ -742,7 +748,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
                 None,
                 &windows,
                 &mut frame,
-                mode5_layers.as_deref_mut(),
+                bitmap_layers.as_deref_mut(),
             );
         }
     }
