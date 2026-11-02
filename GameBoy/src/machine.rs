@@ -341,7 +341,7 @@ impl GbaMachine {
     ///
     /// The caller can use render_frame after this method to obtain the
     /// currently rendered framebuffer.
-    pub fn run_frame(&mut self, max_steps: usize) -> Result<Option<usize>, CpuError> {
+    pub fn run_frame_boundary(&mut self, max_steps: usize) -> Result<Option<usize>, CpuError> {
         self.run_until_next_video_position(160, 0, max_steps)
     }
     /// Executes until the PPU reaches a requested scanline or the instruction limit.
