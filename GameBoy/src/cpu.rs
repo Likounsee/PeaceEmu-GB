@@ -2185,8 +2185,7 @@ impl Cpu {
                     let scale_x = bus.read16(input) as i16;
                     let scale_y = bus.read16(input.wrapping_add(2)) as i16;
                     let angle = bus.read16(input.wrapping_add(4));
-                    let [pa, pb, pc, pd] =
-                        Self::bios_affine_coefficients(scale_x, scale_y, angle);
+                    let [pa, pb, pc, pd] = Self::bios_affine_coefficients(scale_x, scale_y, angle);
                     for (offset, coefficient) in [pa, pb, pc, pd].into_iter().enumerate() {
                         bus.write16(
                             output.wrapping_add((offset as u32).wrapping_mul(stride)),
