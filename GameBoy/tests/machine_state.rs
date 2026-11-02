@@ -35,6 +35,41 @@ fn save_state_restores_cpu_video_and_execution_counters_for_replay() {
 }
 
 #[test]
+fn frame_runner_reaches_vblank_and_advances_one_frame_per_call() {
+    let mut machine = GbaMachine::new(looping_cartridge());
+
+    let first = machine
+        .run_frame(100_000)
+        .expect("frame runner should not hit a CPU error")
+        .expect("instruction budget should cover one frame");
+    assert!(first > 0);
+    let first_snapshot = machine.diagnostic_snapshot();
+    assert_eq!(first_snapshot.video_scanline, 160);
+    assert_eq!(first_snapshot.video_cycles_into_scanline, 0);
+    assert_eq!(first_snapshot.video_vblank_events, 1);
+
+    let second = machine
+        .run_frame(100_000)
+        .expect("second frame should execute")
+        .expect("instruction budget should cover the next frame");
+    assert!(second > 0);
+    let second_snapshot = machine.diagnostic_snapshot();
+    assert_eq!(second_snapshot.video_scanline, 160);
+    assert_eq!(second_snapshot.video_cycles_into_scanline, 0);
+    assert_eq!(second_snapshot.video_vblank_events, 2);
+    assert!(second_snapshot.cycles_elapsed > first_snapshot.cycles_elapsed);
+}
+
+#[test]
+fn frame_runner_returns_none_when_instruction_budget_is_exhausted() {
+    let mut machine = GbaMachine::new(looping_cartridge());
+    let before = machine.diagnostic_snapshot();
+
+    assert_eq!(machine.run_frame(1).unwrap(), None);
+    assert_ne!(machine.diagnostic_snapshot(), before);
+    assert_ne!(machine.diagnostic_snapshot().video_scanline, 160);
+}
+#[test]
 fn zero_sized_run_budgets_do_not_advance_machine_state() {
     let mut machine = GbaMachine::new(looping_cartridge());
     let before = machine.diagnostic_snapshot();
