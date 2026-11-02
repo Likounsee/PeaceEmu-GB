@@ -2181,7 +2181,10 @@ impl Cpu {
                 let count = self.registers[3];
                 for index in 0..count {
                     let input = source.wrapping_add(index.wrapping_mul(8));
-                    let output = destination.wrapping_add(index.wrapping_mul(stride));
+                    // R2 is the spacing between coefficients, so one
+                    // complete 2x2 matrix occupies four strides.
+                    let matrix_stride = stride.wrapping_mul(4);
+                    let output = destination.wrapping_add(index.wrapping_mul(matrix_stride));
                     let scale_x = bus.read16(input) as i16;
                     let scale_y = bus.read16(input.wrapping_add(2)) as i16;
                     let angle = bus.read16(input.wrapping_add(4));
