@@ -19,7 +19,7 @@ fn repeated_game_pak_drq_requests_reuse_programmed_count_and_keep_dma_armed() {
     bus.write32(0x0400_00D4, 0x0200_0100); // DMA3 source: increment.
     bus.write32(0x0400_00D8, 0x0300_0100); // DMA3 destination: fixed.
     bus.write16(0x0400_00DC, 1); // One halfword per external request.
-// Enable + IRQ + repeat + Game Pak DRQ + special timing + fixed destination.
+    // Enable + IRQ + repeat + Game Pak DRQ + special timing + fixed destination.
     bus.write16(0x0400_00DE, 0xFA40);
 
     assert!(bus.request_game_pak_dma());
