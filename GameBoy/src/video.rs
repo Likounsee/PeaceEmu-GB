@@ -2695,7 +2695,7 @@ mod tests {
     }
 
     #[test]
-    fn only_first_32_oam_entries_are_evaluated_per_scanline() {
+    fn later_small_oam_entries_render_while_scanline_budget_remains() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 1 << 12); // OBJ enabled
         bus.write16(PALETTE_BASE + 0x202, 0x001F); // index 1: red
@@ -2703,8 +2703,8 @@ mod tests {
         bus.write16(0x0601_0000, 0x1111); // tile 0 is red
         bus.write16(0x0601_0020, 0x2222); // tile 1 is blue
 
-        // Thirty-two higher-priority OAM entries occupy the scanline.
-        // Entry 32 is placed elsewhere on the same line and must be dropped.
+        // Thirty-two higher-priority 8x8 entries use only 256 OBJ cycles.
+        // Entry 32 therefore still has enough budget to render.
         for index in 0..32_u32 {
             let base = 0x0700_0000 + index * 8;
             bus.write16(base, 0);
@@ -2718,7 +2718,7 @@ mod tests {
 
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
-        assert_eq!(frame.pixel(8, 0), Some(0xFF00_0000));
+        assert_eq!(frame.pixel(8, 0), Some(0xFF0000FF));
     }
 
     #[test]
