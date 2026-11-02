@@ -2133,6 +2133,22 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
+            // SoundBiasChange selects the standard digital output bias.
+            0x19 => {
+                let bias = if self.registers[0] == 0 { 0 } else { 0x0200 };
+                bus.write16(0x0400_0088, bias);
+            }
+            // MidiKey2Freq reads the wave's base frequency at WaveData+4
+            // and applies the requested MIDI key and 1/256-semitone fine tune.
+            0x1F => {
+                let wave_data = self.registers[0];
+                let key = f64::from((self.registers[1] & 0xFF) as u8);
+                let fine = f64::from((self.registers[2] & 0xFF) as u8);
+                let base_frequency = f64::from(bus.read32(wave_data.wrapping_add(4)));
+                let semitones = (180.0 - key - fine / 256.0) / 12.0;
+                let frequency = base_frequency / 2.0_f64.powf(semitones);
+                self.registers[0] = frequency.clamp(0.0, f64::from(u32::MAX)) as u32;
+            }
             // GetBiosChecksum identifies the standard GBA/GBA SP BIOS in HLE.
             // The reference BIOS checksum is the unsigned sum of its 16 KiB image.
             0x0D => {
@@ -8597,6 +8613,54 @@ mod tests {
         assert_eq!(bus.read32(0x0200_0100), 0x1122_3344);
         assert_eq!(cpu.flags(), flags);
         assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn bios_sound_bias_change_selects_zero_or_midpoint() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+
+        cpu.set_register(0, 1);
+        cpu.execute_swi(0x0200_0000, 0xEF00_0019, 0x19, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read16(0x0400_0088) & 0x03FF, 0x0200);
+
+        cpu.set_register(0, 0);
+        cpu.execute_swi(0x0200_0004, 0xEF00_0019, 0x19, false, &mut bus)
+            .unwrap();
+        assert_eq!(bus.read16(0x0400_0088) & 0x03FF, 0);
+    }
+
+    #[test]
+    fn bios_midi_key_to_frequency_uses_wave_base_frequency_and_fine_tuning() {
+        let mut bus = bus_with_program(&[]);
+        let wave_data = 0x0200_1000;
+        bus.write32(wave_data + 4, 8_000);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 180);
+        cpu.set_register(2, 0);
+        cpu.execute_swi(0x0200_0000, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+        assert_eq!(cpu.register(0), Some(8_000));
+
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 69); // A4, 111 semitones below the base key.
+        cpu.set_register(2, 0);
+        cpu.execute_swi(0x0200_0004, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+        let untuned = cpu.register(0).unwrap();
+        assert_eq!(untuned, 11);
+
+        cpu.set_register(0, wave_data);
+        cpu.set_register(1, 69);
+        cpu.set_register(2, 255);
+        cpu.execute_swi(0x0200_0008, 0xEF00_001F, 0x1F, false, &mut bus)
+            .unwrap();
+        assert!(cpu.register(0).unwrap() > untuned);
     }
 
     #[test]
