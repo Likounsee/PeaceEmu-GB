@@ -3600,6 +3600,8 @@ mod tests {
         bus.write16(0x0400_00C6, 0x9640);
         assert!(bus.has_video_timed_dma_enabled());
 
+        // Clear DMA1 before isolating DMA3's external request behavior.
+        bus.write16(0x0400_00C6, 0);
         // DMA3 Game Pak DRQ is externally clocked, even if timing bits are set.
         bus.write16(0x0400_00DE, 0x9840);
         assert!(!bus.has_video_timed_dma_enabled());
