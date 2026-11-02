@@ -2133,10 +2133,12 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
-            // SoundBiasChange selects the standard digital output bias.
+            // SoundBiasChange selects the DAC midpoint while leaving
+            // the resolution/control bits outside the 10-bit bias field intact.
             0x19 => {
+                let current = bus.read16(0x0400_0088);
                 let bias = if self.registers[0] == 0 { 0 } else { 0x0200 };
-                bus.write16(0x0400_0088, bias);
+                bus.write16(0x0400_0088, (current & !0x03FF) | bias);
             }
             // MidiKey2Freq reads the wave's base frequency at WaveData+4
             // and applies the requested MIDI key and 1/256-semitone fine tune.
@@ -2550,22 +2552,6 @@ impl Cpu {
                         bus.write8(destination.wrapping_add(index as u32), byte);
                     }
                 }
-            }
-            // SoundBias selects the DAC midpoint while preserving non-bias register bits.
-            0x19 => {
-                let current = bus.read16(0x0400_0088);
-                let level = if self.registers[0] == 0 { 0 } else { 0x0200 };
-                bus.write16(0x0400_0088, (current & !0x03FF) | level);
-            }
-            // MidiKey2Freq converts WaveData.freq (+4) to the requested MIDI key.
-            // The BIOS fixed-point lookup table is approximated by its semitone exponent.
-            0x1F => {
-                let wave_frequency = bus.read32(self.registers[0].wrapping_add(4));
-                let midi_key = (self.registers[1] & 0xFF) as i32;
-                let fine = (self.registers[2] & 0xFF) as i32;
-                let semitones = f64::from(midi_key - 180) + f64::from(fine) / 256.0;
-                let frequency = f64::from(wave_frequency) * 2.0_f64.powf(semitones / 12.0);
-                self.registers[0] = frequency.round().clamp(0.0, f64::from(u32::MAX)) as u32;
             }
             _ => {
                 return Err(CpuError::UnsupportedInstruction {
