@@ -1308,10 +1308,8 @@ fn object_scanline_mask(
                 } else {
                     raw_x
                 };
-                let intersects_y = (origin_y..origin_y + canvas_height)
-                    .contains(&(line as i32));
-                let intersects_x = origin_x < SCREEN_WIDTH as i32
-                    && origin_x + canvas_width > 0;
+                let intersects_y = (origin_y..origin_y + canvas_height).contains(&(line as i32));
+                let intersects_x = origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
 
                 if !intersects_y || !intersects_x {
                     INSPECTION_CYCLES
@@ -1329,9 +1327,8 @@ fn object_scanline_mask(
             }
             remaining -= cost;
 
-            let is_drawable = dimensions.is_some()
-                && object_mode != 3
-                && (affine || attr0 & (1 << 9) == 0);
+            let is_drawable =
+                dimensions.is_some() && object_mode != 3 && (affine || attr0 & (1 << 9) == 0);
             if is_drawable {
                 if let Some((width, height)) = dimensions {
                     let canvas_height = if affine && attr0 & (1 << 9) != 0 {
