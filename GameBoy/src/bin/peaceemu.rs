@@ -2,7 +2,13 @@
 
 use gameboy::{GbaButton, GbaCartridge, GbaMachine, SCREEN_HEIGHT, SCREEN_WIDTH};
 use minifb::{Key, Scale, Window, WindowOptions};
-use std::{env, error::Error, fs, path::{Path, PathBuf}, time::Duration};
+use std::{
+    env,
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 const MAX_STEPS_PER_FRAME: usize = 500_000;
 
@@ -13,7 +19,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let rom = fs::read(&rom_path)?;
     let cartridge = GbaCartridge::parse(&rom)?;
     let title = if cartridge.title().is_empty() {
-        rom_path.file_name().and_then(|name| name.to_str()).unwrap_or("Game Boy Advance")
+        rom_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Game Boy Advance")
     } else {
         cartridge.title()
     };
@@ -32,7 +41,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         &format!("PeaceEmu GBA — {title}"),
         SCREEN_WIDTH,
         SCREEN_HEIGHT,
-        WindowOptions { scale: Scale::X4, resize: true, ..WindowOptions::default() },
+        WindowOptions {
+            scale: Scale::X4,
+            resize: true,
+            ..WindowOptions::default()
+        },
     )?;
     window.limit_update_rate(Some(Duration::from_micros(16_667)));
     let mut framebuffer = vec![0_u32; SCREEN_WIDTH * SCREEN_HEIGHT];
