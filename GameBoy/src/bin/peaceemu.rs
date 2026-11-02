@@ -7,6 +7,7 @@ use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 const MAX_STEPS_PER_FRAME: usize = 500_000;
@@ -47,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             ..WindowOptions::default()
         },
     )?;
-    window.set_fps_target(60);
+    window.limit_update_rate(Some(Duration::from_micros(16_667)));
     let mut framebuffer = vec![0_u32; SCREEN_WIDTH * SCREEN_HEIGHT];
 
     println!("PeaceEmu GBA running: {title}");
