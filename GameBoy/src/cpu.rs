@@ -3562,6 +3562,39 @@ mod tests {
     }
 
     #[test]
+    fn bios_bg_affine_set_handles_quarter_turn_and_scales_hle_cycles() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 100 << 8);
+        bus.write32(source + 4, 50 << 8);
+        bus.write16(source + 8, 2);
+        bus.write16(source + 10, 3);
+        bus.write16(source + 12, 0x0100);
+        bus.write16(source + 14, 0x0100);
+        bus.write16(source + 16, 0x4000);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.set_register(2, 1);
+        cpu.execute_swi(0x0200_0200, 0xEF00_000E, 0x0E, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read16(destination) as i16, 0);
+        assert_eq!(bus.read16(destination + 2) as i16, -256);
+        assert_eq!(bus.read16(destination + 4) as i16, 256);
+        assert_eq!(bus.read16(destination + 6) as i16, 0);
+        assert_eq!(bus.read32(destination + 8), (103 << 8) as u32);
+        assert_eq!(bus.read32(destination + 12), (48 << 8) as u32);
+
+        cpu.set_register(2, 2);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xEF00_000E, false, &bus), 49);
+        assert_eq!(cpu.estimate_bios_swi_cycles(0xDF0F, true, &bus), 49);
+    }
+
+    #[test]
     fn bios_cpu_fast_set_copies_rounded_eight_word_blocks() {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
