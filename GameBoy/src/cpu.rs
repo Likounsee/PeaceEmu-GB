@@ -2174,8 +2174,8 @@ impl Cpu {
             0x0F => {
                 let source = self.registers[0];
                 let destination = self.registers[1];
-                let stride = self.registers[2];
-                let count = self.registers[3];
+                let count = self.registers[2];
+                let stride = self.registers[3];
                 for index in 0..count {
                     let input = source.wrapping_add(index.wrapping_mul(8));
                     // R2 is the spacing between coefficients, so one
@@ -2637,7 +2637,8 @@ impl Cpu {
     /// Calculates the signed 8.8 affine matrix coefficients used by BIOS
     /// BgAffineSet and ObjAffineSet. Angles use a full 16-bit turn.
     fn bios_affine_coefficients(scale_x: i16, scale_y: i16, angle: u16) -> [i16; 4] {
-        let radians = f64::from(angle) * (core::f64::consts::TAU / 65_536.0);
+        // The BIOS indexes its 256-entry sine table with the high angle byte.
+        let radians = f64::from(angle >> 8) * (core::f64::consts::TAU / 256.0);
         let cosine = radians.cos();
         let sine = radians.sin();
         let coefficient = |scale: i16, factor: f64| {
@@ -8710,8 +8711,8 @@ mod tests {
         cpu.reset(0x0200_0000);
         cpu.set_register(0, source);
         cpu.set_register(1, destination);
-        cpu.set_register(2, 8); // Interleaved OAM matrix stride.
-        cpu.set_register(3, 2);
+        cpu.set_register(2, 2); // Number of matrices.
+        cpu.set_register(3, 8); // Interleaved OAM coefficient stride.
         cpu.execute_swi(0x0200_0000, 0xEF00_000F, 0x0F, false, &mut bus)
             .unwrap();
 
