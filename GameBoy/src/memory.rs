@@ -1418,7 +1418,10 @@ impl MemoryBus {
         (0..4).any(|channel| {
             let offset = 0xB0 + channel * 12 + 10;
             let control = u16::from_le_bytes([self.io[offset], self.io[offset + 1]]);
-            control & 0x8000 != 0 && matches!((control >> 12) & 3, 1 | 2)
+            let game_pak_drq = channel == 3 && control & (1 << 11) != 0;
+            control & 0x8000 != 0
+                && !game_pak_drq
+                && matches!((control >> 12) & 3, 1 | 2)
         })
     }
 
@@ -3598,6 +3601,10 @@ mod tests {
         assert!(bus.has_video_timed_dma_enabled());
         bus.write16(0x0400_00C6, 0x9640);
         assert!(bus.has_video_timed_dma_enabled());
+
+        // DMA3 Game Pak DRQ is externally clocked, even if timing bits are set.
+        bus.write16(0x0400_00E6, 0x9840);
+        assert!(!bus.has_video_timed_dma_enabled());
     }
 
     #[test]
