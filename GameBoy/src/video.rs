@@ -473,7 +473,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
 
     // WINOBJ is a pixel-accurate mask, not the sprite bounding box. Reuse the
     // normal OBJ sampler so affine transforms, flips, mosaic, tile addressing,
-    // transparency, and the 32-OBJ-per-scanline limit match visible sprites.
+    // transparency, and the hardware OBJ rendering budget match visible sprites.
     if windows.obj_window_enabled && display_control & (1 << 12) != 0 {
         let obj_palette = obj_palette_snapshot(bus);
         let mut mask_frame = VideoFrame {
@@ -3329,13 +3329,11 @@ mod tests {
         oam[visible_object..visible_object + 2].copy_from_slice(&8_u16.to_le_bytes());
         oam[visible_object + 2..visible_object + 4].copy_from_slice(&0_u16.to_le_bytes());
 
-        let allowed = object_scanline_mask(&oam);
+        let allowed = object_scanline_mask(&oam, 0);
         assert!(allowed[..32].iter().all(|lines| lines[0]));
         assert!(allowed[32][0]);
         assert!(allowed[32][8]);
     }
-
-    #[test]
 
     #[test]
     fn normal_obj_rendering_budget_limits_large_sprites_in_oam_order() {
