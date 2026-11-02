@@ -4540,6 +4540,45 @@ mod tests {
     }
 
     #[test]
+    fn simultaneous_sound_fifo_requests_service_dma1_and_dma2() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0084, 0x0080);
+        // Both Direct Sound FIFOs select timer 0.
+        bus.write16(0x0400_0082, 0);
+
+        for index in 0..4_u32 {
+            bus.write32(0x0400_00A0, 0x1010_1010 + index);
+            bus.write32(0x0400_00A4, 0x2020_2020 + index);
+            bus.write32(0x0200_0100 + index * 4, 0xA0A0_A0A0 + index);
+            bus.write32(0x0200_0200 + index * 4, 0xB0B0_B0B0 + index);
+        }
+
+        // DMA1 services FIFO A; DMA2 services FIFO B. Both use the required
+        // four-word, fixed-destination, repeating special-timing mode.
+        bus.write32(0x0400_00BC, 0x0200_0100);
+        bus.write32(0x0400_00C0, 0x0400_00A0);
+        bus.write16(0x0400_00C4, 1);
+        bus.write16(0x0400_00C6, 0xB640);
+        bus.write32(0x0400_00C8, 0x0200_0200);
+        bus.write32(0x0400_00CC, 0x0400_00A4);
+        bus.write16(0x0400_00D0, 1);
+        bus.write16(0x0400_00D2, 0xB640);
+
+        // One timer overflow consumes one byte from each FIFO and requests
+        // both DMA channels after their queues cross the low-water mark.
+        bus.write16(0x0400_0100, 0xFFFF);
+        bus.write16(0x0400_0102, 0x0080);
+        bus.advance_cycles(1);
+
+        assert_eq!(bus.audio_fifo_len(0), Some(31));
+        assert_eq!(bus.audio_fifo_len(1), Some(31));
+        assert_eq!(bus.dma_source_address(1), Some(0x0200_0110));
+        assert_eq!(bus.dma_source_address(2), Some(0x0200_0210));
+        assert_eq!(bus.dma_completed_transfers(1), Some(1));
+        assert_eq!(bus.dma_completed_transfers(2), Some(1));
+    }
+
+    #[test]
     fn sound_fifo_dma_requests_the_matching_channel_interrupt() {
         let mut bus = MemoryBus::new(cartridge());
         bus.write16(0x0400_0084, 0x0080);
