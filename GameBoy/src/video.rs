@@ -1338,7 +1338,10 @@ fn bitmap_alpha_blend_mode5(bus: &MemoryBus) -> Option<(u16, u16)> {
         return None;
     }
     let coefficients = bus.read16(0x0400_0052);
-    Some(((coefficients & 0x1F).min(16), ((coefficients >> 8) & 0x1F).min(16)))
+    Some((
+        (coefficients & 0x1F).min(16),
+        ((coefficients >> 8) & 0x1F).min(16),
+    ))
 }
 
 fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16)> {
