@@ -469,7 +469,7 @@ pub fn render_bitmap_frame(bus: &MemoryBus) -> Option<VideoFrame> {
     // the 1 KiB once rather than rereading attributes on every priority pass.
     let oam_snapshot: [u8; 1024] =
         std::array::from_fn(|index| bus.read8(0x0700_0000 + index as u32));
-    let allowed_lines = object_scanline_mask(&oam_snapshot);
+    let allowed_lines = object_scanline_mask(&oam_snapshot, display_control);
 
     // WINOBJ is a pixel-accurate mask, not the sprite bounding box. Reuse the
     // normal OBJ sampler so affine transforms, flips, mosaic, tile addressing,
@@ -1235,60 +1235,134 @@ fn read_oam16(snapshot: &[u8; 1024], address: u32) -> u16 {
     u16::from_le_bytes([snapshot[offset], snapshot[(offset + 1) & 0x3FF]])
 }
 
-/// Selects the first 32 eligible OAM entries intersecting each visible scanline.
-/// The result is computed once per frame and shared across OBJ priority passes.
-fn object_scanline_mask(oam_snapshot: &[u8; 1024]) -> [[bool; SCREEN_HEIGHT]; 128] {
-    const OAM_BASE: u32 = 0x0700_0000;
+/// Selects OAM entries that fit the GBA's per-scanline OBJ rendering budget.
+/// Normal sprites consume their canvas width; affine sprites consume 10 + twice
+/// their canvas width. Entries that cannot draw on the current line still cost
+/// two inspection cycles. OAM order, rather than OBJ priority, decides exhaustion.
+fn object_scanline_mask(
+    oam_snapshot: &[u8; 1024],
+    display_control: u16,
+) -> [[bool; SCREEN_HEIGHT]; 128] {
+    const NORMAL_BUDGET: u16 = 1210;
+    const HBLANK_FREE_BUDGET: u16 = 954;
+    const INSPECTION_CYCLES: u16 = 2;
+    let budget = if display_control & (1 << 5) != 0 {
+        HBLANK_FREE_BUDGET
+    } else {
+        NORMAL_BUDGET
+    };
     let mut allowed_lines = [[false; SCREEN_HEIGHT]; 128];
-    let mut objects_per_line = [0_u8; SCREEN_HEIGHT];
-    for index in 0..128_u32 {
-        let base = OAM_BASE + index * 8;
-        let attr0 = read_oam16(oam_snapshot, base);
-        let attr1 = read_oam16(oam_snapshot, base + 2);
-        let affine = attr0 & (1 << 8) != 0;
-        let object_mode = (attr0 >> 10) & 3;
-        // OBJ-window entries still consume per-scanline object evaluation; only the
-        // prohibited object mode is excluded from the hardware's 32-object limit.
-        if (!affine && attr0 & (1 << 9) != 0) || object_mode == 3 || (attr0 >> 14) & 3 == 3 {
-            continue;
-        }
-        let shape = (attr0 >> 14) & 3;
-        let size = (attr1 >> 14) & 3;
-        let (_, height) = match (shape, size) {
-            (0, 0) => (8_u32, 8_u32),
-            (0, 1) => (16, 16),
-            (0, 2) => (32, 32),
-            (0, 3) => (64, 64),
-            (1, 0) => (16, 8),
-            (1, 1) => (32, 8),
-            (1, 2) => (32, 16),
-            (1, 3) => (64, 32),
-            (2, 0) => (8, 16),
-            (2, 1) => (8, 32),
-            (2, 2) => (16, 32),
-            (2, 3) => (32, 64),
-            _ => continue,
-        };
-        let bounding_height = if affine && attr0 & (1 << 9) != 0 {
-            height * 2
-        } else {
-            height
-        };
-        let raw_y = u32::from(attr0 & 0x00FF);
-        let origin_y = if raw_y >= 256 - bounding_height {
-            raw_y as i32 - 256
-        } else {
-            raw_y as i32
-        };
-        for dy in 0..bounding_height {
-            let screen_y = origin_y + dy as i32;
-            if !(0..SCREEN_HEIGHT as i32).contains(&screen_y) {
-                continue;
+
+    for line in 0..SCREEN_HEIGHT {
+        let mut remaining = budget;
+        for index in 0..128_usize {
+            let base = index * 8;
+            let attr0 = read_oam16(oam_snapshot, base as u32);
+            let attr1 = read_oam16(oam_snapshot, base as u32 + 2);
+            let affine = attr0 & (1 << 8) != 0;
+            let object_mode = (attr0 >> 10) & 3;
+            let shape = (attr0 >> 14) & 3;
+            let size = (attr1 >> 14) & 3;
+
+            let dimensions = match (shape, size) {
+                (0, 0) => Some((8_i32, 8_i32)),
+                (0, 1) => Some((16, 16)),
+                (0, 2) => Some((32, 32)),
+                (0, 3) => Some((64, 64)),
+                (1, 0) => Some((16, 8)),
+                (1, 1) => Some((32, 8)),
+                (1, 2) => Some((32, 16)),
+                (1, 3) => Some((64, 32)),
+                (2, 0) => Some((8, 16)),
+                (2, 1) => Some((8, 32)),
+                (2, 2) => Some((16, 32)),
+                (2, 3) => Some((32, 64)),
+                _ => None,
+            };
+
+            let cost = if (!affine && attr0 & (1 << 9) != 0)
+                || object_mode == 3
+                || dimensions.is_none()
+            {
+                INSPECTION_CYCLES
+            } else if let Some((width, height)) = dimensions {
+                let canvas_width = if affine && attr0 & (1 << 9) != 0 {
+                    width * 2
+                } else {
+                    width
+                };
+                let canvas_height = if affine && attr0 & (1 << 9) != 0 {
+                    height * 2
+                } else {
+                    height
+                };
+                let raw_y = i32::from(attr0 & 0x00FF);
+                let origin_y = if raw_y >= 256 - canvas_height {
+                    raw_y - 256
+                } else {
+                    raw_y
+                };
+                let raw_x = i32::from(attr1 & 0x01FF);
+                let origin_x = if raw_x >= 512 - canvas_width {
+                    raw_x - 512
+                } else {
+                    raw_x
+                };
+                let intersects_y = (origin_y..origin_y + canvas_height)
+                    .contains(&(line as i32));
+                let intersects_x = origin_x < SCREEN_WIDTH as i32
+                    && origin_x + canvas_width > 0;
+
+                if !intersects_y || !intersects_x {
+                    INSPECTION_CYCLES
+                } else if affine {
+                    10 + (canvas_width as u16 * 2)
+                } else {
+                    canvas_width as u16
+                }
+            } else {
+                INSPECTION_CYCLES
+            };
+
+            if cost > remaining {
+                break;
             }
-            let line = screen_y as usize;
-            if objects_per_line[line] < 32 {
-                allowed_lines[index as usize][line] = true;
-                objects_per_line[line] += 1;
+            remaining -= cost;
+
+            let is_drawable = dimensions.is_some()
+                && object_mode != 3
+                && (affine || attr0 & (1 << 9) == 0);
+            if is_drawable {
+                if let Some((width, height)) = dimensions {
+                    let canvas_height = if affine && attr0 & (1 << 9) != 0 {
+                        height * 2
+                    } else {
+                        height
+                    };
+                    let raw_y = i32::from(attr0 & 0x00FF);
+                    let origin_y = if raw_y >= 256 - canvas_height {
+                        raw_y - 256
+                    } else {
+                        raw_y
+                    };
+                    let raw_x = i32::from(attr1 & 0x01FF);
+                    let canvas_width = if affine && attr0 & (1 << 9) != 0 {
+                        width * 2
+                    } else {
+                        width
+                    };
+                    let origin_x = if raw_x >= 512 - canvas_width {
+                        raw_x - 512
+                    } else {
+                        raw_x
+                    };
+                    if (origin_y..origin_y + canvas_height).contains(&(line as i32))
+                        && origin_x < SCREEN_WIDTH as i32
+                        && origin_x + canvas_width > 0
+                    {
+                        allowed_lines[index][line] = true;
+                    }
+                }
             }
         }
     }
@@ -3228,7 +3302,7 @@ mod tests {
     }
 
     #[test]
-    fn disabled_and_prohibited_objects_do_not_consume_scanline_limit() {
+    fn disabled_and_prohibited_objects_only_consume_inspection_cycles() {
         let mut oam = [0_u8; 1024];
         for index in 0..16_usize {
             let base = index * 8;
@@ -3238,12 +3312,12 @@ mod tests {
             let disabled = (16 + index) * 8;
             oam[disabled..disabled + 2].copy_from_slice(&(1_u16 << 9).to_le_bytes());
         }
-        let allowed = object_scanline_mask(&oam);
+        let allowed = object_scanline_mask(&oam, 0);
         assert!(allowed[32][0]);
     }
 
     #[test]
-    fn obj_window_entries_consume_scanline_object_limit() {
+    fn obj_window_entries_consume_their_rendering_cycles() {
         let mut oam = [0_u8; 1024];
         for index in 0..32_usize {
             let base = index * 8;
@@ -3257,12 +3331,53 @@ mod tests {
 
         let allowed = object_scanline_mask(&oam);
         assert!(allowed[..32].iter().all(|lines| lines[0]));
-        assert!(!allowed[32][0]);
+        assert!(allowed[32][0]);
         assert!(allowed[32][8]);
     }
 
     #[test]
-    fn object_scanline_limit_resets_for_each_scanline() {
+
+    #[test]
+    fn normal_obj_rendering_budget_limits_large_sprites_in_oam_order() {
+        let mut oam = [0_u8; 1024];
+        for index in 0..19_usize {
+            let base = index * 8;
+            oam[base..base + 2].copy_from_slice(&0_u16.to_le_bytes());
+            oam[base + 2..base + 4].copy_from_slice(&(3_u16 << 14).to_le_bytes());
+        }
+        let allowed = object_scanline_mask(&oam, 0);
+        assert!(allowed[..18].iter().all(|lines| lines[0]));
+        assert!(!allowed[18][0]);
+    }
+
+    #[test]
+    fn hblank_free_reduces_the_obj_rendering_budget() {
+        let mut oam = [0_u8; 1024];
+        for index in 0..15_usize {
+            let base = index * 8;
+            oam[base..base + 2].copy_from_slice(&0_u16.to_le_bytes());
+            oam[base + 2..base + 4].copy_from_slice(&(3_u16 << 14).to_le_bytes());
+        }
+        let normal = object_scanline_mask(&oam, 0);
+        let hblank_free = object_scanline_mask(&oam, 1 << 5);
+        assert!(normal[14][0]);
+        assert!(!hblank_free[14][0]);
+    }
+
+    #[test]
+    fn affine_double_size_obj_consumes_affine_canvas_cycles() {
+        let mut oam = [0_u8; 1024];
+        for index in 0..5_usize {
+            let base = index * 8;
+            oam[base..base + 2].copy_from_slice(&((1 << 8) | (1 << 9)).to_le_bytes());
+            oam[base + 2..base + 4].copy_from_slice(&(3_u16 << 14).to_le_bytes());
+        }
+        let allowed = object_scanline_mask(&oam, 0);
+        assert!(allowed[..4].iter().all(|lines| lines[0]));
+        assert!(!allowed[4][0]);
+    }
+
+    fn object_rendering_budget_resets_for_each_scanline() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 1 << 12);
         bus.write16(PALETTE_BASE + 0x202, 0x001F);
