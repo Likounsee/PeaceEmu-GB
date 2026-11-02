@@ -1280,9 +1280,8 @@ fn object_scanline_mask(
                 _ => None,
             };
 
-            let invalid = (!affine && attr0 & (1 << 9) != 0)
-                || object_mode == 3
-                || dimensions.is_none();
+            let invalid =
+                (!affine && attr0 & (1 << 9) != 0) || object_mode == 3 || dimensions.is_none();
             if invalid {
                 if remaining < INSPECTION_CYCLES {
                     break;
@@ -1315,8 +1314,7 @@ fn object_scanline_mask(
                 raw_x
             };
             let intersects_y = (origin_y..origin_y + canvas_height).contains(&(line as i32));
-            let intersects_x =
-                origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
+            let intersects_x = origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
 
             if !intersects_y || !intersects_x {
                 if remaining < INSPECTION_CYCLES {
