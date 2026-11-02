@@ -1356,8 +1356,9 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
     }
     let blend_control = bus.read16(0x0400_0050);
     // Semi-transparent OBJ pixels force alpha blending regardless of BLDCNT's
-    // global effect mode. BG2 is target 2 at bit 10 (bits 8-11 select BG0-BG3).
-    if blend_control & (1 << 10) == 0 {
+    // global effect mode. The actual second target is selected per pixel:
+    // BG2 (bit 10) when visible, or backdrop (bit 13) when a window masks BG2.
+    if blend_control & ((1 << 10) | (1 << 13)) == 0 {
         return None;
     }
     let coefficients = bus.read16(0x0400_0052);
