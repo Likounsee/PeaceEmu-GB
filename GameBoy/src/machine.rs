@@ -332,6 +332,18 @@ impl GbaMachine {
         Ok(None)
     }
 
+    /// Executes one complete frame, stopping at the next VBlank entry.
+    ///
+    /// A frame boundary is scanline 160, cycle 0. The first call from a newly
+    /// created machine runs to the first VBlank; subsequent calls advance one
+    /// full frame each. Returns the number of instructions executed, or
+    /// None when the instruction budget is exhausted or the CPU is stopped.
+    ///
+    /// The caller can use render_frame after this method to obtain the
+    /// currently rendered framebuffer.
+    pub fn run_frame(&mut self, max_steps: usize) -> Result<Option<usize>, CpuError> {
+        self.run_until_next_video_position(160, 0, max_steps)
+    }
     /// Executes until the PPU reaches a requested scanline or the instruction limit.
     ///
     /// The target must be in the GBA scanline range 0..228. Returns `None` for
