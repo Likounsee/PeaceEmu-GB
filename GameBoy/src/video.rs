@@ -3113,6 +3113,23 @@ mod tests {
     }
 
     #[test]
+    fn semi_transparent_obj_blends_with_mode5_backdrop_outside_bitmap_viewport() {
+        let mut bus = bus();
+        bus.write16(0x0400_0000, 5 | (1 << 10) | (1 << 12)); // Mode 5, BG2 and OBJ.
+        bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop outside the 160x128 viewport.
+        bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ palette index 1.
+        bus.write16(0x0601_4000, 0x1111); // Bitmap-mode OBJ tile index 512.
+        bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ at (0, 0).
+        bus.write16(0x0700_0002, 0);
+        bus.write16(0x0700_0004, 512);
+        bus.write16(0x0400_0050, (1 << 6) | (1 << 13)); // Alpha mode; backdrop is target 2.
+        bus.write16(0x0400_0052, 8 | (8 << 8)); // EVA = EVB = 8.
+
+        let frame = render_bitmap_frame(&bus).expect("mode 5 should render");
+        assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
+    }
+
+    #[test]
     fn semi_transparent_obj_blends_in_mode4_with_selected_bitmap_page() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 4 | (1 << 4) | (1 << 10) | (1 << 12));
