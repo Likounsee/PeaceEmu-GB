@@ -2022,7 +2022,7 @@ impl MemoryBus {
                 0xFF00
             };
             self.sio_rcnt = (self.sio_rcnt & !mask) | (u16::from(value) << shift & mask);
-            self.sio_rcnt &= 0xC00F;
+            self.sio_rcnt &= 0xC0FF;
             return;
         }
 
@@ -2187,7 +2187,7 @@ impl MemoryBus {
             return;
         }
         if sio_address == 0x0400_0134 {
-            self.sio_rcnt = value & 0xC00F;
+            self.sio_rcnt = value & 0xC0FF;
             return;
         }
         if (0x0400_0120..=0x0400_0123).contains(&sio_address) && self.sio_control >> 12 & 3 == 1 {
@@ -2649,7 +2649,25 @@ mod tests {
         bus.write16(0x0400_0128, 0xFFFF);
         assert_eq!(bus.read16(0x0400_0128), 0x7F8B);
         bus.write16(0x0400_0134, 0xFFFF);
-        assert_eq!(bus.read16(0x0400_0134), 0xC00F);
+        assert_eq!(bus.read16(0x0400_0134), 0xC0FF);
+    }
+
+    #[test]
+    fn sio_rcnt_preserves_gpio_data_and_direction_bits_for_byte_and_halfword_writes() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.write16(0x0400_0134, 0x00A5);
+        assert_eq!(bus.read16(0x0400_0134), 0x00A5);
+
+        // GPIO direction occupies RCNT bits 4..7 in the low byte.
+        bus.write8(0x0400_0134, 0x5A);
+        assert_eq!(bus.read8(0x0400_0134), 0x5A);
+        bus.write8(0x0400_0135, 0xFF);
+        assert_eq!(bus.read16(0x0400_0134), 0xC05A);
+
+        bus.write16(0x0400_0134, 0x003C);
+        assert_eq!(bus.read16(0x0400_0134), 0x003C);
+        bus.write16(0x0400_0134, 0xFFFF);
+        assert_eq!(bus.read16(0x0400_0134), 0xC0FF);
     }
 
     #[test]
