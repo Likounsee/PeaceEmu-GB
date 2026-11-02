@@ -1448,7 +1448,6 @@ fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16
     ))
 }
 
-
 fn composite_background_pixel(
     bus: &MemoryBus,
     bg: u32,
