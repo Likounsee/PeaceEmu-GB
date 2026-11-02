@@ -1361,6 +1361,65 @@ fn object_scanline_mask(
 }
 
 /// win ties, so entries are visited from 127 down to 0.
+fn composite_background_pixel(
+    bus: &MemoryBus,
+    bg: u32,
+    destination: usize,
+    source: u32,
+    layer_buffer: &[u8],
+    target_color: u32,
+) -> u32 {
+    let control = bus.read16(0x0400_0050);
+    if (control >> 6) & 3 != 1 || control & (1 << bg) == 0 {
+        return source;
+    }
+    let Some(&target_layer) = layer_buffer.get(destination) else {
+        return source;
+    };
+    let target_mask = if target_layer == 5 {
+        control & (1 << 13) != 0
+    } else {
+        control & (1 << (8 + target_layer)) != 0
+    };
+    if !target_mask {
+        return source;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    let eva = (coefficients & 0x1F).min(16);
+    let evb = ((coefficients >> 8) & 0x1F).min(16);
+    blend_argb555(source, target_color, eva, evb)
+}
+
+/// Applies GBA BLDY brightness or darkness to an opaque RGB555-derived color.
+fn apply_brightness_effect(color: u32, effect: Option<(bool, u16)>) -> u32 {
+    let Some((brighten, coefficient)) = effect else {
+        return color;
+    };
+    let transform = |shift: u32| {
+        let channel = ((color >> shift) & 0xFF) >> 3;
+        let amount = u32::from(coefficient);
+        let result = if brighten {
+            channel + (((31 - channel) * amount) >> 4)
+        } else {
+            channel - ((channel * amount) >> 4)
+        };
+        (result.min(31) << 3) | (result.min(31) >> 2)
+    };
+    0xFF00_0000 | (transform(16) << 16) | (transform(8) << 8) | transform(0)
+}
+
+fn blend_argb555(source: u32, target: u32, eva: u16, evb: u16) -> u32 {
+    let blend_channel = |shift: u32| {
+        let source = (source >> shift) & 0xFF;
+        let target = (target >> shift) & 0xFF;
+        let source5 = source >> 3;
+        let target5 = target >> 3;
+        let value = ((source5 * u32::from(eva) + target5 * u32::from(evb)) >> 4).min(31);
+        (value << 3) | (value >> 2)
+    };
+    0xFF00_0000 | (blend_channel(16) << 16) | (blend_channel(8) << 8) | blend_channel(0)
+}
+
 fn render_regular_objects(
     bus: &MemoryBus,
     display_control: u16,
@@ -1368,7 +1427,7 @@ fn render_regular_objects(
     palette: &[u32; 256],
     tile_cache: &mut [Option<[u8; 64]>],
     oam_snapshot: &[u8; 1024],
-    allowed_lines: &[[bool; SCREEN_HEIGHT]; 128],
+    allowed_lines: &[[u16; SCREEN_HEIGHT]; 128],
     bitmap_blend: Option<(u16, u16)>,
     bitmap_obj_effect: Option<(bool, u16)>,
     mut obj_window_mask: Option<&mut [bool]>,
