@@ -5267,6 +5267,31 @@ mod tests {
     }
 
     #[test]
+    fn arm_msr_updates_irq_spsr_control_for_exception_return() {
+        let mut bus = bus_with_program(&[
+            0xE161_F000, // MSR SPSR_c, r0
+            0xE1B0_F00E, // MOVS pc, lr
+        ]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.mode = 0x12;
+        cpu.spsr_irq = 0x12;
+        cpu.spsr_irq_valid = true;
+        cpu.set_register(0, 0x3F); // System mode, Thumb state.
+        cpu.set_register(14, 0x0800_0100);
+
+        cpu.step(&mut bus).expect("write IRQ SPSR control byte");
+        assert_eq!(cpu.spsr_irq & 0xFF, 0x3F);
+
+        cpu.step(&mut bus).expect("return from IRQ using updated SPSR");
+        assert_eq!(cpu.mode, 0x1F);
+        assert!(cpu.is_thumb());
+        assert!(!cpu.irq_disabled);
+        assert_eq!(cpu.register(15), Some(0x0800_0100));
+        assert!(!cpu.spsr_irq_valid);
+    }
+
+    #[test]
     fn arm_msr_user_mode_cannot_change_cpsr_control_state() {
         let mut bus = bus_with_program(&[0xE121_F000]); // MSR CPSR_c, r0
         let mut cpu = Cpu::new();
