@@ -2154,19 +2154,16 @@ impl Cpu {
                     let scale_x = bus.read16(input.wrapping_add(12)) as i16;
                     let scale_y = bus.read16(input.wrapping_add(14)) as i16;
                     let angle = bus.read16(input.wrapping_add(16));
-                    let [pa, pb, pc, pd] =
-                        Self::bios_affine_coefficients(scale_x, scale_y, angle);
+                    let [pa, pb, pc, pd] = Self::bios_affine_coefficients(scale_x, scale_y, angle);
                     bus.write16(output, pa as u16);
                     bus.write16(output.wrapping_add(2), pb as u16);
                     bus.write16(output.wrapping_add(4), pc as u16);
                     bus.write16(output.wrapping_add(6), pd as u16);
                     let dx = texture_x.wrapping_sub(
-                        i32::from(pa) * i32::from(screen_x)
-                            + i32::from(pb) * i32::from(screen_y),
+                        i32::from(pa) * i32::from(screen_x) + i32::from(pb) * i32::from(screen_y),
                     );
                     let dy = texture_y.wrapping_sub(
-                        i32::from(pc) * i32::from(screen_x)
-                            + i32::from(pd) * i32::from(screen_y),
+                        i32::from(pc) * i32::from(screen_x) + i32::from(pd) * i32::from(screen_y),
                     );
                     bus.write32(output.wrapping_add(8), dx as u32);
                     bus.write32(output.wrapping_add(12), dy as u32);
@@ -2191,7 +2188,10 @@ impl Cpu {
                     let [pa, pb, pc, pd] =
                         Self::bios_affine_coefficients(scale_x, scale_y, angle);
                     for (offset, coefficient) in [pa, pb, pc, pd].into_iter().enumerate() {
-                        bus.write16(output.wrapping_add((offset as u32).wrapping_mul(stride)), coefficient as u16);
+                        bus.write16(
+                            output.wrapping_add((offset as u32).wrapping_mul(stride)),
+                            coefficient as u16,
+                        );
                     }
                 }
             }
