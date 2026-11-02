@@ -1280,9 +1280,8 @@ fn object_scanline_mask(
                 _ => None,
             };
 
-            let invalid = (!affine && attr0 & (1 << 9) != 0)
-                || object_mode == 3
-                || dimensions.is_none();
+            let invalid =
+                (!affine && attr0 & (1 << 9) != 0) || object_mode == 3 || dimensions.is_none();
             if invalid {
                 if remaining < INSPECTION_CYCLES {
                     break;
@@ -1315,8 +1314,7 @@ fn object_scanline_mask(
                 raw_x
             };
             let intersects_y = (origin_y..origin_y + canvas_height).contains(&(line as i32));
-            let intersects_x =
-                origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
+            let intersects_x = origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
 
             if !intersects_y || !intersects_x {
                 if remaining < INSPECTION_CYCLES {
@@ -1404,7 +1402,6 @@ fn composite_bitmap_background_pixel(
     blend_argb555(source, backdrop, eva, evb)
 }
 
-
 fn bitmap_backdrop_alpha_blend(bus: &MemoryBus) -> Option<(u16, u16)> {
     let blend_control = bus.read16(0x0400_0050);
     // Semi-transparent OBJ pixels force alpha blending regardless of the
@@ -1419,7 +1416,6 @@ fn bitmap_backdrop_alpha_blend(bus: &MemoryBus) -> Option<(u16, u16)> {
     ))
 }
 
-
 fn bitmap_alpha_blend_mode5(bus: &MemoryBus) -> Option<(u16, u16)> {
     let control = bus.read16(0x0400_0050);
     // In mode 5 the visible second target varies per pixel: BG2 inside its
@@ -1433,7 +1429,6 @@ fn bitmap_alpha_blend_mode5(bus: &MemoryBus) -> Option<(u16, u16)> {
         ((coefficients >> 8) & 0x1F).min(16),
     ))
 }
-
 
 fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16)> {
     if display_control & (1 << 10) == 0 {
