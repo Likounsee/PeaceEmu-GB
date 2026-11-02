@@ -1418,7 +1418,7 @@ impl MemoryBus {
         (0..4).any(|channel| {
             let offset = 0xB0 + channel * 12 + 10;
             let control = u16::from_le_bytes([self.io[offset], self.io[offset + 1]]);
-            control & 0x8000 != 0 && (control >> 12) & 3 != 0
+            control & 0x8000 != 0 && matches!((control >> 12) & 3, 1 | 2)
         })
     }
 
@@ -3583,6 +3583,21 @@ mod tests {
         bus.write16(0x0400_00DE, 0x8800);
         assert_eq!(bus.read16(0x0300_0000), 0);
         assert_eq!(bus.read16(0x0400_00DE) & 0x8000, 0x8000);
+    }
+
+    #[test]
+    fn sound_fifo_dma_does_not_force_per_cycle_video_timing() {
+        let mut bus = MemoryBus::new(cartridge());
+
+        // DMA1 special timing (3) is timer/FIFO-driven, not a PPU edge.
+        bus.write16(0x0400_00C6, 0xB640);
+        assert!(!bus.has_video_timed_dma_enabled());
+
+        // HBlank (2) and VBlank (1) DMA must retain exact edge processing.
+        bus.write16(0x0400_00C6, 0xA640);
+        assert!(bus.has_video_timed_dma_enabled());
+        bus.write16(0x0400_00C6, 0x9640);
+        assert!(bus.has_video_timed_dma_enabled());
     }
 
     #[test]
