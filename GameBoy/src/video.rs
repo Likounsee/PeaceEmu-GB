@@ -3336,6 +3336,19 @@ mod tests {
     }
 
     #[test]
+    fn all_128_small_objects_fit_in_normal_scanline_budget() {
+        let mut oam = [0_u8; 1024];
+        for index in 0..128_usize {
+            let base = index * 8;
+            oam[base..base + 2].copy_from_slice(&0_u16.to_le_bytes());
+            oam[base + 2..base + 4].copy_from_slice(&0_u16.to_le_bytes());
+        }
+
+        let allowed = object_scanline_mask(&oam, 0);
+        assert!(allowed.iter().all(|lines| lines[0]));
+    }
+
+    #[test]
     fn normal_obj_rendering_budget_limits_large_sprites_in_oam_order() {
         let mut oam = [0_u8; 1024];
         for index in 0..19_usize {
