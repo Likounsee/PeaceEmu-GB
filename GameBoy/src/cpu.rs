@@ -8622,7 +8622,7 @@ mod tests {
     fn bios_midi_key_to_frequency_uses_wave_base_frequency_and_fine_tuning() {
         let mut bus = bus_with_program(&[]);
         let wave_data = 0x0200_1000;
-        bus.write32(wave_data + 4, 8_000);
+        bus.write32(wave_data + 4, 8_000_000);
 
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
@@ -8631,7 +8631,7 @@ mod tests {
         cpu.set_register(2, 0);
         cpu.execute_swi(0x0200_0000, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(8_000));
+        assert_eq!(cpu.register(0), Some(8_000_000));
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69); // A4, 111 semitones below the base key.
@@ -8639,14 +8639,14 @@ mod tests {
         cpu.execute_swi(0x0200_0004, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let untuned = cpu.register(0).unwrap();
-        assert_eq!(untuned, 13);
+        assert_eq!(untuned, 12_699);
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69);
         cpu.set_register(2, 255);
         cpu.execute_swi(0x0200_0008, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
-        assert!(cpu.register(0).unwrap() >= untuned);
+        assert!(cpu.register(0).unwrap() > untuned);
     }
 
     #[test]
