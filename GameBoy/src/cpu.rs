@@ -932,6 +932,7 @@ impl Cpu {
         };
 
         match swi {
+            0x0D => 1, // GetBiosChecksum returns a constant BIOS image checksum.
             0x01 => {
                 let flags = self.registers[0];
                 let bytes = [
@@ -2333,6 +2334,10 @@ impl Cpu {
                     self.registers[3] = quotient.wrapping_abs() as u32;
                 }
             }
+            // GetBiosChecksum: the retail GBA BIOS reports its fixed image checksum.
+            0x0D => {
+                self.registers[0] = 0xBAAE_187F;
+            }
             // BitUnPack: unpack packed source fields and add the configured data offset.
             0x10 => {
                 let source = self.registers[0];
@@ -3551,6 +3556,24 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bios_get_checksum_returns_the_retail_bios_checksum() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0x1234_5678);
+        cpu.set_register(1, 0x8765_4321);
+        cpu.set_register(3, 0xDEAD_BEEF);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_000D, 0x0D, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), 0xBAAE_187F);
+        assert_eq!(cpu.register(1), 0x8765_4321);
+        assert_eq!(cpu.register(3), 0xDEAD_BEEF);
+        assert_eq!(cpu.register(15), 0x0200_0204);
+    }
+
     #[test]
     fn bios_bg_affine_set_writes_identity_matrix_and_reference_point() {
         let mut bus = bus_with_program(&[]);
