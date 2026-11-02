@@ -1374,7 +1374,8 @@ impl MemoryBus {
                 if self.audio_samples.len() == QUEUE_CAPACITY {
                     self.audio_samples.pop_front();
                 }
-                self.audio_samples.push_back(self.audio_stereo_sample());
+                let sample = self.audio_stereo_sample();
+                self.audio_samples.push_back(sample);
             }
         }
     }
@@ -6332,4 +6333,25 @@ mod tests {
         assert_eq!(bus.video_hblank_events(), 0);
         assert_eq!(bus.video_vblank_events(), 0);
     }
+    #[test]
+    fn audio_stream_emits_at_native_rate_and_drains_in_order() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.advance_cycles(511);
+        assert!(bus.drain_audio_samples().is_empty());
+        bus.advance_cycles(1);
+        assert_eq!(bus.drain_audio_samples(), vec![(0, 0)]);
+        bus.advance_cycles(512 * 3);
+        assert_eq!(bus.drain_audio_samples(), vec![(0, 0); 3]);
+        assert!(bus.drain_audio_samples().is_empty());
+    }
+
+    #[test]
+    fn audio_stream_queue_is_bounded_when_frontend_falls_behind() {
+        let mut bus = MemoryBus::new(cartridge());
+        bus.advance_cycles(512 * 8_200);
+        let samples = bus.drain_audio_samples();
+        assert_eq!(samples.len(), 8_192);
+        assert!(samples.iter().all(|sample| *sample == (0, 0)));
+    }
+
 }
