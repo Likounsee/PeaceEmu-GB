@@ -2317,11 +2317,6 @@ impl Cpu {
                 }
             }
 
-            // GetBiosChecksum reports the fixed checksum of the retail GBA BIOS.
-            // The HLE contract changes R0 only; the protected BIOS ROM is not exposed.
-            0x0D => {
-                self.registers[0] = 0xBAAE_187F;
-            }
             // BgAffineSet: build affine BG matrices and fixed-point reference points.
             0x0E => {
                 let source = self.registers[0];
