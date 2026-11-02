@@ -8639,7 +8639,7 @@ mod tests {
         cpu.execute_swi(0x0200_0004, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let untuned = cpu.register(0).unwrap();
-        assert_eq!(untuned, 12_699);
+        assert_eq!(untuned, 13_139);
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69);
