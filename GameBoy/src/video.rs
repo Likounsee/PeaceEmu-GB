@@ -2220,9 +2220,33 @@ mod tests {
         bus.write16(0x0700_0004, 0);
 
         let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
-        // Full alpha-effect composition is not implemented yet, but mode 1
-        // must not make the OBJ disappear entirely.
+        // With no second target selected, the source pixel remains visible.
         assert_eq!(frame.pixel(0, 0), Some(0xFFFF_0000));
+    }
+
+    #[test]
+    fn semi_transparent_obj_forces_alpha_even_when_global_effect_is_not_alpha() {
+        // OBJ mode 1 forces alpha blending independently of BLDCNT's effect
+        // mode. The second-target mask and EVA/EVB still apply.
+        for effect_mode in [0_u16, 2, 3] {
+            let mut bus = bus();
+            bus.write16(0x0400_0000, 1 << 12); // OBJ enabled, mode 0
+            bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop
+            bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ pixel
+            bus.write16(0x0601_0000, 0x1111);
+            bus.write16(0x0700_0000, 1 << 10); // Semi-transparent 8x8 OBJ
+            bus.write16(0x0700_0002, 0);
+            bus.write16(0x0700_0004, 0);
+            bus.write16(0x0400_0050, (effect_mode << 6) | (1 << 13));
+            bus.write16(0x0400_0052, (8 << 8) | 8);
+
+            let frame = render_bitmap_frame(&bus).expect("mode 0 should render");
+            assert_eq!(
+                frame.pixel(0, 0),
+                Some(0xFF7B_007B),
+                "semi-transparent OBJ must force alpha for BLDCNT effect mode {effect_mode}"
+            );
+        }
     }
 
     #[test]
