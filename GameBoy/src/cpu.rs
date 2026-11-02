@@ -2133,6 +2133,13 @@ impl Cpu {
         bus: &mut MemoryBus,
     ) -> Result<(), CpuError> {
         match swi {
+            // GetBiosChecksum identifies the standard GBA/GBA SP BIOS in HLE.
+            // The reference BIOS checksum is the unsigned sum of its 16 KiB image.
+            0x0D => {
+                self.registers[0] = 0xBAAE_187F;
+                self.registers[1] = 1;
+                self.registers[3] = 0x4000;
+            }
             // ArcTan accepts a signed Q2.14 tangent and returns a signed
             // 16-bit angle where one full turn is 0x10000 units.
             0x09 => {
@@ -7780,6 +7787,24 @@ mod tests {
             .unwrap();
         assert_eq!(bus.read32(0x0200_0100), 0xCAFE_BABE);
         assert_eq!(bus.read16(0x0500_0010), 0xABCD);
+    }
+
+    #[test]
+    fn bios_checksum_returns_reference_gba_bios_identity() {
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, 0xDEAD_BEEF);
+        cpu.set_register(1, 0xCAFE_BABE);
+        cpu.set_register(3, 0x1234_5678);
+
+        cpu.execute_swi(0x0200_0200, 0xEF00_000D, 0x0D, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(cpu.register(0), Some(0xBAAE_187F));
+        assert_eq!(cpu.register(1), Some(1));
+        assert_eq!(cpu.register(3), Some(0x4000));
+        assert_eq!(cpu.register(2), Some(0));
     }
 
     #[test]
