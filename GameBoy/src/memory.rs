@@ -1360,7 +1360,7 @@ impl MemoryBus {
     /// Advances PSG oscillators and emits samples at the fixed hardware output rate.
     fn advance_audio_cycles(&mut self, cycles: u32) {
         const CPU_CLOCK: u64 = 16_777_216;
-        const SAMPLE_RATE: u64 = u64::from(crate::AUDIO_SAMPLE_RATE);
+        const SAMPLE_RATE: u64 = 32_768;
         const QUEUE_CAPACITY: usize = 8192;
         let mut remaining = u64::from(cycles);
         while remaining != 0 {
@@ -6333,6 +6333,7 @@ mod tests {
         assert_eq!(bus.video_hblank_events(), 0);
         assert_eq!(bus.video_vblank_events(), 0);
     }
+
     #[test]
     fn audio_stream_emits_at_native_rate_and_drains_in_order() {
         let mut bus = MemoryBus::new(cartridge());
