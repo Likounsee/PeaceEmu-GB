@@ -2149,7 +2149,7 @@ mod tests {
         bus.write16(VRAM_BASE, 0x03E0);
 
         let frame = render_bitmap_frame(&bus).expect("mode 5 should render");
-        assert_eq!(frame.pixel(40, 16), Some(0xFF00_FF00));
+        assert_eq!(frame.pixel(40, 16), Some(0xFFFF_0000));
         assert_eq!(frame.pixel(41, 16), Some(0xFF00_FF00));
     }
 
@@ -2290,8 +2290,8 @@ mod tests {
         let frame = render_bitmap_frame(&bus).expect("mode 5 should render");
         // (0,0) is outside the centered bitmap: backdrop is the second target.
         assert_eq!(frame.pixel(0, 0), Some(0xFF7B_007B));
-        // (40,16) is the BG2 viewport origin: BG2 is not a selected second target.
-        assert_eq!(frame.pixel(40, 16), Some(0xFFFF_0000));
+        // (40,16) is the BG2 viewport origin; no OBJ is placed there.
+        assert_eq!(frame.pixel(40, 16), Some(0xFF00_FF00));
     }
 
     #[test]
@@ -3035,7 +3035,7 @@ mod tests {
     #[test]
     fn semi_transparent_obj_uses_backdrop_target_when_bitmap_bg2_is_windowed_out() {
         let mut bus = bus();
-        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12) | (1 << 14));
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12) | (1 << 13));
         bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop.
         bus.write16(VRAM_BASE, 0x03E0); // Green BG2, hidden by WIN0.
         bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
@@ -3044,7 +3044,7 @@ mod tests {
         bus.write16(0x0700_0002, 0);
         bus.write16(0x0700_0004, 512);
         bus.write16(0x0400_0040, 8 << 8); // WIN0 covers x=0..7.
-        bus.write16(0x0400_0044, 1 << 8); // WIN0 covers y=0.
+        bus.write16(0x0400_0044, 8 << 8); // WIN0 covers y=0..7.
         bus.write16(0x0400_0048, 1); // Enable WIN0.
         bus.write16(0x0400_004A, (1 << 4) | (1 << 5)); // OBJ + effects, no BG2.
         bus.write16(0x0400_0050, (1 << 6) | (1 << 13)); // Backdrop is target 2.
