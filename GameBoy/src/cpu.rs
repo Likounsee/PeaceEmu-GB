@@ -2317,22 +2317,6 @@ impl Cpu {
             0x0D => {
                 self.registers[0] = 0xBAAE_187F;
             }
-            // ArcTan: interpret R0 as signed 1.14 tangent and return a 3.12 angle.
-            0x09 => {
-                let tangent = (self.registers[0] as i16) as f64 / 16_384.0;
-                self.registers[0] = (tangent.atan() * 4_096.0).round() as i32 as u32;
-            }
-            // ArcTan2: signed 1.14 Y (R1) and X (R0), result in signed 3.12 radians.
-            0x0A => {
-                let x = (self.registers[0] as i16) as f64;
-                let y = (self.registers[1] as i16) as f64;
-                let angle = if x == 0.0 && y == 0.0 {
-                    0.0
-                } else {
-                    y.atan2(x)
-                };
-                self.registers[0] = (angle * 4_096.0).round() as i32 as u32;
-            }
             // BgAffineSet: build affine BG matrices and fixed-point reference points.
             0x0E => {
                 let source = self.registers[0];
@@ -3720,13 +3704,13 @@ mod tests {
         cpu.set_register(1, 0x4000);
         cpu.execute_swi(0x0200_0204, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0).unwrap() as i32, 6434);
+        assert_eq!(cpu.register(0).unwrap() as i32, 0x4000);
 
         cpu.set_register(0, 0xC000);
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0208, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0).unwrap() as i32, 12868);
+        assert_eq!(cpu.register(0).unwrap() as i32, 0x8000);
     }
 
     #[test]
@@ -3975,7 +3959,7 @@ mod tests {
         cpu.execute_swi(0x0200_0100, 0xEF00_0009, 0x09, false, &mut bus)
             .unwrap();
         let angle = cpu.register(0).unwrap() as i32;
-        assert!((angle - 3_217).abs() <= 1);
+        assert!(angle == 0x2000);
     }
 
     #[test]
@@ -3993,13 +3977,13 @@ mod tests {
         cpu.set_register(1, 16_384);
         cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(6_434));
+        assert_eq!(cpu.register(0), Some(0x4000));
 
         cpu.set_register(0, (-16_384_i32) as u32);
         cpu.set_register(1, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_000A, 0x0A, false, &mut bus)
             .unwrap();
-        assert_eq!(cpu.register(0), Some(12_868));
+        assert_eq!(cpu.register(0), Some(0x8000));
     }
 
     #[test]
