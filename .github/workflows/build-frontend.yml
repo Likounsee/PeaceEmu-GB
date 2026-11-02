@@ -1,0 +1,37 @@
+name: Desktop frontend build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "GameBoy/**"
+      - ".github/workflows/build-frontend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows desktop executable
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build release executable
+        run: cargo build --release --manifest-path GameBoy/Cargo.toml --bin peaceemu-gba
+      - name: Package executable and instructions
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item GameBoy/target/release/peaceemu-gba.exe dist/
+          Copy-Item GameBoy/README.md dist/
+          Compress-Archive -Path dist/* -DestinationPath peaceemu-gba-windows.zip
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: peaceemu-gba-windows
+          path: peaceemu-gba-windows.zip
+          if-no-files-found: error
