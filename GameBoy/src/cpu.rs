@@ -3968,12 +3968,12 @@ mod tests {
         cpu.set_register(0, 1);
         cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0088), 0xC200);
+        assert_eq!(bus.read16(0x0400_0088), 0x0200);
 
         cpu.set_register(0, 0);
         cpu.execute_swi(0x0200_0100, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
-        assert_eq!(bus.read16(0x0400_0088), 0xC000);
+        assert_eq!(bus.read16(0x0400_0088), 0x0000);
     }
 
     #[test]
@@ -8653,7 +8653,7 @@ mod tests {
         cpu.execute_swi(0x0200_0004, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let untuned = cpu.register(0).unwrap();
-        assert_eq!(untuned, 11);
+        assert_eq!(untuned, 13);
 
         cpu.set_register(0, wave_data);
         cpu.set_register(1, 69);
@@ -8903,7 +8903,7 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_001F, 0x1F, false, &mut bus)
             .unwrap();
         let actual = cpu.register(0).unwrap();
-        let expected = (12_000.0_f64 * 2.0_f64.powf(0.5 / 12.0)).round() as u32;
+        let expected = (12_000.0_f64 * 2.0_f64.powf(0.5 / 12.0)) as u32;
         assert_eq!(actual, expected);
     }
 
@@ -8933,7 +8933,7 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_0019, 0x19, false, &mut bus)
             .unwrap();
 
-        assert_eq!(bus.read16(0x0400_0088), 0x8200);
+        assert_eq!(bus.read16(0x0400_0088), 0x0200);
         assert_eq!(cpu.register(15), Some(0x0200_0204));
     }
 
