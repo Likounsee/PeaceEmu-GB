@@ -3035,7 +3035,7 @@ mod tests {
     #[test]
     fn semi_transparent_obj_uses_backdrop_target_when_bitmap_bg2_is_windowed_out() {
         let mut bus = bus();
-        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12) | (1 << 13));
+        bus.write16(0x0400_0000, 3 | (1 << 10) | (1 << 12) | (1 << 14));
         bus.write16(PALETTE_BASE, 0x7C00); // Blue backdrop.
         bus.write16(VRAM_BASE, 0x03E0); // Green BG2, hidden by WIN0.
         bus.write16(PALETTE_BASE + 0x202, 0x001F); // Red OBJ.
