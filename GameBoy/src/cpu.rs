@@ -2334,10 +2334,6 @@ impl Cpu {
                     self.registers[3] = quotient.wrapping_abs() as u32;
                 }
             }
-            // GetBiosChecksum: the retail GBA BIOS reports its fixed image checksum.
-            0x0D => {
-                self.registers[0] = 0xBAAE_187F;
-            }
             // BitUnPack: unpack packed source fields and add the configured data offset.
             0x10 => {
                 let source = self.registers[0];
