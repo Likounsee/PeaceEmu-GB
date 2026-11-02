@@ -2019,14 +2019,19 @@ impl Cpu {
         self.registers[15] = address.wrapping_add(8).wrapping_add(displacement) & !3;
     }
 
-    /// Writes the modeled CPSR condition flags with MSR CPSR_f.
-    /// Control fields and SPSR writes require exception-mode state and remain unsupported.
+    /// Writes modeled CPSR/SPSR fields with MSR.
+    ///
+    /// The control byte supports User, System, and IRQ mode banking plus the
+    /// Thumb and IRQ-disable bits. FIQ state and other privileged modes remain
+    /// unsupported rather than being silently accepted.
     fn execute_msr(&mut self, address: u32, instruction: u32) -> Result<(), CpuError> {
         let saved_status = instruction & (1 << 22) != 0;
         let field_mask = (instruction >> 16) & 0xF;
         let immediate = instruction & (1 << 25) != 0;
 
-        if (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid)) || field_mask & !0x8 != 0 {
+        if field_mask & !0x9 != 0
+            || (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid))
+        {
             return Err(CpuError::UnsupportedInstruction {
                 address,
                 instruction,
@@ -2050,12 +2055,50 @@ impl Cpu {
         };
 
         if saved_status {
-            self.spsr_irq = (self.spsr_irq & 0x0FFF_FFFF) | (value & 0xF000_0000);
+            let mut next = self.spsr_irq;
+            if field_mask & 0x8 != 0 {
+                next = (next & 0x0FFF_FFFF) | (value & 0xF000_0000);
+            }
+            if field_mask & 0x1 != 0 {
+                let next_mode = value & 0x1F;
+                if !matches!(next_mode, 0x10 | 0x12 | 0x1F) || value & (1 << 6) != 0 {
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
+                }
+                next = (next & !0xFF) | (value & 0xBF);
+            }
+            self.spsr_irq = next;
         } else {
-            self.flags.negative = value >> 31 != 0;
-            self.flags.zero = value & (1 << 30) != 0;
-            self.flags.carry = value & (1 << 29) != 0;
-            self.flags.overflow = value & (1 << 28) != 0;
+            if field_mask & 0x1 != 0 {
+                // User mode may update condition flags, but cannot change CPSR
+                // control state. The FIQ-disable bit is not modeled.
+                if self.mode == 0x10
+                    || value & (1 << 6) != 0
+                    || !matches!(value & 0x1F, 0x10 | 0x12 | 0x1F)
+                {
+                    return Err(CpuError::UnsupportedInstruction {
+                        address,
+                        instruction,
+                    });
+                }
+                self.switch_mode(value & 0x1F);
+                self.thumb = value & (1 << 5) != 0;
+                self.irq_disabled = value & (1 << 7) != 0;
+                self.registers[15] = if self.thumb {
+                    self.registers[15] & !1
+                } else {
+                    self.registers[15] & !3
+                };
+                self.last_fetch_next = None;
+            }
+            if field_mask & 0x8 != 0 {
+                self.flags.negative = value >> 31 != 0;
+                self.flags.zero = value & (1 << 30) != 0;
+                self.flags.carry = value & (1 << 29) != 0;
+                self.flags.overflow = value & (1 << 28) != 0;
+            }
         }
         Ok(())
     }
@@ -5151,7 +5194,7 @@ mod tests {
     fn arm_mrs_rejects_spsr_and_msr_control_fields_without_mutating_flags() {
         let mut bus = bus_with_program(&[
             0xE14F_2000, // MRS r2, SPSR (no SPSR model)
-            0xE121_F000, // MSR CPSR_c, r0 (control field not modeled)
+            0xE121_F000, // MSR CPSR_c, r0 (invalid requested mode)
         ]);
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0000);
@@ -5178,6 +5221,65 @@ mod tests {
         assert!(cpu.flags().zero);
         assert!(!cpu.flags().carry);
         assert!(!cpu.flags().overflow);
+    }
+
+
+    #[test]
+    fn arm_msr_switches_between_system_and_irq_banked_registers() {
+        let mut bus = bus_with_program(&[
+            0xE121_F000, // MSR CPSR_c, r0
+            0xE121_F001, // MSR CPSR_c, r1
+        ]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0x12); // IRQ mode, ARM state, IRQs enabled.
+        cpu.set_register(1, 0x1F); // Return to System mode.
+        cpu.set_register(13, 0x0300_1000);
+        cpu.set_register(14, 0x0800_1234);
+
+        cpu.step(&mut bus).expect("switch into IRQ mode");
+        assert_eq!(cpu.mode, 0x12);
+        assert_eq!(cpu.register(13), Some(0));
+        assert_eq!(cpu.register(14), Some(0));
+
+        cpu.set_register(13, 0x0300_2000);
+        cpu.set_register(14, 0x0800_5678);
+        cpu.step(&mut bus).expect("switch back to System mode");
+        assert_eq!(cpu.mode, 0x1F);
+        assert_eq!(cpu.register(13), Some(0x0300_1000));
+        assert_eq!(cpu.register(14), Some(0x0800_1234));
+        assert_eq!(cpu.irq_sp_lr, [0x0300_2000, 0x0800_5678]);
+    }
+
+    #[test]
+    fn arm_msr_cpsr_control_updates_thumb_and_irq_mask() {
+        let mut bus = bus_with_program(&[0xE121_F000]); // MSR CPSR_c, r0
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0xBF); // System mode, Thumb state, IRQ disabled.
+
+        cpu.step(&mut bus).expect("valid CPSR control write");
+
+        assert_eq!(cpu.mode, 0x1F);
+        assert!(cpu.is_thumb());
+        assert!(cpu.irq_disabled);
+        assert_eq!(cpu.register(15), Some(0x0200_0004));
+    }
+
+    #[test]
+    fn arm_msr_user_mode_cannot_change_cpsr_control_state() {
+        let mut bus = bus_with_program(&[0xE121_F000]); // MSR CPSR_c, r0
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.mode = 0x10;
+        cpu.set_register(0, 0x1F);
+
+        assert!(matches!(
+            cpu.step(&mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(cpu.mode, 0x10);
+        assert_eq!(cpu.register(15), Some(0x0200_0000));
     }
 
     #[test]
