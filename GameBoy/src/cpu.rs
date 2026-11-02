@@ -5221,7 +5221,6 @@ mod tests {
         assert!(!cpu.flags().overflow);
     }
 
-
     #[test]
     fn arm_msr_switches_between_system_and_irq_banked_registers() {
         let mut bus = bus_with_program(&[
@@ -5281,7 +5280,8 @@ mod tests {
         cpu.step(&mut bus).expect("write IRQ SPSR control byte");
         assert_eq!(cpu.spsr_irq & 0xFF, 0x3F);
 
-        cpu.step(&mut bus).expect("return from IRQ using updated SPSR");
+        cpu.step(&mut bus)
+            .expect("return from IRQ using updated SPSR");
         assert_eq!(cpu.mode, 0x1F);
         assert!(cpu.is_thumb());
         assert!(!cpu.irq_disabled);
