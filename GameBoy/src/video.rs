@@ -3150,7 +3150,7 @@ mod tests {
             oam[disabled..disabled + 2].copy_from_slice(&(1_u16 << 9).to_le_bytes());
         }
         let allowed = object_scanline_mask(&oam, 0);
-        assert!(allowed[32][0]);
+        assert_eq!(allowed[32][0], 8);
     }
 
     #[test]
@@ -3167,9 +3167,9 @@ mod tests {
         oam[visible_object + 2..visible_object + 4].copy_from_slice(&0_u16.to_le_bytes());
 
         let allowed = object_scanline_mask(&oam, 0);
-        assert!(allowed[..32].iter().all(|lines| lines[0]));
+        assert!(allowed[..32].iter().all(|lines| lines[0] > 0));
         assert_eq!(allowed[32][0], 0);
-        assert!(allowed[32][8]);
+        assert_eq!(allowed[32][8], 8);
     }
 
     #[test]
@@ -3182,7 +3182,7 @@ mod tests {
         }
 
         let allowed = object_scanline_mask(&oam, 0);
-        assert!(allowed.iter().all(|lines| lines[0]));
+        assert!(allowed.iter().all(|lines| lines[0] > 0));
     }
 
     #[test]
@@ -3194,7 +3194,7 @@ mod tests {
             oam[base + 2..base + 4].copy_from_slice(&(3_u16 << 14).to_le_bytes());
         }
         let allowed = object_scanline_mask(&oam, 0);
-        assert!(allowed[..18].iter().all(|lines| lines[0]));
+        assert!(allowed[..18].iter().all(|lines| lines[0] == 64));
         assert_eq!(allowed[18][0], 58);
     }
 
@@ -3221,7 +3221,7 @@ mod tests {
             oam[base + 2..base + 4].copy_from_slice(&(3_u16 << 14).to_le_bytes());
         }
         let allowed = object_scanline_mask(&oam, 0);
-        assert!(allowed[..4].iter().all(|lines| lines[0]));
+        assert!(allowed[..4].iter().all(|lines| lines[0] == 128));
         assert_eq!(allowed[4][0], 68);
     }
 
