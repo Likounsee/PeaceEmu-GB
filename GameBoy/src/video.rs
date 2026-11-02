@@ -3282,6 +3282,7 @@ mod tests {
         assert_eq!(allowed[4][0], 68);
     }
 
+    #[test]
     fn object_rendering_budget_resets_for_each_scanline() {
         let mut bus = bus();
         bus.write16(0x0400_0000, 1 << 12);
