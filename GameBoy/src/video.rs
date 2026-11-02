@@ -1280,8 +1280,9 @@ fn object_scanline_mask(
                 _ => None,
             };
 
-            let invalid =
-                (!affine && attr0 & (1 << 9) != 0) || object_mode == 3 || dimensions.is_none();
+            let invalid = (!affine && attr0 & (1 << 9) != 0)
+                || object_mode == 3
+                || dimensions.is_none();
             if invalid {
                 if remaining < INSPECTION_CYCLES {
                     break;
@@ -1314,7 +1315,8 @@ fn object_scanline_mask(
                 raw_x
             };
             let intersects_y = (origin_y..origin_y + canvas_height).contains(&(line as i32));
-            let intersects_x = origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
+            let intersects_x =
+                origin_x < SCREEN_WIDTH as i32 && origin_x + canvas_width > 0;
 
             if !intersects_y || !intersects_x {
                 if remaining < INSPECTION_CYCLES {
@@ -1359,6 +1361,29 @@ fn object_scanline_mask(
 }
 
 /// win ties, so entries are visited from 127 down to 0.
+fn bitmap_brightness_effect(
+    bus: &MemoryBus,
+    _display_control: u16,
+    target_bit: u16,
+) -> Option<(bool, u16)> {
+    let control = bus.read16(0x0400_0050);
+    if control & (1 << target_bit) == 0 {
+        return None;
+    }
+    let brighten = match (control >> 6) & 3 {
+        2 => true,
+        3 => false,
+        _ => return None,
+    };
+    Some((brighten, (bus.read16(0x0400_0054) & 0x1F).min(16)))
+}
+
+/// Composites a first-target tiled background over the currently visible layer.
+///
+/// BLDCNT alpha mode blends a BG pixel only when its layer is selected as a
+/// first target and the pixel immediately behind it is selected as a second
+/// target. The backdrop uses target bit 13; BG0..BG3 use bits 8..11.
+
 fn composite_background_pixel(
     bus: &MemoryBus,
     bg: u32,
