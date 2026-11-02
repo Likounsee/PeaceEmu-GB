@@ -31,5 +31,8 @@ pub mod machine;
 /// Initial bitmap-mode renderer for the Game Boy Advance display.
 pub mod video;
 
+/// GBA stereo PCM output sample rate in samples per second.
+pub const AUDIO_SAMPLE_RATE: u32 = 32_768;
+
 pub use machine::{GbaMachine, GbaSaveState, MachineSnapshot, CARTRIDGE_ENTRY_POINT};
 pub use video::{render_bitmap_frame, VideoFrame, SCREEN_HEIGHT, SCREEN_WIDTH};
