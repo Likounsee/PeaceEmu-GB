@@ -7,7 +7,6 @@ use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
-    time::Duration,
 };
 
 const MAX_STEPS_PER_FRAME: usize = 500_000;
@@ -23,8 +22,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("Game Boy Advance")
+            .to_owned()
     } else {
-        cartridge.title()
+        cartridge.title().to_owned()
     };
 
     let save_path = save_path_for(&rom_path);
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             ..WindowOptions::default()
         },
     )?;
-    window.limit_update_rate(Some(Duration::from_micros(16_667)));
+    window.set_fps_target(60);
     let mut framebuffer = vec![0_u32; SCREEN_WIDTH * SCREEN_HEIGHT];
 
     println!("PeaceEmu GBA running: {title}");
