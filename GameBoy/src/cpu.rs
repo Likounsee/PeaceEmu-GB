@@ -7912,6 +7912,18 @@ mod tests {
     }
 
     #[test]
+    fn bios_arctan2_handles_signed_coordinate_boundaries() {
+        // The BIOS accepts signed Q2.14 coordinates in the low halfword.
+        // These edge pairs exercise i16::MIN without overflowing abs/division.
+        assert_eq!(Cpu::bios_arctan2(i16::MIN as i32, i16::MIN as i32), 0xA000);
+        assert_eq!(Cpu::bios_arctan2(i16::MAX as i32, i16::MAX as i32), 0x2000);
+        assert_eq!(Cpu::bios_arctan2(i16::MIN as i32, i16::MAX as i32), 0x6000);
+        assert_eq!(Cpu::bios_arctan2(i16::MAX as i32, i16::MIN as i32), 0xE000);
+        assert_eq!(Cpu::bios_arctan2(i16::MIN as i32, -1), 0x8000);
+        assert_eq!(Cpu::bios_arctan2(-1, i16::MIN as i32), 0xC000);
+    }
+
+    #[test]
     fn bios_arctan_swi_sign_extends_result_and_arctan2_returns_turn_units() {
         let mut bus = bus_with_program(&[]);
         let mut cpu = Cpu::new();
