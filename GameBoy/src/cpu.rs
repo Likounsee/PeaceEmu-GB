@@ -2143,7 +2143,7 @@ impl Cpu {
             0x0E => {
                 let source = self.registers[0];
                 let destination = self.registers[1];
-                let count = self.registers[2];
+                let count = self.registers[2].min(0x1000);
                 for index in 0..count {
                     let input = source.wrapping_add(index.wrapping_mul(20));
                     let output = destination.wrapping_add(index.wrapping_mul(16));
@@ -2174,7 +2174,7 @@ impl Cpu {
             0x0F => {
                 let source = self.registers[0];
                 let destination = self.registers[1];
-                let count = self.registers[2];
+                let count = self.registers[2].min(0x1000);
                 let stride = self.registers[3];
                 for index in 0..count {
                     let input = source.wrapping_add(index.wrapping_mul(8));
