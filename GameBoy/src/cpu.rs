@@ -2029,9 +2029,7 @@ impl Cpu {
         let field_mask = (instruction >> 16) & 0xF;
         let immediate = instruction & (1 << 25) != 0;
 
-        if field_mask & !0x9 != 0
-            || (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid))
-        {
+        if field_mask & !0x9 != 0 || (saved_status && (self.mode != 0x12 || !self.spsr_irq_valid)) {
             return Err(CpuError::UnsupportedInstruction {
                 address,
                 instruction,
