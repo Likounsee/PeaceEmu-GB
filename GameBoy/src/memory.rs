@@ -135,6 +135,10 @@ pub struct MemoryBus {
     audio_fifo_samples_consumed: [u64; 2],
     /// Legacy PSG pulse-channel synthesizer.
     psg: crate::sound::Psg,
+    /// Fractional 32,768 Hz output-sample phase measured in CPU-clock units.
+    audio_sample_phase: u64,
+    /// Bounded interleaved stereo output queue (oldest samples are discarded on overflow).
+    audio_samples: VecDeque<(i16, i16)>,
     /// Completed DMA bursts per channel since the last power cycle.
     dma_completed_transfers: [u64; 4],
     /// Serial data registers: SIOMULTI0..3 / SIODATA32 share 0x120..0x127.
@@ -214,6 +218,8 @@ impl MemoryBus {
             audio_last_samples: [0; 2],
             audio_fifo_samples_consumed: [0; 2],
             psg: crate::sound::Psg::default(),
+            audio_sample_phase: 0,
+            audio_samples: VecDeque::with_capacity(8192),
             dma_completed_transfers: [0; 4],
             sio_multi: [0xFFFF; 4],
             sio_data8: 0,
@@ -1342,6 +1348,37 @@ impl MemoryBus {
         }
     }
 
+    /// Returns and clears all queued stereo PCM samples in chronological order.
+    ///
+    /// Samples are signed 16-bit stereo at [`AUDIO_SAMPLE_RATE`] Hz. The queue
+    /// is bounded to one quarter second; if a frontend falls behind, the oldest
+    /// samples are discarded rather than allowing unbounded memory growth.
+    pub fn drain_audio_samples(&mut self) -> Vec<(i16, i16)> {
+        self.audio_samples.drain(..).collect()
+    }
+
+    /// Advances PSG oscillators and emits samples at the fixed hardware output rate.
+    fn advance_audio_cycles(&mut self, cycles: u32) {
+        const CPU_CLOCK: u64 = 16_777_216;
+        const SAMPLE_RATE: u64 = u64::from(crate::AUDIO_SAMPLE_RATE);
+        const QUEUE_CAPACITY: usize = 8192;
+        let mut remaining = u64::from(cycles);
+        while remaining != 0 {
+            let clocks_to_sample = (CPU_CLOCK - self.audio_sample_phase).div_ceil(SAMPLE_RATE);
+            let step = remaining.min(clocks_to_sample.max(1));
+            self.psg.advance(step as u32);
+            self.audio_sample_phase += step * SAMPLE_RATE;
+            remaining -= step;
+            if self.audio_sample_phase >= CPU_CLOCK {
+                self.audio_sample_phase -= CPU_CLOCK;
+                if self.audio_samples.len() == QUEUE_CAPACITY {
+                    self.audio_samples.pop_front();
+                }
+                self.audio_samples.push_back(self.audio_stereo_sample());
+            }
+        }
+    }
+
     /// Advances timers and video timing by a number of CPU clock cycles.
     ///
     /// Timer overflow reloads the configured value and raises the matching IF
@@ -1351,7 +1388,6 @@ impl MemoryBus {
     /// supplies elapsed CPU cycles; instruction-specific bus wait states are not yet modeled.
     pub fn advance_cycles(&mut self, cycles: u32) {
         self.advance_sio_cycles(cycles);
-        self.psg.advance(cycles);
         // Most instructions execute with all hardware timers disabled. In that
         // common case, jump between PPU transition edges instead of iterating
         // once per CPU cycle; HBlank/VBlank DMA and IRQ edges remain exact.
@@ -1361,6 +1397,7 @@ impl MemoryBus {
             .all(|control| control & 0x0080 == 0)
             && !self.has_video_timed_dma_enabled()
         {
+            self.advance_audio_cycles(cycles);
             self.advance_video_cycles_without_timers(cycles);
             return;
         }
@@ -1409,6 +1446,7 @@ impl MemoryBus {
                     }
                 }
             }
+            self.advance_audio_cycles(1);
         }
     }
 
