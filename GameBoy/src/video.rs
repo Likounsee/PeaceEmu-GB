@@ -1384,6 +1384,76 @@ fn bitmap_brightness_effect(
 /// first target and the pixel immediately behind it is selected as a second
 /// target. The backdrop uses target bit 13; BG0..BG3 use bits 8..11.
 
+fn composite_bitmap_background_pixel(
+    bus: &MemoryBus,
+    source: u32,
+    backdrop: u32,
+    effects_allowed: bool,
+) -> u32 {
+    if !effects_allowed {
+        return source;
+    }
+    let control = bus.read16(0x0400_0050);
+    // BG2 is selected as a first target by bit 2; backdrop is second target bit 13.
+    if (control >> 6) & 3 != 1 || control & (1 << 2) == 0 || control & (1 << 13) == 0 {
+        return source;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    let eva = (coefficients & 0x1F).min(16);
+    let evb = ((coefficients >> 8) & 0x1F).min(16);
+    blend_argb555(source, backdrop, eva, evb)
+}
+
+
+fn bitmap_backdrop_alpha_blend(bus: &MemoryBus) -> Option<(u16, u16)> {
+    let blend_control = bus.read16(0x0400_0050);
+    // Semi-transparent OBJ pixels force alpha blending regardless of the
+    // global BLDCNT effect-mode bits; only the selected second target matters.
+    if blend_control & (1 << 13) == 0 {
+        return None;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    Some((
+        (coefficients & 0x1F).min(16),
+        ((coefficients >> 8) & 0x1F).min(16),
+    ))
+}
+
+
+fn bitmap_alpha_blend_mode5(bus: &MemoryBus) -> Option<(u16, u16)> {
+    let control = bus.read16(0x0400_0050);
+    // In mode 5 the visible second target varies per pixel: BG2 inside its
+    // centered viewport, backdrop outside it (or where a window masks BG2).
+    if control & ((1 << 10) | (1 << 13)) == 0 {
+        return None;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    Some((
+        (coefficients & 0x1F).min(16),
+        ((coefficients >> 8) & 0x1F).min(16),
+    ))
+}
+
+
+fn bitmap_alpha_blend(bus: &MemoryBus, display_control: u16) -> Option<(u16, u16)> {
+    if display_control & (1 << 10) == 0 {
+        return None;
+    }
+    let blend_control = bus.read16(0x0400_0050);
+    // Semi-transparent OBJ pixels force alpha blending regardless of BLDCNT's
+    // global effect mode. The actual second target is selected per pixel:
+    // BG2 (bit 10) when visible, or backdrop (bit 13) when a window masks BG2.
+    if blend_control & ((1 << 10) | (1 << 13)) == 0 {
+        return None;
+    }
+    let coefficients = bus.read16(0x0400_0052);
+    Some((
+        (coefficients & 0x1F).min(16),
+        ((coefficients >> 8) & 0x1F).min(16),
+    ))
+}
+
+
 fn composite_background_pixel(
     bus: &MemoryBus,
     bg: u32,
