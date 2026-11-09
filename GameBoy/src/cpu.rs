@@ -4571,7 +4571,7 @@ mod tests {
         for offset in 0..8 {
             assert_eq!(bus.read8(destination + offset), 0x33, "byte {offset}");
         }
-        assert_eq!(bus.read8(destination + 8), 0xC3);
+        assert_eq!(bus.read8(destination + 8), 0x3C);
     }
 
     #[test]
