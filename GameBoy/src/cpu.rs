@@ -4580,7 +4580,7 @@ mod tests {
         let source = 0x0200_0000;
         let destination = 0x0200_0100;
         bus.write32(source, 0x0000_0420); // Four output bytes, eight-bit symbols.
-        bus.write8(source + 4, 4); // Five tree nodes/slots: ten bytes.
+        bus.write8(source + 4, 4); // Tree data occupies ten bytes.
         bus.write8(source + 5, 0x01); // Root children are at offsets +4 and +5.
         bus.write8(source + 9, 0xC0); // Left internal node: both children are leaves.
         bus.write8(source + 10, 0xC0); // Right internal node: both children are leaves.
