@@ -4575,6 +4575,36 @@ mod tests {
     }
 
     #[test]
+    fn bios_huffman_decompression_traverses_internal_tree_nodes() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0420); // Four output bytes, eight-bit symbols.
+        bus.write8(source + 4, 4); // Five tree nodes/slots: ten bytes.
+        bus.write8(source + 5, 0x01); // Root children are at offsets +4 and +5.
+        bus.write8(source + 9, 0xC0); // Left internal node: both children are leaves.
+        bus.write8(source + 10, 0xC0); // Right internal node: both children are leaves.
+        bus.write8(source + 11, b'A');
+        bus.write8(source + 12, b'B');
+        bus.write8(source + 13, b'C');
+        bus.write32(source + 16, 0x1B00_0000); // Codes 00, 01, 10, 11.
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(
+            (0..4)
+                .map(|offset| bus.read8(destination + offset))
+                .collect::<Vec<_>>(),
+            b"ABBC"
+        );
+    }
+
+    #[test]
     fn bios_huffman_four_bit_symbols_continue_across_payload_words() {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
