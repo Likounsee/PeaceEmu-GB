@@ -3141,6 +3141,23 @@ impl Cpu {
         // address/write-back as though all 16 registers had been listed.
         let empty_list = register_list == 0;
         let effective_list = if empty_list { 1 << 15 } else { register_list };
+
+        // LDM^ with PC is an exception return. Validate the SPSR before
+        // touching any destination register or reading from the bus, so an
+        // unsupported return cannot leave a partially applied transfer.
+        if user_registers
+            && load
+            && effective_list & (1 << 15) != 0
+            && (self.mode != 0x12
+                || !self.spsr_irq_valid
+                || !matches!(self.spsr_irq & 0x1F, 0x10 | 0x12 | 0x1F))
+        {
+            return Err(CpuError::UnsupportedInstruction {
+                address,
+                instruction,
+            });
+        }
+
         let count = if empty_list {
             16
         } else {
@@ -9323,6 +9340,28 @@ mod tests {
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
         assert_eq!(cpu.register(14), Some(0x0200_0104));
         assert_eq!(cpu.register(1).unwrap(), 0x0200_2008);
+    }
+
+    #[test]
+    fn ldm_user_bank_with_pc_without_valid_spsr_is_side_effect_free() {
+        // LDMIA r0, {r1, pc}^ is invalid outside IRQ mode.
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0x0200_3000);
+        cpu.set_register(1, 0x1111_2222);
+        cpu.set_register(15, 0x0200_0100);
+        bus.write32(0x0200_3000, 0xAABB_CCDD);
+        bus.write32(0x0200_3004, 0x0800_4001);
+        let before = cpu.snapshot();
+
+        assert!(matches!(
+            cpu.execute_block_transfer(0x0200_0000, 0xE8F0_8002, &mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(cpu.snapshot(), before);
+        assert_eq!(bus.read32(0x0200_3000), 0xAABB_CCDD);
+        assert_eq!(bus.read32(0x0200_3004), 0x0800_4001);
     }
 
     #[test]
