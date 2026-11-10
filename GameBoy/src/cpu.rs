@@ -4605,6 +4605,47 @@ mod tests {
     }
 
     #[test]
+    fn bios_huffman_rejects_leaf_children_outside_the_tree() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0420); // Four output bytes, eight-bit symbols.
+        bus.write8(source + 4, 0); // A single two-byte tree node.
+        bus.write8(source + 5, 0x80); // Left child is marked as a leaf but lies outside the tree.
+        bus.write32(source + 8, 0x0000_0000);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+
+        assert!(matches!(
+            cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(bus.read32(destination), 0);
+    }
+
+    #[test]
+    fn bios_huffman_zero_length_stream_returns_without_reading_tree_or_payload() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_0020); // Valid 8-bit Huffman tag, zero output bytes.
+        bus.write32(destination, 0xA5A5_5A5A);
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .unwrap();
+
+        assert_eq!(bus.read32(destination), 0xA5A5_5A5A);
+        assert_eq!(cpu.register(15).unwrap(), 0x0200_0204);
+    }
+
+    #[test]
     fn bios_huffman_four_bit_symbols_continue_across_payload_words() {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
