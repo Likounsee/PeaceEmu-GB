@@ -2967,7 +2967,14 @@ impl Cpu {
         }
 
         // S=1 with Rd=PC is an exception return through SPSR_irq.
-        if set_flags && rd == 15 && (self.mode != 0x12 || !self.spsr_irq_valid) {
+        if set_flags
+            && rd == 15
+            && (self.mode != 0x12
+                || !self.spsr_irq_valid
+                || !matches!(self.spsr_irq & 0x1F, 0x10 | 0x12 | 0x1F))
+        {
+            // Validate the complete exception-return state before the
+            // destination PC or condition flags can be changed.
             return Err(CpuError::UnsupportedInstruction {
                 address,
                 instruction,
@@ -5628,6 +5635,26 @@ mod tests {
                 overflow: true,
             }
         );
+    }
+
+    #[test]
+    fn arm_data_processing_exception_return_rejects_invalid_saved_mode_atomically() {
+        // MOVS pc, r0 attempts to restore CPSR from SPSR_irq.
+        let mut cpu = Cpu::new();
+        let mut bus = bus_with_program(&[]);
+        cpu.reset(0x0200_0000);
+        assert!(cpu.enter_irq());
+        cpu.spsr_irq = 0x0000_0093; // Reserved processor mode.
+        cpu.spsr_irq_valid = true;
+        cpu.registers[0] = 0x0800_1001;
+        cpu.registers[15] = 0x0200_0100;
+        let before = cpu.snapshot();
+
+        assert!(matches!(
+            cpu.execute_data_processing(0x0200_0000, 0xE1B0_F000, &mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(cpu.snapshot(), before);
     }
 
     #[test]
