@@ -4549,6 +4549,32 @@ mod tests {
     }
 
     #[test]
+    fn bios_huffman_eight_bit_symbols_continue_across_payload_words() {
+        let mut bus = bus_with_program(&[]);
+        let source = 0x0200_0000;
+        let destination = 0x0200_0100;
+        bus.write32(source, 0x0000_2120); // Thirty-three output bytes, eight-bit symbols.
+        bus.write8(source + 4, 1);
+        bus.write8(source + 5, 0xC0); // Root's two children are leaves.
+        bus.write8(source + 7, b'A');
+        bus.write8(source + 8, b'B');
+        bus.write32(source + 12, 0x0000_0000); // First 32 symbols select leaf 0.
+        bus.write32(source + 16, 0x8000_0000); // Next symbol selects leaf 1.
+
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0200);
+        cpu.set_register(0, source);
+        cpu.set_register(1, destination);
+        cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
+            .unwrap();
+
+        for offset in 0..32 {
+            assert_eq!(bus.read8(destination + offset), b'A', "byte {offset}");
+        }
+        assert_eq!(bus.read8(destination + 32), b'B');
+    }
+
+    #[test]
     fn bios_huffman_four_bit_symbols_continue_across_payload_words() {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
