@@ -4553,13 +4553,13 @@ mod tests {
         let mut bus = bus_with_program(&[]);
         let source = 0x0200_0000;
         let destination = 0x0200_0100;
-        bus.write32(source, 0x0000_0924); // Nine output bytes, four-bit symbols.
+        bus.write32(source, 0x0000_1124); // Seventeen output bytes, four-bit symbols.
         bus.write8(source + 4, 1);
         bus.write8(source + 5, 0xC0); // Root's two children are leaves.
         bus.write8(source + 7, 0x03);
         bus.write8(source + 8, 0x0C);
-        bus.write32(source + 12, 0x0000_0000); // Sixteen symbols select leaf 0.
-        bus.write32(source + 16, 0x8000_0000); // Next symbol selects leaf 1.
+        bus.write32(source + 12, 0x0000_0000); // First 32 symbols select leaf 0.
+        bus.write32(source + 16, 0x8000_0000); // Next symbols select leaves 1, then 0.
 
         let mut cpu = Cpu::new();
         cpu.reset(0x0200_0200);
@@ -4568,10 +4568,10 @@ mod tests {
         cpu.execute_swi(0x0200_0200, 0xEF00_0013, 0x13, false, &mut bus)
             .unwrap();
 
-        for offset in 0..8 {
+        for offset in 0..16 {
             assert_eq!(bus.read8(destination + offset), 0x33, "byte {offset}");
         }
-        assert_eq!(bus.read8(destination + 8), 0x3C);
+        assert_eq!(bus.read8(destination + 16), 0x3C);
     }
 
     #[test]
