@@ -5641,7 +5641,6 @@ mod tests {
     fn arm_data_processing_exception_return_rejects_invalid_saved_mode_atomically() {
         // MOVS pc, r0 attempts to restore CPSR from SPSR_irq.
         let mut cpu = Cpu::new();
-        let mut bus = bus_with_program(&[]);
         cpu.reset(0x0200_0000);
         assert!(cpu.enter_irq());
         cpu.spsr_irq = 0x0000_0093; // Reserved processor mode.
@@ -5651,7 +5650,7 @@ mod tests {
         let before = cpu.snapshot();
 
         assert!(matches!(
-            cpu.execute_data_processing(0x0200_0000, 0xE1B0_F000, &mut bus),
+            cpu.execute_data_processing(0x0200_0000, 0xE1B0_F000),
             Err(CpuError::UnsupportedInstruction { .. })
         ));
         assert_eq!(cpu.snapshot(), before);
