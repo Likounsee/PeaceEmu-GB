@@ -3149,6 +3149,15 @@ impl Cpu {
         let empty_list = register_list == 0;
         let effective_list = if empty_list { 1 << 15 } else { register_list };
 
+        // ARM7TDMI documents base write-back as unsupported for user-bank
+        // transfers (S=1). Reject it before any memory or register side effect.
+        if user_registers && !load && write_back {
+            return Err(CpuError::UnsupportedInstruction {
+                address,
+                instruction,
+            });
+        }
+
         // LDM^ with PC is an exception return. Validate the SPSR before
         // touching any destination register or reading from the bus, so an
         // unsupported return cannot leave a partially applied transfer.
@@ -9366,6 +9375,27 @@ mod tests {
         assert_eq!(cpu.register(13), Some(0x0300_7F00));
         assert_eq!(cpu.register(14), Some(0x0200_0104));
         assert_eq!(cpu.register(1).unwrap(), 0x0200_2008);
+    }
+
+    #[test]
+    fn stm_user_bank_with_writeback_is_rejected_without_side_effects() {
+        // STMIA r0!, {r1}^ requests the discouraged/unsupported base
+        // write-back form for a user-bank transfer.
+        let mut bus = bus_with_program(&[]);
+        let mut cpu = Cpu::new();
+        cpu.reset(0x0200_0000);
+        cpu.set_register(0, 0x0200_3000);
+        cpu.set_register(1, 0xAABB_CCDD);
+        cpu.set_register(15, 0x0200_0100);
+        assert!(cpu.enter_irq());
+        let before = cpu.snapshot();
+
+        assert!(matches!(
+            cpu.execute_block_transfer(0x0200_0000, 0xE8E0_0002, &mut bus),
+            Err(CpuError::UnsupportedInstruction { .. })
+        ));
+        assert_eq!(cpu.snapshot(), before);
+        assert_eq!(bus.read32(0x0200_3000), 0);
     }
 
     #[test]
